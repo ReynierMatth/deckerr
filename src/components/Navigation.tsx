@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-    import { Home, PlusSquare, Library, LogOut, Settings, ChevronDown } from 'lucide-react';
+    import { Home, PlusSquare, Library, LogOut, Settings, ChevronDown, Search } from 'lucide-react';
     import { useAuth } from '../contexts/AuthContext';
     import { supabase } from '../lib/supabase';
 
-    type Page = 'home' | 'deck' | 'login' | 'collection' | 'profile';
+    type Page = 'home' | 'deck' | 'login' | 'collection' | 'profile' | 'search';
 
     interface NavigationProps {
       currentPage: Page;
@@ -49,6 +49,7 @@ import React, { useState, useRef, useEffect } from 'react';
         { id: 'home' as const, label: 'Home', icon: Home },
         { id: 'deck' as const, label: 'New Deck', icon: PlusSquare },
         { id: 'collection' as const, label: 'Collection', icon: Library },
+        { id: 'search' as const, label: 'Search', icon: Search },
       ];
 
       const handleSignOut = async () => {
@@ -134,7 +135,7 @@ import React, { useState, useRef, useEffect } from 'react';
 
           {/* Mobile Navigation - Bottom */}
           <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 z-50">
-            <div className="grid grid-cols-4 h-16">
+            <div className="grid grid-cols-5 h-16">
               {navItems.map((item) => (
                 <button
                   key={item.id}
