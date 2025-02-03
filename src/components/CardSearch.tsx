@@ -92,7 +92,7 @@ import React, { useState } from 'react';
 
         try {
           const cards = await searchCards(query.trim());
-          setSearchResults(cards);
+          setSearchResults(cards || []);
         } catch (err) {
           setError('Failed to fetch cards.');
           console.error('Error fetching cards:', err);
@@ -501,7 +501,7 @@ import React, { useState } from 'react';
               </div>
             )}
 
-            {searchResults.length > 0 && (
+            {searchResults && searchResults.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {searchResults.map((card) => (
                   <div key={card.id} className="bg-gray-800 rounded-lg overflow-hidden">
