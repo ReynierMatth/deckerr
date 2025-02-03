@@ -7,9 +7,10 @@ import React, { useState } from 'react';
     import DeckEditor from './components/DeckEditor';
     import Profile from './components/Profile';
     import CardSearch from './components/CardSearch';
+    import LifeCounter from './components/LifeCounter';
     import { AuthProvider, useAuth } from './contexts/AuthContext';
 
-    type Page = 'home' | 'deck' | 'login' | 'collection' | 'edit-deck' | 'profile' | 'search';
+    type Page = 'home' | 'deck' | 'login' | 'collection' | 'edit-deck' | 'profile' | 'search' | 'life-counter';
 
     function AppContent() {
       const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -62,6 +63,8 @@ import React, { useState } from 'react';
             return <Profile />;
           case 'search':
             return <CardSearch />;
+          case 'life-counter':
+            return <LifeCounter />;
           case 'login':
             return <LoginForm />;
           default:
