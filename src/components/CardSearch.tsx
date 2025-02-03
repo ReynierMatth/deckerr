@@ -12,7 +12,7 @@ import React, { useState } from 'react';
       const [colors, setColors] = useState({ W: false, U: false, B: false, R: false, G: false, C: false });
       const [colorMode, setColorMode] = useState('exactly');
       const [commanderColors, setCommanderColors] = useState({ W: false, U: false, B: false, R: false, G: false, C: false });
-      const [manaCost, setManaCost] = useState('');
+      const [manaCost, setManaCost] = useState({ W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 });
       const [manaValue, setManaValue] = useState('');
       const [manaValueComparison, setManaValueComparison] = useState('=');
       const [games, setGames] = useState({ paper: false, arena: false, mtgo: false });
@@ -62,7 +62,14 @@ import React, { useState } from 'react';
           const activeColors = Object.keys(commanderColors).filter((key) => commanderColors[key as keyof typeof commanderColors]).join('');
           query += `id:${activeColors} `;
         }
-        if (manaCost) query += `m:${manaCost} `;
+
+        const manaCostString = Object.entries(manaCost)
+          .filter(([, count]) => count > 0)
+          .map(([color, count]) => `{${color}}`.repeat(count))
+          .join('');
+
+        if (manaCostString) query += `m:${manaCostString} `;
+
         if (manaValue) query += `mv${manaValueComparison}${manaValue} `;
         if (Object.values(games).some(Boolean)) {
           const activeGames = Object.keys(games).filter((key) => games[key as keyof typeof games]).join(',');
@@ -161,15 +168,17 @@ import React, { useState } from 'react';
                 <div>
                   <h4 className="font-bold mb-2">Card Colors</h4>
                   <div className="flex gap-2">
-                    {['W', 'U', 'B', 'R', 'G', 'C'].map((color) => (
+                    {Object.entries(colors).map(([color, active]) => (
                       <label key={color} className="flex items-center space-x-2">
                         <input
                           type="checkbox"
-                          checked={colors[color as keyof typeof colors]}
-                          onChange={() => setColors({ ...colors, [color]: !colors[color as keyof typeof colors] })}
+                          checked={active}
+                          onChange={() => setColors({ ...colors, [color]: !active })}
                           className="rounded border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
-                        <span>{color}</span>
+                        <span style={{ fontSize: '1.5em' }}>
+                          {color === 'W' ? '⚪' : color === 'U' ? '🔵' : color === 'B' ? '⚫' : color === 'R' ? '🔴' : color === 'G' ? '🟢' : '🟤'}
+                        </span>
                       </label>
                     ))}
                   </div>
@@ -185,15 +194,17 @@ import React, { useState } from 'react';
                 <div>
                   <h4 className="font-bold mb-2">Commander Colors</h4>
                   <div className="flex gap-2">
-                    {['W', 'U', 'B', 'R', 'G', 'C'].map((color) => (
+                    {Object.entries(commanderColors).map(([color, active]) => (
                       <label key={color} className="flex items-center space-x-2">
                         <input
                           type="checkbox"
-                          checked={commanderColors[color as keyof typeof commanderColors]}
-                          onChange={() => setCommanderColors({ ...commanderColors, [color]: !commanderColors[color as keyof typeof commanderColors] })}
+                          checked={active}
+                          onChange={() => setCommanderColors({ ...commanderColors, [color]: !active })}
                           className="rounded border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
-                        <span>{color}</span>
+                        <span style={{ fontSize: '1.5em' }}>
+                          {color === 'W' ? '⚪' : color === 'U' ? '🔵' : color === 'B' ? '⚫' : color === 'R' ? '🔴' : color === 'G' ? '🟢' : '🟤'}
+                        </span>
                       </label>
                     ))}
                   </div>
@@ -201,13 +212,22 @@ import React, { useState } from 'react';
               </div>
 
               {/* Mana Cost */}
-              <input
-                type="text"
-                value={manaCost}
-                onChange={(e) => setManaCost(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
-                placeholder="Mana Cost (e.g., {W}{W})"
-              />
+              <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                {Object.entries(manaCost).map(([color, count]) => (
+                  <div key={color} className="flex items-center space-x-2">
+                    <span style={{ fontSize: '1.5em' }}>
+                      {color === 'W' ? '⚪' : color === 'U' ? '🔵' : color === 'B' ? '⚫' : color === 'R' ? '🔴' : color === 'G' ? '🟢' : '🟤'}
+                    </span>
+                    <input
+                      type="number"
+                      value={count}
+                      onChange={(e) => setManaCost({ ...manaCost, [color]: parseInt(e.target.value) })}
+                      className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
+                      min="0"
+                    />
+                  </div>
+                ))}
+              </div>
 
               {/* Stats */}
               <div className="flex gap-2">
