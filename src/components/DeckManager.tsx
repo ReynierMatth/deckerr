@@ -5,11 +5,85 @@ import { searchCards } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { validateDeck } from '../utils/deckValidation';
+import MagicCard from './MagicCard';
 
 interface DeckManagerProps {
   initialDeck?: Deck;
   onSave?: () => void;
 }
+
+const calculateManaCurve = (cards: { card: Card; quantity: number }[]) => {
+  const manaValues = cards.map(({ card }) => {
+    if (!card.mana_cost) return 0;
+    // Basic heuristic: count mana symbols
+    return (card.mana_cost.match(/\{WUBRG0-9]\}/g) || []).length;
+  });
+
+  const averageManaValue = manaValues.reduce((a, b) => a + b, 0) / manaValues.length;
+  return averageManaValue;
+};
+
+const suggestLandCountAndDistribution = (cards: { card: Card; quantity: number }[], format: string) => {
+  const formatRules = {
+    standard: { minCards: 60, targetLands: 24.5 },
+    modern: { minCards: 60, targetLands: 24.5 },
+    commander: { minCards: 100, targetLands: 36.5 },
+    legacy: { minCards: 60, targetLands: 24.5 },
+    vintage: { minCards: 60, targetLands: 24.5 },
+    pauper: { minCards: 60, targetLands: 24.5 },
+  };
+
+  const { minCards, targetLands } = formatRules[format as keyof typeof formatRules] || formatRules.standard;
+  const deckSize = cards.reduce((acc, { quantity }) => acc + quantity, 0);
+  const nonLandCards = cards.reduce((acc, { card, quantity }) => card.type_line?.toLowerCase().includes('land') ? acc : acc + quantity, 0);
+  const landsToAdd = Math.max(0, minCards - deckSize);
+
+  const colorCounts = { W: 0, U: 0, B: 0, R: 0, G: 0 };
+  let totalColorSymbols = 0;
+
+  cards.forEach(({ card, quantity }) => {
+    if (card.mana_cost) {
+      const wMatches = (card.mana_cost.match(/\{W\}/g) || []).length;
+      const uMatches = (card.mana_cost.match(/\{U\}/g) || []).length;
+      const bMatches = (card.mana_cost.match(/\{B\}/g) || []).length;
+      const rMatches = (card.mana_cost.match(/\{R\}/g) || []).length;
+      const gMatches = (card.mana_cost.match(/\{G\}/g) || []).length;
+
+      colorCounts.W += wMatches * quantity;
+      colorCounts.U += uMatches * quantity;
+      colorCounts.B += bMatches * quantity;
+      colorCounts.R += rMatches * quantity;
+      colorCounts.G += gMatches * quantity;
+
+      totalColorSymbols += (wMatches + uMatches + bMatches + rMatches + gMatches) * quantity;
+    }
+  });
+
+  const landDistribution: { [key: string]: number } = {};
+  for (const color in colorCounts) {
+    const proportion = totalColorSymbols > 0 ? colorCounts[color as keyof typeof colorCounts] / totalColorSymbols : 0;
+    landDistribution[color] = Math.round(landsToAdd * proportion);
+  }
+
+  let totalDistributed = Object.values(landDistribution).reduce((acc, count) => acc + count, 0);
+
+  if (totalDistributed > landsToAdd) {
+    // Find the color with the most lands
+    let maxColor = '';
+    let maxCount = 0;
+    for (const color in landDistribution) {
+      if (landDistribution[color] > maxCount) {
+        maxColor = color;
+        maxCount = landDistribution[color];
+      }
+    }
+
+    // Reduce the land count of that color
+    landDistribution[maxColor] = maxCount - 1;
+  }
+
+  return { landCount: landsToAdd, landDistribution };
+};
 
 export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -35,11 +109,12 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
   const addCardToDeck = (card: Card) => {
     setSelectedCards(prev => {
+      const isBasicLand = card.name === 'Plains' || card.name === 'Island' || card.name === 'Swamp' || card.name === 'Mountain' || card.name === 'Forest';
       const existing = prev.find(c => c.card.id === card.id);
       if (existing) {
         return prev.map(c =>
           c.card.id === card.id
-            ? { ...c, quantity: Math.min(c.quantity + 1, 4) }
+            ? { ...c, quantity: isBasicLand ? c.quantity + 1 : Math.min(c.quantity + 1, 4) }
             : c
         );
       }
@@ -47,18 +122,19 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     });
   };
 
-  const removeCardFromDeck = (cardId: string) => {
+  const removeCardFromDeck = (cardId: string) =>
     setSelectedCards(prev => prev.filter(c => c.card.id !== cardId));
-  };
 
   const updateCardQuantity = (cardId: string, quantity: number) => {
-    setSelectedCards(prev =>
-      prev.map(c =>
-        c.card.id === cardId
-          ? { ...c, quantity: Math.max(1, Math.min(quantity, 4)) }
-          : c
-      )
-    );
+    setSelectedCards(prev => {
+      return prev.map(c => {
+        if (c.card.id === cardId) {
+          const isBasicLand = c.card.name === 'Plains' || c.card.name === 'Island' || c.card.name === 'Swamp' || c.card.name === 'Mountain' || c.card.name === 'Forest';
+          return { ...c, quantity: quantity };
+        }
+        return c;
+      });
+    });
   };
 
   const saveDeck = async () => {
@@ -139,6 +215,47 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
   const validation = validateDeck(currentDeck);
 
+  const deckSize = selectedCards.reduce((acc, curr) => acc + curr.quantity, 0);
+  const { landCount: suggestedLandCountValue, landDistribution: suggestedLands } = suggestLandCountAndDistribution(selectedCards, deckFormat);
+
+  const totalPrice = selectedCards.reduce((acc, { card, quantity }) => {
+    const isBasicLand = card.name === 'Plains' || card.name === 'Island' || card.name === 'Swamp' || card.name === 'Mountain' || card.name === 'Forest';
+    const price = isBasicLand ? 0 : (card.prices?.usd ? parseFloat(card.prices.usd) : 0);
+    return acc + price * quantity;
+  }, 0);
+
+  const addSuggestedLandsToDeck = async () => {
+    const basicLandCards = {
+      W: { name: 'Plains', set: 'unh' },
+      U: { name: 'Island', set: 'unh' },
+      B: { name: 'Swamp', set: 'unh' },
+      R: { name: 'Mountain', set: 'unh' },
+      G: { name: 'Forest', set: 'unh' },
+    };
+
+    for (const color in suggestedLands) {
+      const landCount = suggestedLands[color];
+      if (landCount > 0) {
+        const landName = basicLandCards[color]?.name;
+        const landSet = basicLandCards[color]?.set;
+
+        if (landName && landSet) {
+          try {
+            const cards = await searchCards(`${landName} set:${landSet}`);
+            if (cards && cards.length > 0) {
+              const landCard = cards[0]; // Take the first matching card
+              for (let i = 0; i < landCount; i++) {
+                addCardToDeck(landCard);
+              }
+            }
+          } catch (error) {
+            console.error(`Failed to add ${landName}:`, error);
+          }
+        }
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-white p-6">
       <div className="max-w-7xl mx-auto">
@@ -171,13 +288,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                   key={card.id}
                   className="bg-gray-800 rounded-lg overflow-hidden hover:ring-2 hover:ring-blue-500 transition-all"
                 >
-                  {card.image_uris?.normal && (
-                    <img
-                      src={card.image_uris.normal}
-                      alt={card.name}
-                      className="w-full h-auto"
-                    />
-                  )}
+                  <MagicCard card={card} />
                   <div className="p-4">
                     <h3 className="font-bold mb-2">{card.name}</h3>
                     <button
@@ -240,13 +351,17 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                     />
                     <div className="flex-1">
                       <h4 className="font-medium">{card.name}</h4>
+                      {card.prices?.usd && (
+                        <div className="text-sm text-gray-400">
+                          ${card.prices.usd}
+                        </div>
+                      )}
                     </div>
                     <input
                       type="number"
                       value={quantity}
                       onChange={(e) => updateCardQuantity(card.id, parseInt(e.target.value))}
                       min="1"
-                      max="4"
                       className="w-16 px-2 py-1 bg-gray-600 border border-gray-500 rounded text-center"
                     />
                     <button
@@ -258,6 +373,31 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                   </div>
                 ))}
               </div>
+
+              <div className="font-bold text-xl">
+                Total Price: ${totalPrice.toFixed(2)}
+              </div>
+
+              {deckSize > 0 && (
+                <div className="text-gray-400">
+                  Suggested Land Count: {suggestedLandCountValue}
+                  {Object.entries(suggestedLands).map(([landType, count]) => (
+                    <div key={landType}>
+                      {landType}: {count}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {deckSize > 0 && (
+                <button
+                  onClick={addSuggestedLandsToDeck}
+                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center justify-center gap-2"
+                >
+                  <Plus size={20} />
+                  Add Suggested Lands
+                </button>
+              )}
 
               <button
                 onClick={saveDeck}

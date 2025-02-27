@@ -67,7 +67,10 @@ export function validateDeck(deck: Deck): DeckValidation {
   }
   
   cardCounts.forEach((count, cardName) => {
-    if (count > rules.maxCopies) {
+    const card = deck.cards.find(c => c.card.id === cardName)?.card;
+    const isBasicLand = card?.name === 'Plains' || card?.name === 'Island' || card?.name === 'Swamp' || card?.name === 'Mountain' || card?.name === 'Forest';
+
+    if (!isBasicLand && count > rules.maxCopies) {
       errors.push(`${cardName} has too many copies (max ${rules.maxCopies})`);
     }
   });
