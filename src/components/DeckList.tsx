@@ -35,22 +35,32 @@ const DeckList = ({ onDeckEdit }: DeckListProps) => {
         const cardIds = cardEntities.map((entity) => entity.card_id);
         const uniqueCardIds = [...new Set(cardIds)];
 
-        const scryfallCards = await getCardsByIds(uniqueCardIds);
+        try {
+          const scryfallCards = await getCardsByIds(uniqueCardIds);
 
-        const cards = cardEntities.map((entity) => {
-          const card = scryfallCards.find((c) => c.id === entity.card_id);
+          if (!scryfallCards) {
+            console.error("scryfallCards is undefined after getCardsByIds");
+            return { ...deck, cards: [] };
+          }
+
+          const cards = cardEntities.map((entity) => {
+            const card = scryfallCards.find((c) => c.id === entity.card_id);
+            return {
+              card,
+              quantity: entity.quantity,
+            };
+          });
+
           return {
-            card,
-            quantity: entity.quantity,
+            ...deck,
+            cards,
+            createdAt: new Date(deck.created_at),
+            updatedAt: new Date(deck.updated_at),
           };
-        });
-
-        return {
-          ...deck,
-          cards,
-          createdAt: new Date(deck.created_at),
-          updatedAt: new Date(deck.updated_at),
-        };
+        } catch (error) {
+          console.error("Error fetching cards from Scryfall:", error);
+          return { ...deck, cards: [] };
+        }
       }));
 
       setDecks(decksWithCards);

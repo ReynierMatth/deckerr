@@ -75,16 +75,6 @@ export function validateDeck(deck: Deck): DeckValidation {
     }
   });
   
-  // Check commander requirement
-  if (rules.requiresCommander) {
-    const hasCommander = deck.cards.some(({ card }) =>
-      card.type_line?.toLowerCase().includes('legendary creature')
-    );
-    if (!hasCommander) {
-      errors.push('Deck must have a legendary creature as commander');
-    }
-  }
-  
   return {
     isValid: errors.length === 0,
     errors,
