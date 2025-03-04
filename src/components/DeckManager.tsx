@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Save, Trash2 } from 'lucide-react';
+import { Plus, Search, Save, Trash2, Upload, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { Card, Deck } from '../types';
 import { searchCards } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,7 +12,7 @@ interface DeckManagerProps {
   onSave?: () => void;
 }
 
-const calculateManaCurve = (cards: { card: Card; quantity: number }[]) => {
+const calculateManaCurve = (cards: { card; quantity: number }[]) => {
   const manaValues = cards.map(({ card }) => {
     if (!card.mana_cost) return 0;
     // Basic heuristic: count mana symbols
@@ -23,7 +23,10 @@ const calculateManaCurve = (cards: { card: Card; quantity: number }[]) => {
   return averageManaValue;
 };
 
-const suggestLandCountAndDistribution = (cards: { card: Card; quantity: number }[], format: string) => {
+const suggestLandCountAndDistribution = (
+  cards: { card; quantity: number }[],
+  format: string
+) => {
   const formatRules = {
     standard: { minCards: 60, targetLands: 24.5 },
     modern: { minCards: 60, targetLands: 24.5 },
@@ -33,9 +36,14 @@ const suggestLandCountAndDistribution = (cards: { card: Card; quantity: number }
     pauper: { minCards: 60, targetLands: 24.5 },
   };
 
-  const { minCards, targetLands } = formatRules[format as keyof typeof formatRules] || formatRules.standard;
+  const { minCards, targetLands } =
+    formatRules[format as keyof typeof formatRules] || formatRules.standard;
   const deckSize = cards.reduce((acc, { quantity }) => acc + quantity, 0);
-  const nonLandCards = cards.reduce((acc, { card, quantity }) => card.type_line?.toLowerCase().includes('land') ? acc : acc + quantity, 0);
+  const nonLandCards = cards.reduce(
+    (acc, { card, quantity }) =>
+      card.type_line?.toLowerCase().includes('land') ? acc : acc + quantity,
+    0
+  );
   const landsToAdd = Math.max(0, minCards - deckSize);
 
   const colorCounts = { W: 0, U: 0, B: 0, R: 0, G: 0 };
@@ -55,17 +63,24 @@ const suggestLandCountAndDistribution = (cards: { card: Card; quantity: number }
       colorCounts.R += rMatches * quantity;
       colorCounts.G += gMatches * quantity;
 
-      totalColorSymbols += (wMatches + uMatches + bMatches + rMatches + gMatches) * quantity;
+      totalColorSymbols +=
+        (wMatches + uMatches + bMatches + rMatches + gMatches) * quantity;
     }
   });
 
   const landDistribution: { [key: string]: number } = {};
   for (const color in colorCounts) {
-    const proportion = totalColorSymbols > 0 ? colorCounts[color as keyof typeof colorCounts] / totalColorSymbols : 0;
+    const proportion =
+      totalColorSymbols > 0
+        ? colorCounts[color as keyof typeof colorCounts] / totalColorSymbols
+        : 0;
     landDistribution[color] = Math.round(landsToAdd * proportion);
   }
 
-  let totalDistributed = Object.values(landDistribution).reduce((acc, count) => acc + count, 0);
+  let totalDistributed = Object.values(landDistribution).reduce(
+    (acc, count) => acc + count,
+    0
+  );
 
   if (totalDistributed > landsToAdd) {
     // Find the color with the most lands
@@ -88,12 +103,21 @@ const suggestLandCountAndDistribution = (cards: { card: Card; quantity: number }
 export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Card[]>([]);
-  const [selectedCards, setSelectedCards] = useState<{ card: Card; quantity: number }[]>(
-    initialDeck?.cards || []
-  );
+  const [selectedCards, setSelectedCards] = useState<{
+    card: Card;
+    quantity: number;
+  }[]>(initialDeck?.cards || []);
   const [deckName, setDeckName] = useState(initialDeck?.name || '');
   const [deckFormat, setDeckFormat] = useState(initialDeck?.format || 'standard');
+  const [commander, setCommander] = useState<Card | null>(
+    initialDeck?.cards.find(c =>
+      c.card.type_line?.toLowerCase().includes('legendary creature')
+    )?.card || null
+  );
   const { user } = useAuth();
+  const [isImporting, setIsImporting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [snackbar, setSnackbar] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,12 +133,20 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
   const addCardToDeck = (card: Card) => {
     setSelectedCards(prev => {
-      const isBasicLand = card.name === 'Plains' || card.name === 'Island' || card.name === 'Swamp' || card.name === 'Mountain' || card.name === 'Forest';
+      const isBasicLand =
+        card.name === 'Plains' ||
+        card.name === 'Island' ||
+        card.name === 'Swamp' ||
+        card.name === 'Mountain' ||
+        card.name === 'Forest';
       const existing = prev.find(c => c.card.id === card.id);
       if (existing) {
         return prev.map(c =>
           c.card.id === card.id
-            ? { ...c, quantity: isBasicLand ? c.quantity + 1 : Math.min(c.quantity + 1, 4) }
+            ? {
+                ...c,
+                quantity: isBasicLand ? c.quantity + 1 : Math.min(c.quantity + 1, 4),
+              }
             : c
         );
       }
@@ -129,7 +161,12 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     setSelectedCards(prev => {
       return prev.map(c => {
         if (c.card.id === cardId) {
-          const isBasicLand = c.card.name === 'Plains' || c.card.name === 'Island' || c.card.name === 'Swamp' || c.card.name === 'Mountain' || c.card.name === 'Forest';
+          const isBasicLand =
+            c.card.name === 'Plains' ||
+            c.card.name === 'Island' ||
+            c.card.name === 'Swamp' ||
+            c.card.name === 'Mountain' ||
+            c.card.name === 'Forest';
           return { ...c, quantity: quantity };
         }
         return c;
@@ -140,30 +177,27 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const saveDeck = async () => {
     if (!deckName.trim() || selectedCards.length === 0 || !user) return;
 
-    const deckToSave: Deck = {
-      id: initialDeck?.id || crypto.randomUUID(),
-      name: deckName,
-      format: deckFormat,
-      cards: selectedCards,
-      userId: user.id,
-      createdAt: initialDeck?.createdAt || new Date(),
-      updatedAt: new Date()
-    };
-
-    const validation = validateDeck(deckToSave);
-    if (!validation.isValid) {
-      alert(`Deck validation failed: ${validation.errors.join(', ')}`);
-      return;
-    }
-
+    setIsSaving(true);
     try {
+      const deckToSave: Deck = {
+        id: initialDeck?.id || crypto.randomUUID(),
+        name: deckName,
+        format: deckFormat,
+        cards: selectedCards,
+        userId: user.id,
+        createdAt: initialDeck?.createdAt || new Date(),
+        updatedAt: new Date(),
+      };
+
+      const validation = validateDeck(deckToSave);
+
       const deckData = {
         id: deckToSave.id,
         name: deckToSave.name,
         format: deckToSave.format,
         user_id: deckToSave.userId,
         created_at: deckToSave.createdAt,
-        updated_at: deckToSave.updatedAt
+        updated_at: deckToSave.updatedAt,
       };
 
       // Save or update the deck
@@ -176,10 +210,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
       // Delete existing cards if updating
       if (initialDeck) {
-        await supabase
-          .from('deck_cards')
-          .delete()
-          .eq('deck_id', initialDeck.id);
+        await supabase.from('deck_cards').delete().eq('deck_id', initialDeck.id);
       }
 
       // Save the deck cards
@@ -187,7 +218,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         deck_id: deckToSave.id,
         card_id: card.card.id,
         quantity: card.quantity,
-        is_commander: card.card.type_line?.toLowerCase().includes('legendary creature') || false
+        is_commander: card.card.id === commander?.id,
       }));
 
       const { error: cardsError } = await supabase
@@ -196,10 +227,14 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
       if (cardsError) throw cardsError;
 
+      setSnackbar({ message: 'Deck saved successfully!', type: 'success' });
       if (onSave) onSave();
     } catch (error) {
       console.error('Error saving deck:', error);
-      alert('Failed to save deck');
+      setSnackbar({ message: 'Failed to save deck.', type: 'error' });
+    } finally {
+      setIsSaving(false);
+      setTimeout(() => setSnackbar(null), 3000); // Clear snackbar after 3 seconds
     }
   };
 
@@ -210,17 +245,25 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     cards: selectedCards,
     userId: user?.id || '',
     createdAt: initialDeck?.createdAt || new Date(),
-    updatedAt: new Date()
+    updatedAt: new Date(),
   };
 
   const validation = validateDeck(currentDeck);
 
   const deckSize = selectedCards.reduce((acc, curr) => acc + curr.quantity, 0);
-  const { landCount: suggestedLandCountValue, landDistribution: suggestedLands } = suggestLandCountAndDistribution(selectedCards, deckFormat);
+  const {
+    landCount: suggestedLandCountValue,
+    landDistribution: suggestedLands,
+  } = suggestLandCountAndDistribution(selectedCards, deckFormat);
 
   const totalPrice = selectedCards.reduce((acc, { card, quantity }) => {
-    const isBasicLand = card.name === 'Plains' || card.name === 'Island' || card.name === 'Swamp' || card.name === 'Mountain' || card.name === 'Forest';
-    const price = isBasicLand ? 0 : (card.prices?.usd ? parseFloat(card.prices.usd) : 0);
+    const isBasicLand =
+      card.name === 'Plains' ||
+      card.name === 'Island' ||
+      card.name === 'Swamp' ||
+      card.name === 'Mountain' ||
+      card.name === 'Forest';
+    const price = isBasicLand ? 0 : card.prices?.usd ? parseFloat(card.prices.usd) : 0;
     return acc + price * quantity;
   }, 0);
 
@@ -256,6 +299,67 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     }
   };
 
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async e => {
+        const text = e.target?.result as string;
+        const lines = text.split('\n');
+        const cardsToAdd: { card: Card; quantity: number }[] = [];
+
+        for (const line of lines) {
+          const parts = line.trim().split(' ');
+          const quantity = parseInt(parts[0]);
+          const cardName = parts.slice(1).join(' ');
+
+          if (isNaN(quantity) || quantity <= 0 || !cardName) continue;
+
+          try {
+            const searchResults = await searchCards(cardName);
+            if (searchResults && searchResults.length > 0) {
+              const card = searchResults[0];
+              cardsToAdd.push({ card, quantity });
+            } else {
+              console.warn(`Card not found: ${cardName}`);
+              alert(`Card not found: ${cardName}`);
+            }
+          } catch (error) {
+            console.error(`Failed to search card ${cardName}:`, error);
+            alert(`Failed to search card ${cardName}: ${error}`);
+          }
+        }
+
+        setSelectedCards(prev => {
+          const updatedCards = [...prev];
+          for (const { card, quantity } of cardsToAdd) {
+            const existingCardIndex = updatedCards.findIndex(
+              c => c.card.id === card.id
+            );
+            if (existingCardIndex !== -1) {
+              updatedCards[existingCardIndex].quantity = Math.min(
+                updatedCards[existingCardIndex].quantity + quantity,
+                4
+              );
+            } else {
+              updatedCards.push({ card, quantity });
+            }
+          }
+          return updatedCards;
+        });
+      };
+
+      reader.readAsText(file);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-white p-6">
       <div className="max-w-7xl mx-auto">
@@ -264,11 +368,14 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
           <div className="lg:col-span-2 space-y-6">
             <form onSubmit={handleSearch} className="flex gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                <Search
+                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                  size={20}
+                />
                 <input
                   type="text"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={e => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
                   placeholder="Search for cards..."
                 />
@@ -310,14 +417,14 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
               <input
                 type="text"
                 value={deckName}
-                onChange={(e) => setDeckName(e.target.value)}
+                onChange={e => setDeckName(e.target.value)}
                 className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
                 placeholder="Deck Name"
               />
 
               <select
                 value={deckFormat}
-                onChange={(e) => setDeckFormat(e.target.value)}
+                onChange={e => setDeckFormat(e.target.value)}
                 className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               >
                 <option value="standard">Standard</option>
@@ -327,6 +434,51 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                 <option value="vintage">Vintage</option>
                 <option value="pauper">Pauper</option>
               </select>
+
+              {deckFormat === 'commander' && (
+                <select
+                  value={commander?.id || ''}
+                  onChange={e => {
+                    const card =
+                      selectedCards.find(c => c.card.id === e.target.value)?.card ||
+                      null;
+                    setCommander(card);
+                  }}
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
+                >
+                  <option value="">Select Commander</option>
+                  {selectedCards
+                    .filter(c =>
+                      c.card.type_line?.toLowerCase().includes('legendary creature')
+                    )
+                    .map(({ card }) => (
+                      <option key={card.id} value={card.id}>
+                        {card.name}
+                      </option>
+                    ))}
+                </select>
+              )}
+
+              <div className="relative">
+                <input
+                  type="file"
+                  accept=".txt"
+                  onChange={handleFileUpload}
+                  disabled={isImporting}
+                  className="w-full text-sm text-gray-500
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-lg
+                file:border-0
+                file:text-sm file:font-semibold
+                file:bg-blue-500 file:text-white
+                hover:file:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                />
+                {isImporting && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-800 bg-opacity-50 rounded-lg">
+                    <Loader2 className="animate-spin text-white" size={48} />
+                  </div>
+                )}
+              </div>
 
               {!validation.isValid && (
                 <div className="bg-red-500/10 border border-red-500 rounded-lg p-3">
@@ -343,7 +495,10 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                   Cards ({selectedCards.reduce((acc, curr) => acc + curr.quantity, 0)})
                 </h3>
                 {selectedCards.map(({ card, quantity }) => (
-                  <div key={card.id} className="flex items-center gap-4 bg-gray-700 p-2 rounded-lg">
+                  <div
+                    key={card.id}
+                    className="flex items-center gap-4 bg-gray-700 p-2 rounded-lg"
+                  >
                     <img
                       src={card.image_uris?.art_crop}
                       alt={card.name}
@@ -352,15 +507,15 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                     <div className="flex-1">
                       <h4 className="font-medium">{card.name}</h4>
                       {card.prices?.usd && (
-                        <div className="text-sm text-gray-400">
-                          ${card.prices.usd}
-                        </div>
+                        <div className="text-sm text-gray-400">${card.prices.usd}</div>
                       )}
                     </div>
                     <input
                       type="number"
                       value={quantity}
-                      onChange={(e) => updateCardQuantity(card.id, parseInt(e.target.value))}
+                      onChange={e =>
+                        updateCardQuantity(card.id, parseInt(e.target.value))
+                      }
                       min="1"
                       className="w-16 px-2 py-1 bg-gray-600 border border-gray-500 rounded text-center"
                     />
@@ -368,7 +523,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                       onClick={() => removeCardFromDeck(card.id)}
                       className="text-red-500 hover:text-red-400"
                     >
-                      <Trash2 size={20}/>
+                      <Trash2 size={20} />
                     </button>
                   </div>
                 ))}
@@ -401,16 +556,48 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
               <button
                 onClick={saveDeck}
-                disabled={!deckName.trim() || selectedCards.length === 0 || !validation.isValid}
-                className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2"
+                disabled={
+                  !deckName.trim() || selectedCards.length === 0 || isSaving
+                }
+                className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 relative"
               >
-                <Save size={20} />
-                {initialDeck ? 'Update Deck' : 'Save Deck'}
+                {isSaving ? (
+                  <>
+                    <Loader2 className="animate-spin text-white absolute left-2 top-1/2 -translate-y-1/2" size={20} />
+                    <span className="opacity-0">Save Deck</span>
+                  </>
+                ) : (
+                  <>
+                    <Save size={20} />
+                    <span>{initialDeck ? 'Update Deck' : 'Save Deck'}</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
         </div>
       </div>
+      {snackbar && (
+        <div
+          className={`fixed bottom-4 right-4 bg-green-500 text-white p-4 rounded-lg shadow-lg transition-all duration-300 ${
+            snackbar.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              {snackbar.type === 'success' ? (
+                <CheckCircle className="mr-2" size={20} />
+              ) : (
+                <XCircle className="mr-2" size={20} />
+              )}
+              <span>{snackbar.message}</span>
+            </div>
+            <button onClick={() => setSnackbar(null)} className="ml-4 text-gray-200 hover:text-white focus:outline-none">
+              <Trash2 size={16} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
