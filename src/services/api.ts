@@ -24,6 +24,8 @@ export const getCardById = async (cardId: string): Promise<Card> => {
 };
 
 export const getCardsByIds = async (cardIds: string[]): Promise<Card[]> => {
+
+  //75 cards per request max
   const response = await fetch(`${SCRYFALL_API}/cards/collection`, {
     method: 'POST',
     headers: {
