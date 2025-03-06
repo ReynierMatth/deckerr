@@ -23,19 +23,32 @@ export const getCardById = async (cardId: string): Promise<Card> => {
   return await response.json();
 };
 
+const chunkArray = (array: string[], size: number): string[][] => {
+  const chunkedArray: string[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunkedArray.push(array.slice(i, i + size));
+  }
+  return chunkedArray;
+};
+
 export const getCardsByIds = async (cardIds: string[]): Promise<Card[]> => {
+  const chunkedCardIds = chunkArray(cardIds, 75);
+  let allCards: Card[] = [];
 
-  //75 cards per request max
-  const response = await fetch(`${SCRYFALL_API}/cards/collection`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      identifiers: cardIds.map((id) => ({ id })),
-    }),
-  });
+  for (const chunk of chunkedCardIds) {
+    const response = await fetch(`${SCRYFALL_API}/cards/collection`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        identifiers: chunk.map((id) => ({ id })),
+      }),
+    });
 
-  const data = await response.json();
-  return data.data;
+    const data = await response.json();
+    allCards = allCards.concat(data.data);
+  }
+
+  return allCards;
 };
