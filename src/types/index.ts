@@ -22,7 +22,7 @@ export interface Deck {
   id: string;
   name: string;
   format: string;
-  cards: { card: Card; quantity: number }[];
+  cards: { card: Card; quantity: number, is_commander: boolean }[];
   userId: string;
   createdAt: Date;
   updatedAt: Date;

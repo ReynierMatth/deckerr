@@ -11,7 +11,7 @@ interface DeckCardProps {
 export default function DeckCard({ deck, onEdit }: DeckCardProps) {
   const validation = validateDeck(deck);
   const commander = deck.format === 'commander' ? deck.cards.find(card => 
-    card.card.type_line?.toLowerCase().includes('legendary creature')
+    card.is_commander
   )?.card : null;
 
   return (
