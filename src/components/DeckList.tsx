@@ -27,6 +27,11 @@ const DeckList = ({ onDeckEdit }: DeckListProps) => {
           .select('*')
           .eq('deck_id', deck.id);
 
+        if(deck.id === "410ed539-a8f4-4bc4-91f1-6c113b9b7e25"){
+          console.log("deck", deck.name);
+            console.log("cardEntities", cardEntities);
+        }
+
         if (cardsError) {
           console.error(`Error fetching cards for deck ${deck.id}:`, cardsError);
           return { ...deck, cards: [] };
@@ -34,6 +39,8 @@ const DeckList = ({ onDeckEdit }: DeckListProps) => {
 
         const cardIds = cardEntities.map((entity) => entity.card_id);
         const uniqueCardIds = [...new Set(cardIds)];
+
+        console.log("uniqueCardIds", uniqueCardIds);
 
         try {
           const scryfallCards = await getCardsByIds(uniqueCardIds);
@@ -48,6 +55,7 @@ const DeckList = ({ onDeckEdit }: DeckListProps) => {
             return {
               card,
               quantity: entity.quantity,
+              is_commander: entity.is_commander,
             };
           });
 
