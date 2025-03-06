@@ -40,7 +40,6 @@ const FORMAT_RULES = {
 };
 
 export function validateDeck(deck: Deck): DeckValidation {
-  console.log("deck in validator", deck);
   const rules = FORMAT_RULES[deck.format as keyof typeof FORMAT_RULES];
   const errors: string[] = [];
   
@@ -61,7 +60,7 @@ export function validateDeck(deck: Deck): DeckValidation {
   const cardCounts = new Map<string, number>();
   for (const element of deck.cards) {
     const {card, quantity} = element;
-    console.log("card", card);
+    //console.log("card", card);
     const currentCount = cardCounts.get(card.id) || 0;
     cardCounts.set(card.id, currentCount + quantity);
   }

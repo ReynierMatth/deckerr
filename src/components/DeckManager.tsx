@@ -110,10 +110,11 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const [deckName, setDeckName] = useState(initialDeck?.name || '');
   const [deckFormat, setDeckFormat] = useState(initialDeck?.format || 'standard');
   const [commander, setCommander] = useState<Card | null>(
-    initialDeck?.cards.find(c =>
-      c.card.type_line?.toLowerCase().includes('legendary creature')
-    )?.card || null
+      initialDeck?.cards.find(card =>
+          card.is_commander
+      )?.card  || null
   );
+
   const { user } = useAuth();
   const [isImporting, setIsImporting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -449,7 +450,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                   <option value="">Select Commander</option>
                   {selectedCards
                     .filter(c =>
-                      c.card.type_line?.toLowerCase().includes('legendary creature')
+                      c.card.type_line?.toLowerCase().includes('legendary')
                     )
                     .map(({ card }) => (
                       <option key={card.id} value={card.id}>

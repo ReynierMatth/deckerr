@@ -9,6 +9,12 @@ interface DeckCardProps {
 }
 
 export default function DeckCard({ deck, onEdit }: DeckCardProps) {
+
+  if(deck.id === "410ed539-a8f4-4bc4-91f1-6c113b9b7e25"){
+    console.log("deck", deck.name);
+    console.log("cardEntities", deck.cards);
+  }
+
   const validation = validateDeck(deck);
   const commander = deck.format === 'commander' ? deck.cards.find(card => 
     card.is_commander
