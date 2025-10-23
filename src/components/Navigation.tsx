@@ -74,18 +74,18 @@ import React, { useState, useRef, useEffect } from 'react';
       return (
         <>
           {/* Desktop Navigation - Top */}
-          <nav className="hidden md:block fixed top-0 left-0 right-0 bg-gray-800 border-b border-gray-700 z-50">
+          <nav className="hidden md:block fixed top-0 left-0 right-0 bg-gray-800 border-b border-gray-700 z-50 animate-slide-in-left">
             <div className="max-w-7xl mx-auto px-4">
               <div className="flex items-center justify-between h-16">
                 <div className="flex items-center space-x-8">
-                  <span className="text-2xl font-bold text-orange-500">Deckerr</span>
+                  <span className="text-2xl font-bold text-orange-500 animate-bounce-in">Deckerr</span>
                   {navItems.map((item) => (
                     <button
                       key={item.id}
                       onClick={() => setCurrentPage(item.id)}
-                      className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors
+                      className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-smooth
                         ${currentPage === item.id
-                          ? 'text-white bg-gray-900'
+                          ? 'text-white bg-gray-900 animate-pulse-glow'
                           : 'text-gray-300 hover:text-white hover:bg-gray-700'
                         }`}
                     >
@@ -100,32 +100,32 @@ import React, { useState, useRef, useEffect } from 'react';
                     <div className="relative" ref={dropdownRef}>
                       <button
                         onClick={() => setShowDropdown(!showDropdown)}
-                        className="flex items-center space-x-3 px-3 py-2 rounded-md hover:bg-gray-700"
+                        className="flex items-center space-x-3 px-3 py-2 rounded-md hover:bg-gray-700 transition-smooth"
                       >
                         <img
                           src={getAvatarUrl(user.id)}
                           alt="User avatar"
-                          className="w-8 h-8 rounded-full bg-gray-700"
+                          className="w-8 h-8 rounded-full bg-gray-700 transition-smooth hover:scale-110"
                         />
                         <span className="text-gray-300 text-sm">{username || user.email}</span>
                         <ChevronDown size={16} className="text-gray-400" />
                       </button>
 
                       {showDropdown && (
-                        <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-md shadow-lg py-1 border border-gray-700">
+                        <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-md shadow-lg py-1 border border-gray-700 animate-scale-in glass-effect">
                           <button
                             onClick={() => {
                               setCurrentPage('profile');
                               setShowDropdown(false);
                             }}
-                            className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700"
+                            className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-smooth"
                           >
                             <Settings size={16} />
                             <span>Profile Settings</span>
                           </button>
                           <button
                             onClick={handleSignOut}
-                            className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700"
+                            className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-smooth"
                           >
                             <LogOut size={16} />
                             <span>Sign Out</span>
@@ -140,9 +140,9 @@ import React, { useState, useRef, useEffect } from 'react';
           </nav>
 
           {/* Mobile Navigation - Bottom */}
-          <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 z-50">
+          <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 z-50 animate-slide-in-right">
             <div className="flex justify-between items-center h-16 px-4">
-              <span className="text-2xl font-bold text-orange-500">Deckerr</span>
+              <span className="text-2xl font-bold text-orange-500 animate-bounce-in">Deckerr</span>
               <div className="relative" ref={mobileMenuRef}>
                 <button
                   onClick={() => setShowMobileMenu(!showMobileMenu)}
@@ -151,7 +151,7 @@ import React, { useState, useRef, useEffect } from 'react';
                   <Menu size={24} />
                 </button>
                 {showMobileMenu && (
-                  <div className="absolute right-0 bottom-16 w-48 bg-gray-800 rounded-md shadow-lg py-1 border border-gray-700">
+                  <div className="absolute right-0 bottom-16 w-48 bg-gray-800 rounded-md shadow-lg py-1 border border-gray-700 animate-scale-in glass-effect">
                     {navItems.map((item) => (
                       <button
                         key={item.id}
@@ -159,7 +159,7 @@ import React, { useState, useRef, useEffect } from 'react';
                           setCurrentPage(item.id);
                           setShowMobileMenu(false);
                         }}
-                        className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700"
+                        className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-smooth"
                       >
                         <item.icon size={16} />
                         <span>{item.label}</span>
@@ -172,14 +172,14 @@ import React, { useState, useRef, useEffect } from 'react';
                             setCurrentPage('profile');
                             setShowMobileMenu(false);
                           }}
-                          className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700"
+                          className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-smooth"
                         >
                           <Settings size={16} />
                           <span>Profile Settings</span>
                         </button>
                         <button
                           onClick={handleSignOut}
-                          className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700"
+                          className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-smooth"
                         >
                           <LogOut size={16} />
                           <span>Sign Out</span>
