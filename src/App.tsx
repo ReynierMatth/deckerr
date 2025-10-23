@@ -20,7 +20,7 @@ import React, { useState } from 'react';
       if (loading) {
         return (
           <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div>
+            <div className="loading-spinner h-32 w-32"></div>
           </div>
         );
       }
@@ -38,9 +38,9 @@ import React, { useState } from 'react';
         switch (currentPage) {
           case 'home':
             return (
-              <div className="min-h-screen bg-gray-900 text-white p-6">
+              <div className="min-h-screen bg-gray-900 text-white p-6 animate-fade-in">
                 <div className="max-w-7xl mx-auto">
-                  <h1 className="text-3xl font-bold mb-6">My Decks</h1>
+                  <h1 className="text-3xl font-bold mb-6 animate-slide-in-left">My Decks</h1>
                   <DeckList onDeckEdit={handleDeckEdit} />
                 </div>
               </div>
