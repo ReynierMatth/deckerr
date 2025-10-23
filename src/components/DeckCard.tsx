@@ -21,8 +21,8 @@ export default function DeckCard({ deck, onEdit }: DeckCardProps) {
   )?.card : null;
 
   return (
-    <div 
-      className="bg-gray-800 rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
+    <div
+      className="bg-gray-800 rounded-xl overflow-hidden shadow-lg card-hover cursor-pointer animate-scale-in"
       onClick={() => onEdit?.(deck.id)}
     >
       <div className="relative h-48 overflow-hidden">
@@ -66,7 +66,7 @@ export default function DeckCard({ deck, onEdit }: DeckCardProps) {
             e.stopPropagation();
             onEdit?.(deck.id);
           }}
-          className="mt-4 w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center justify-center gap-2 text-white"
+          className="mt-4 w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center justify-center gap-2 text-white btn-ripple transition-smooth glow-on-hover"
         >
           <Edit size={20} />
           Edit Deck
