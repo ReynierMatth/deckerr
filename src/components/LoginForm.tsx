@@ -80,13 +80,13 @@ import { useState, useEffect } from 'react';
           </div>
 
           {/* Login Form */}
-          <div className="relative z-10 bg-gray-900/80 p-8 rounded-lg shadow-xl backdrop-blur-sm w-full max-w-md">
-            <h2 className="text-3xl font-bold text-orange-500 mb-6 text-center">
+          <div className="relative z-10 bg-gray-900/80 p-8 rounded-lg shadow-xl backdrop-blur-sm w-full max-w-md glass-effect animate-scale-in">
+            <h2 className="text-3xl font-bold text-orange-500 mb-6 text-center animate-bounce-in">
               Deckerr
             </h2>
             
             {error && (
-              <div className="mb-4 p-3 bg-red-500/10 border border-red-500 rounded text-red-500">
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500 rounded text-red-500 animate-fade-in">
                 {error}
               </div>
             )}
@@ -102,7 +102,7 @@ import { useState, useEffect } from 'react';
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-gray-800/50 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
+                    className="w-full pl-10 pr-4 py-2 bg-gray-800/50 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white transition-smooth"
                     placeholder="Enter your email"
                     required
                   />
@@ -118,7 +118,7 @@ import { useState, useEffect } from 'react';
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-gray-800/50 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
+                    className="w-full pl-10 pr-4 py-2 bg-gray-800/50 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white transition-smooth"
                     placeholder="Enter your password"
                     required
                   />
@@ -126,7 +126,7 @@ import { useState, useEffect } from 'react';
               </div>
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
+                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg btn-ripple glow-on-hover transition-smooth"
               >
                 <LogIn size={20} />
                 {isSignUp ? 'Sign Up' : 'Sign In'}
@@ -136,7 +136,7 @@ import { useState, useEffect } from 'react';
             <div className="mt-4 text-center">
               <button
                 onClick={() => setIsSignUp(!isSignUp)}
-                className="text-blue-400 hover:text-blue-300"
+                className="text-blue-400 hover:text-blue-300 transition-smooth"
               >
                 {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
               </button>
