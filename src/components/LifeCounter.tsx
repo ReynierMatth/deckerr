@@ -1,167 +1,208 @@
-import React, { useState, useEffect } from 'react';
-    import { Plus, Minus } from 'lucide-react';
+import React, { useState } from 'react';
+import { Users, RotateCcw, Settings } from 'lucide-react';
+import PlayerLifeCounter from './PlayerLifeCounter';
+import CardSearchModal from './CardSearchModal';
+import { Card } from '../types';
 
-    interface Player {
-      id: number;
-      name: string;
-      life: number;
-      color: string;
+interface Player {
+  id: number;
+  name: string;
+  life: number;
+  backgroundImage?: string;
+}
+
+const DEFAULT_STARTING_LIFE = 20;
+
+export default function LifeCounter() {
+  const [players, setPlayers] = useState<Player[]>([
+    { id: 1, name: 'Player 1', life: DEFAULT_STARTING_LIFE },
+    { id: 2, name: 'Player 2', life: DEFAULT_STARTING_LIFE },
+  ]);
+  const [isCardSearchOpen, setIsCardSearchOpen] = useState(false);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [startingLife, setStartingLife] = useState(DEFAULT_STARTING_LIFE);
+
+  const updateLife = (playerId: number, change: number) => {
+    setPlayers((prevPlayers) =>
+      prevPlayers.map((player) =>
+        player.id === playerId ? { ...player, life: Math.max(0, player.life + change) } : player
+      )
+    );
+  };
+
+  const changePlayerName = (playerId: number) => {
+    const player = players.find((p) => p.id === playerId);
+    if (!player) return;
+
+    const newName = prompt('Enter new player name:', player.name);
+    if (newName && newName.trim()) {
+      setPlayers((prevPlayers) =>
+        prevPlayers.map((p) => (p.id === playerId ? { ...p, name: newName.trim() } : p))
+      );
     }
+  };
 
-    const COLORS = ['white', 'blue', 'black', 'red', 'green'];
+  const openBackgroundSelector = (playerId: number) => {
+    setSelectedPlayerId(playerId);
+    setIsCardSearchOpen(true);
+  };
 
-    export default function LifeCounter() {
-      const [numPlayers, setNumPlayers] = useState<number | null>(null);
-      const [playerNames, setPlayerNames] = useState<string[]>([]);
-      const [players, setPlayers] = useState<Player[]>([]);
-      const [setupComplete, setSetupComplete] = useState(false);
+  const handleCardSelect = (card: Card) => {
+    if (selectedPlayerId !== null && card.image_uris?.art_crop) {
+      setPlayers((prevPlayers) =>
+        prevPlayers.map((p) =>
+          p.id === selectedPlayerId ? { ...p, backgroundImage: card.image_uris!.art_crop } : p
+        )
+      );
+    }
+    setSelectedPlayerId(null);
+  };
 
-      useEffect(() => {
-        if (numPlayers !== null) {
-          setPlayers(
-            Array.from({ length: numPlayers }, (_, i) => ({
-              id: i + 1,
-              name: playerNames[i] || `Player ${i + 1}`,
-              life: 20,
-              color: COLORS[i % COLORS.length],
-            }))
-          );
-        }
-      }, [numPlayers, playerNames]);
+  const changePlayerCount = (count: number) => {
+    const currentCount = players.length;
 
-      const handleNumPlayersChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const newNumPlayers = parseInt(e.target.value, 10);
-        setNumPlayers(newNumPlayers);
-        setPlayerNames(Array(newNumPlayers).fill(''));
-      };
+    if (count > currentCount) {
+      // Add players
+      const newPlayers = Array.from({ length: count - currentCount }, (_, i) => ({
+        id: currentCount + i + 1,
+        name: `Player ${currentCount + i + 1}`,
+        life: startingLife,
+      }));
+      setPlayers([...players, ...newPlayers]);
+    } else if (count < currentCount) {
+      // Remove players
+      setPlayers(players.slice(0, count));
+    }
+  };
 
-      const handleNameChange = (index: number, newName: string) => {
-        const updatedNames = [...playerNames];
-        updatedNames[index] = newName;
-        setPlayerNames(updatedNames);
-      };
+  const resetAllLife = () => {
+    if (confirm(`Reset all players to ${startingLife} life?`)) {
+      setPlayers((prevPlayers) =>
+        prevPlayers.map((p) => ({ ...p, life: startingLife }))
+      );
+    }
+  };
 
-      const updateLife = (playerId: number, change: number) => {
-        setPlayers((prevPlayers) =>
-          prevPlayers.map((player) =>
-            player.id === playerId ? { ...player, life: player.life + change } : player
-          )
-        );
-      };
+  const getGridClass = () => {
+    const count = players.length;
+    if (count === 1) return 'grid-cols-1';
+    if (count === 2) return 'grid-cols-1 md:grid-cols-2';
+    if (count === 3) return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3';
+    if (count === 4) return 'grid-cols-2 lg:grid-cols-2';
+    if (count === 5) return 'grid-cols-2 lg:grid-cols-3';
+    if (count === 6) return 'grid-cols-2 lg:grid-cols-3';
+    if (count === 7 || count === 8) return 'grid-cols-2 lg:grid-cols-4';
+    return 'grid-cols-2 lg:grid-cols-4';
+  };
 
-      const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        setSetupComplete(true);
-      };
+  return (
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+      {/* Header */}
+      <div className="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center justify-between">
+        <h1 className="text-xl md:text-2xl font-bold">Life Counter</h1>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={resetAllLife}
+            className="bg-gray-700 hover:bg-gray-600 text-white rounded-lg px-3 py-2 text-sm flex items-center gap-2 transition-colors"
+          >
+            <RotateCcw size={18} />
+            <span className="hidden sm:inline">Reset</span>
+          </button>
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 text-sm flex items-center gap-2 transition-colors"
+          >
+            <Settings size={18} />
+            <span className="hidden sm:inline">Settings</span>
+          </button>
+        </div>
+      </div>
 
-      const renderSetupForm = () => (
-        <div className="max-w-md mx-auto">
-          <h2 className="text-2xl font-bold mb-6">Setup Players</h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Settings Panel */}
+      {showSettings && (
+        <div className="bg-gray-800 border-b border-gray-700 px-4 py-4 animate-fade-in">
+          <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Player Count */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
+                <Users size={16} className="inline mr-2" />
                 Number of Players
               </label>
-              <select
-                value={numPlayers || ''}
-                onChange={handleNumPlayersChange}
-                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
-                required
-              >
-                <option value="" disabled>Select Number of Players</option>
-                {[2, 3, 4, 5, 6].map((num) => (
-                  <option key={num} value={num}>
-                    {num}
-                  </option>
+              <div className="grid grid-cols-4 gap-2">
+                {[2, 3, 4, 5, 6, 7, 8].map((count) => (
+                  <button
+                    key={count}
+                    onClick={() => changePlayerCount(count)}
+                    className={`py-2 rounded-lg font-medium transition-colors ${
+                      players.length === count
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    {count}
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
 
-            {numPlayers !== null &&
-              Array.from({ length: numPlayers }, (_, i) => (
-                <div key={i}>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Player {i + 1} Name
-                  </label>
-                  <input
-                    type="text"
-                    value={playerNames[i] || ''}
-                    onChange={(e) => handleNameChange(i, e.target.value)}
-                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
-                    placeholder={`Player ${i + 1} Name`}
-                  />
-                </div>
-              ))}
-
-            {numPlayers !== null && (
-              <button
-                type="submit"
-                className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg"
-              >
-                Start Game
-              </button>
-            )}
-          </form>
-        </div>
-      );
-
-      const renderLifeCounters = () => (
-        <div className="flex flex-col items-center justify-center min-h-screen">
-          <div className="relative w-full h-full">
-            {players.map((player, index) => {
-              const angle = (index / players.length) * 360;
-              const rotation = 360 - angle;
-              const x = 50 + 40 * Math.cos((angle - 90) * Math.PI / 180);
-              const y = 50 + 40 * Math.sin((angle - 90) * Math.PI / 180);
-
-              return (
-                <div
-                  key={player.id}
-                  className="absolute transform -translate-x-1/2 -translate-y-1/2"
-                  style={{
-                    top: `${y}%`,
-                    left: `${x}%`,
-                    transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
-                  }}
-                >
-                  <div
-                    className="rounded-lg p-4 flex flex-col items-center"
-                    style={{
-                      backgroundColor: `var(--color-${player.color}-primary)`,
-                      color: 'white',
-                      transform: `rotate(${-rotation}deg)`,
+            {/* Starting Life */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Starting Life Total
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[20, 30, 40].map((life) => (
+                  <button
+                    key={life}
+                    onClick={() => {
+                      setStartingLife(life);
+                      if (confirm(`Change starting life to ${life}? This will reset all players.`)) {
+                        setPlayers((prevPlayers) =>
+                          prevPlayers.map((p) => ({ ...p, life }))
+                        );
+                      }
                     }}
+                    className={`py-2 rounded-lg font-medium transition-colors ${
+                      startingLife === life
+                        ? 'bg-green-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
                   >
-                    <h2 className="text-xl font-bold mb-4">{player.name}</h2>
-                    <div className="text-4xl font-bold mb-4">{player.life}</div>
-                    <div className="flex gap-4">
-                      <button
-                        onClick={() => updateLife(player.id, 1)}
-                        className="bg-green-600 hover:bg-green-700 rounded-full p-2"
-                      >
-                        <Plus size={24} />
-                      </button>
-                      <button
-                        onClick={() => updateLife(player.id, -1)}
-                        className="bg-red-600 hover:bg-red-700 rounded-full p-2"
-                      >
-                        <Minus size={24} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                    {life}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-      );
+      )}
 
-      return (
-        <div className="min-h-screen bg-gray-900 text-white p-6">
-          <div className="max-w-7xl mx-auto">
-            <h1 className="text-3xl font-bold mb-6">Life Counter</h1>
-            {!setupComplete ? renderSetupForm() : renderLifeCounters()}
-          </div>
-        </div>
-      );
-    }
+      {/* Life Counter Grid */}
+      <div className={`flex-1 grid ${getGridClass()} gap-2 md:gap-4 p-2 md:p-4`}>
+        {players.map((player) => (
+          <PlayerLifeCounter
+            key={player.id}
+            id={player.id}
+            name={player.name}
+            life={player.life}
+            backgroundImage={player.backgroundImage}
+            onLifeChange={(change) => updateLife(player.id, change)}
+            onChangeName={() => changePlayerName(player.id)}
+            onChangeBackground={() => openBackgroundSelector(player.id)}
+          />
+        ))}
+      </div>
+
+      {/* Card Search Modal */}
+      <CardSearchModal
+        isOpen={isCardSearchOpen}
+        onClose={() => {
+          setIsCardSearchOpen(false);
+          setSelectedPlayerId(null);
+        }}
+        onSelectCard={handleCardSelect}
+      />
+    </div>
+  );
+}
