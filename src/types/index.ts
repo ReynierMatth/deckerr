@@ -16,6 +16,20 @@ export interface Card {
   type_line?: string;
   oracle_text?: string;
   colors?: string[];
+  prices?: {
+    usd?: string;
+    usd_foil?: string;
+    eur?: string;
+  };
+}
+
+export interface Collection {
+  id: string;
+  user_id: string;
+  card_id: string;
+  quantity: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Deck {
