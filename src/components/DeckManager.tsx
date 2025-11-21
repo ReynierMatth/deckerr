@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Save, Trash2, Loader2, CheckCircle, XCircle, AlertCircle, PackagePlus, RefreshCw } from 'lucide-react';
+import { Plus, Minus, Search, Save, Trash2, Loader2, CheckCircle, XCircle, AlertCircle, PackagePlus, RefreshCw } from 'lucide-react';
 import { Card, Deck } from '../types';
 import { searchCards, getUserCollection, addCardToCollection, addMultipleCardsToCollection } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -539,6 +539,8 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                 const isMultiFaced = isDoubleFaced(card);
                 const inCollection = userCollection.get(card.id) || 0;
                 const isAddingThisCard = addingCardId === card.id;
+                const cardInDeck = selectedCards.find(c => c.card.id === card.id);
+                const quantityInDeck = cardInDeck?.quantity || 0;
 
                 const displayName = isMultiFaced && card.card_faces
                   ? card.card_faces[currentFaceIndex]?.name || card.name
@@ -592,13 +594,37 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                       )}
                     </div>
 
-                    {/* Add Button */}
-                    <button
-                      onClick={() => addCardToDeck(card)}
-                      className="flex-shrink-0 w-10 h-10 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center transition-colors"
-                    >
-                      <Plus size={20} />
-                    </button>
+                    {/* Add/Quantity Controls */}
+                    {quantityInDeck > 0 ? (
+                      <div className="flex-shrink-0 flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            if (quantityInDeck === 1) {
+                              removeCardFromDeck(card.id);
+                            } else {
+                              updateCardQuantity(card.id, quantityInDeck - 1);
+                            }
+                          }}
+                          className="w-8 h-8 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center transition-colors"
+                        >
+                          <Minus size={16} />
+                        </button>
+                        <span className="w-6 text-center text-sm font-medium">{quantityInDeck}</span>
+                        <button
+                          onClick={() => addCardToDeck(card)}
+                          className="w-8 h-8 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center transition-colors"
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => addCardToDeck(card)}
+                        className="flex-shrink-0 w-10 h-10 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center transition-colors"
+                      >
+                        <Plus size={20} />
+                      </button>
+                    )}
 
                     {/* Add to Collection Button (hidden on mobile by default) */}
                     <button
