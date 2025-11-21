@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Loader2, Trash2, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { Search, Loader2, Trash2, CheckCircle, XCircle, RefreshCw, Plus, Minus, X } from 'lucide-react';
 import { Card } from '../types';
-import { getUserCollection, getCardsByIds } from '../services/api';
+import { getUserCollection, getCardsByIds, addCardToCollection } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 export default function Collection() {
   const { user } = useAuth();
@@ -11,8 +12,10 @@ export default function Collection() {
   const [filteredCollection, setFilteredCollection] = useState<{ card: Card; quantity: number }[]>([]);
   const [isLoadingCollection, setIsLoadingCollection] = useState(true);
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
+  const [selectedCard, setSelectedCard] = useState<{ card: Card; quantity: number } | null>(null);
   const [cardFaceIndex, setCardFaceIndex] = useState<Map<string, number>>(new Map());
   const [snackbar, setSnackbar] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   // Helper function to check if a card has an actual back face (not adventure/split/etc)
   const isDoubleFaced = (card: Card) => {
@@ -114,6 +117,71 @@ export default function Collection() {
     setFilteredCollection(filtered);
   }, [searchQuery, collection]);
 
+  // Update card quantity in collection
+  const updateCardQuantity = async (cardId: string, newQuantity: number) => {
+    if (!user || newQuantity < 0) return;
+
+    try {
+      setIsUpdating(true);
+
+      if (newQuantity === 0) {
+        // Remove card from collection
+        const { error } = await supabase
+          .from('collections')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('card_id', cardId);
+
+        if (error) throw error;
+
+        // Update local state
+        setCollection(prev => prev.filter(item => item.card.id !== cardId));
+        setSelectedCard(null);
+        setSnackbar({ message: 'Card removed from collection', type: 'success' });
+      } else {
+        // Update quantity
+        const { error } = await supabase
+          .from('collections')
+          .update({ quantity: newQuantity, updated_at: new Date().toISOString() })
+          .eq('user_id', user.id)
+          .eq('card_id', cardId);
+
+        if (error) throw error;
+
+        // Update local state
+        setCollection(prev =>
+          prev.map(item =>
+            item.card.id === cardId ? { ...item, quantity: newQuantity } : item
+          )
+        );
+
+        if (selectedCard && selectedCard.card.id === cardId) {
+          setSelectedCard({ ...selectedCard, quantity: newQuantity });
+        }
+
+        setSnackbar({ message: 'Quantity updated', type: 'success' });
+      }
+    } catch (error) {
+      console.error('Error updating card quantity:', error);
+      setSnackbar({ message: 'Failed to update quantity', type: 'error' });
+    } finally {
+      setIsUpdating(false);
+      setTimeout(() => setSnackbar(null), 3000);
+    }
+  };
+
+  // Add one to quantity
+  const incrementQuantity = async (cardId: string, currentQuantity: number) => {
+    await updateCardQuantity(cardId, currentQuantity + 1);
+  };
+
+  // Remove one from quantity
+  const decrementQuantity = async (cardId: string, currentQuantity: number) => {
+    if (currentQuantity > 0) {
+      await updateCardQuantity(cardId, currentQuantity - 1);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-white p-6">
       <div className="max-w-7xl mx-auto">
@@ -168,6 +236,7 @@ export default function Collection() {
                     className="relative group cursor-pointer"
                     onMouseEnter={() => setHoveredCard(card)}
                     onMouseLeave={() => setHoveredCard(null)}
+                    onClick={() => setSelectedCard({ card, quantity })}
                   >
                     {/* Small card thumbnail */}
                     <div className="relative rounded-lg overflow-hidden shadow-lg transition-all group-hover:ring-2 group-hover:ring-blue-500">
@@ -207,8 +276,8 @@ export default function Collection() {
         </div>
       </div>
 
-      {/* Hover Card Preview */}
-      {hoveredCard && (() => {
+      {/* Hover Card Preview - only show if no card is selected */}
+      {hoveredCard && !selectedCard && (() => {
         const currentFaceIndex = getCurrentFaceIndex(hoveredCard.id);
         const isMultiFaced = isDoubleFaced(hoveredCard);
         const currentFace = isMultiFaced && hoveredCard.card_faces
@@ -220,7 +289,7 @@ export default function Collection() {
         const displayOracleText = currentFace?.oracle_text || hoveredCard.oracle_text;
 
         return (
-          <div className="fixed top-1/2 right-8 transform -translate-y-1/2 z-50 pointer-events-none">
+          <div className="fixed top-1/2 right-8 transform -translate-y-1/2 z-40 pointer-events-none">
             <div className="bg-gray-800 rounded-lg shadow-2xl p-4 max-w-md">
               <div className="relative">
                 <img
@@ -250,6 +319,131 @@ export default function Collection() {
               </div>
             </div>
           </div>
+        );
+      })()}
+
+      {/* Card Detail Panel - slides in from right */}
+      {selectedCard && (() => {
+        const currentFaceIndex = getCurrentFaceIndex(selectedCard.card.id);
+        const isMultiFaced = isDoubleFaced(selectedCard.card);
+        const currentFace = isMultiFaced && selectedCard.card.card_faces
+          ? selectedCard.card.card_faces[currentFaceIndex]
+          : null;
+
+        const displayName = currentFace?.name || selectedCard.card.name;
+        const displayTypeLine = currentFace?.type_line || selectedCard.card.type_line;
+        const displayOracleText = currentFace?.oracle_text || selectedCard.card.oracle_text;
+
+        return (
+          <>
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity duration-300"
+              onClick={() => setSelectedCard(null)}
+            />
+
+            {/* Sliding Panel */}
+            <div className="fixed top-0 right-0 h-full w-full md:w-96 bg-gray-800 shadow-2xl z-50 overflow-y-auto animate-slide-in-right">
+              <div className="p-6">
+                {/* Close button */}
+                <button
+                  onClick={() => setSelectedCard(null)}
+                  className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+                >
+                  <X size={24} />
+                </button>
+
+                {/* Card Image */}
+                <div className="relative mb-4">
+                  <img
+                    src={getCardLargeImageUri(selectedCard.card, currentFaceIndex)}
+                    alt={displayName}
+                    className="w-full h-auto rounded-lg shadow-lg"
+                  />
+                  {isMultiFaced && (
+                    <>
+                      <div className="absolute top-2 right-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
+                        Face {currentFaceIndex + 1}/{selectedCard.card.card_faces!.length}
+                      </div>
+                      <button
+                        onClick={() => toggleCardFace(selectedCard.card.id, selectedCard.card.card_faces!.length)}
+                        className="absolute bottom-2 right-2 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full shadow-lg transition-all"
+                        title="Flip card"
+                      >
+                        <RefreshCw size={20} />
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Card Info */}
+                <div className="space-y-4">
+                  <div>
+                    <h2 className="text-2xl font-bold text-white mb-2">{displayName}</h2>
+                    <p className="text-sm text-gray-400">{displayTypeLine}</p>
+                  </div>
+
+                  {displayOracleText && (
+                    <div className="border-t border-gray-700 pt-3">
+                      <p className="text-sm text-gray-300">{displayOracleText}</p>
+                    </div>
+                  )}
+
+                  {selectedCard.card.prices?.usd && (
+                    <div className="border-t border-gray-700 pt-3">
+                      <div className="text-lg text-green-400 font-semibold">
+                        ${selectedCard.card.prices.usd} each
+                      </div>
+                      <div className="text-sm text-gray-400">
+                        Total value: ${(parseFloat(selectedCard.card.prices.usd) * selectedCard.quantity).toFixed(2)}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Quantity Management */}
+                  <div className="border-t border-gray-700 pt-3">
+                    <h3 className="text-lg font-semibold mb-3">Quantity in Collection</h3>
+                    <div className="flex items-center justify-between bg-gray-900 rounded-lg p-4">
+                      <button
+                        onClick={() => decrementQuantity(selectedCard.card.id, selectedCard.quantity)}
+                        disabled={isUpdating || selectedCard.quantity === 0}
+                        className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-colors"
+                      >
+                        <Minus size={20} />
+                      </button>
+
+                      <div className="text-center">
+                        <div className="text-3xl font-bold">{selectedCard.quantity}</div>
+                        <div className="text-xs text-gray-400">copies</div>
+                      </div>
+
+                      <button
+                        onClick={() => incrementQuantity(selectedCard.card.id, selectedCard.quantity)}
+                        disabled={isUpdating}
+                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-colors"
+                      >
+                        <Plus size={20} />
+                      </button>
+                    </div>
+
+                    {/* Remove from collection button */}
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Remove ${displayName} from your collection?`)) {
+                          updateCardQuantity(selectedCard.card.id, 0);
+                        }
+                      }}
+                      disabled={isUpdating}
+                      className="w-full mt-3 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+                    >
+                      <Trash2 size={20} />
+                      Remove from Collection
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
         );
       })()}
 
