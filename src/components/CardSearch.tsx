@@ -192,9 +192,9 @@ const CardSearch = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="min-h-screen bg-gray-900 text-white p-3 sm:p-6 md:pt-16 pb-16 md:pb-0">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Card Search</h1>
+        <h1 className="text-2xl md:text-3xl font-bold mb-4 md:mb-6">Card Search</h1>
         <form onSubmit={handleSearch} className="mb-8 space-y-4">
           {/* Card Details */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -295,17 +295,17 @@ const CardSearch = () => {
           </div>
 
           {/* Mana Cost */}
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
             {Object.entries(manaCost).map(([color, count]) => (
               <div key={color} className="flex items-center space-x-2">
-                <span style={{ fontSize: '1.5em' }}>
+                <span style={{ fontSize: '1.2em' }} className="md:text-[1.5em]">
                   {color === 'W' ? '⚪' : color === 'U' ? '🔵' : color === 'B' ? '⚫' : color === 'R' ? '🔴' : color === 'G' ? '🟢' : '🟤'}
                 </span>
                 <input
                   type="number"
                   value={count}
                   onChange={(e) => setManaCost({ ...manaCost, [color]: parseInt(e.target.value) })}
-                  className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
+                  className="w-14 sm:w-16 px-2 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
                   min="0"
                 />
               </div>
@@ -586,7 +586,7 @@ const CardSearch = () => {
 
           <button
             type="submit"
-            className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg"
+            className="mt-4 w-full sm:w-auto min-h-[44px] px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium text-base"
           >
             Search
           </button>
@@ -605,7 +605,7 @@ const CardSearch = () => {
         )}
 
         {searchResults && searchResults.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
             {searchResults.map((card) => {
               const currentFaceIndex = getCurrentFaceIndex(card.id);
               const isMultiFaced = isDoubleFaced(card);

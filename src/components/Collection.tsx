@@ -189,9 +189,9 @@ export default function Collection() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="min-h-screen bg-gray-900 text-white p-3 sm:p-6 md:pt-16 pb-16 md:pb-0">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">My Collection</h1>
+        <h1 className="text-2xl md:text-3xl font-bold mb-4 md:mb-6">My Collection</h1>
 
         {/* Search within collection */}
         <div className="mb-8">
@@ -228,7 +228,7 @@ export default function Collection() {
               <p className="text-sm">Try a different search term</p>
             </div>
           ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-9 gap-2 sm:gap-3">
               {filteredCollection.map(({ card, quantity }) => {
                 const currentFaceIndex = getCurrentFaceIndex(card.id);
                 const isMultiFaced = isDoubleFaced(card);
@@ -252,7 +252,7 @@ export default function Collection() {
                         className="w-full h-auto"
                       />
                       {/* Quantity badge */}
-                      <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
+                      <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs sm:text-sm font-bold px-2 py-1 rounded-full shadow-lg">
                         x{quantity}
                       </div>
                       {/* Flip button for double-faced cards */}
@@ -295,7 +295,7 @@ export default function Collection() {
         const displayOracleText = currentFace?.oracle_text || hoveredCard.oracle_text;
 
         return (
-          <div className="fixed top-1/2 right-8 transform -translate-y-1/2 z-40 pointer-events-none">
+          <div className="hidden lg:block fixed top-1/2 right-8 transform -translate-y-1/2 z-40 pointer-events-none">
             <div className="bg-gray-800 rounded-lg shadow-2xl p-4 max-w-md">
               <div className="relative">
                 <img
@@ -350,14 +350,16 @@ export default function Collection() {
 
             {/* Sliding Panel */}
             <div className="fixed top-0 right-0 h-full w-full md:w-96 bg-gray-800 shadow-2xl z-50 overflow-y-auto animate-slide-in-right">
-              <div className="p-6">
-                {/* Close button */}
-                <button
-                  onClick={() => setSelectedCard(null)}
-                  className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
-                >
-                  <X size={24} />
-                </button>
+              {/* Close button - fixed position, stays visible when scrolling */}
+              <button
+                onClick={() => setSelectedCard(null)}
+                className="fixed top-4 right-4 bg-gray-700 hover:bg-gray-600 text-white p-2 md:p-1.5 rounded-full transition-colors z-[60] shadow-lg"
+                aria-label="Close"
+              >
+                <X size={24} className="md:w-5 md:h-5" />
+              </button>
+
+              <div className="p-4 sm:p-6">
 
                 {/* Card Image */}
                 <div className="relative mb-4">
@@ -385,8 +387,8 @@ export default function Collection() {
                 {/* Card Info */}
                 <div className="space-y-4">
                   <div>
-                    <h2 className="text-2xl font-bold text-white mb-2">{displayName}</h2>
-                    <p className="text-sm text-gray-400">{displayTypeLine}</p>
+                    <h2 className="text-xl md:text-2xl font-bold text-white mb-2">{displayName}</h2>
+                    <p className="text-xs sm:text-sm text-gray-400">{displayTypeLine}</p>
                   </div>
 
                   {displayOracleText && (
@@ -442,7 +444,7 @@ export default function Collection() {
                         });
                       }}
                       disabled={isUpdating}
-                      className="w-full mt-3 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+                      className="w-full mt-3 min-h-[44px] px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
                     >
                       <Trash2 size={20} />
                       Remove from Collection

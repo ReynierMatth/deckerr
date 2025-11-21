@@ -490,9 +490,9 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="min-h-screen bg-gray-900 text-white p-3 sm:p-6 md:pt-16 pb-16 md:pb-0">
       <div className="max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Card Search Section */}
           <div className="lg:col-span-2 space-y-6">
             <form onSubmit={handleSearch} className="flex gap-2">
@@ -511,10 +511,10 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
               </div>
               <button
                 type="submit"
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-2"
+                className="min-h-[44px] px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-2"
               >
                 <Search size={20} />
-                Search
+                <span className="hidden sm:inline">Search</span>
               </button>
             </form>
 

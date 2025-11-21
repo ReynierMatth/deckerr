@@ -88,13 +88,13 @@ export default function Profile() {
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Theme Color
             </label>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
               {THEME_COLORS.map((color) => (
                 <button
                   key={color}
                   type="button"
                   onClick={() => setThemeColor(color)}
-                  className={`h-12 rounded-lg border-2 transition-all capitalize
+                  className={`h-12 sm:h-14 rounded-lg border-2 transition-all capitalize text-sm sm:text-base
                     ${themeColor === color
                       ? 'border-white scale-105'
                       : 'border-transparent hover:border-gray-600'
@@ -110,7 +110,7 @@ export default function Profile() {
           <button
             type="submit"
             disabled={saving}
-            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
+            className="w-full min-h-[44px] flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg transition duration-200"
           >
             {saving ? (
               <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>

@@ -1,0 +1,23 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="512" height="512" fill="#0f172a" rx="128"/>
+
+  <!-- Card stack effect - back card -->
+  <rect x="120" y="130" width="240" height="320" rx="16" fill="#1e293b" transform="rotate(-8 240 290)"/>
+
+  <!-- Card stack effect - middle card -->
+  <rect x="120" y="130" width="240" height="320" rx="16" fill="#334155" transform="rotate(-4 240 290)"/>
+
+  <!-- Front card -->
+  <rect x="120" y="130" width="240" height="320" rx="16" fill="#475569"/>
+  <rect x="135" y="145" width="210" height="290" rx="12" fill="#1e293b"/>
+
+  <!-- Card details/design -->
+  <circle cx="240" cy="200" r="40" fill="#3b82f6" opacity="0.6"/>
+  <rect x="160" y="280" width="160" height="12" rx="6" fill="#3b82f6" opacity="0.8"/>
+  <rect x="160" y="310" width="120" height="12" rx="6" fill="#3b82f6" opacity="0.6"/>
+  <rect x="160" y="340" width="140" height="12" rx="6" fill="#3b82f6" opacity="0.4"/>
+
+  <!-- "D" Letter overlay -->
+  <text x="256" y="310" font-family="Arial, sans-serif" font-size="160" font-weight="bold" fill="#3b82f6" text-anchor="middle" opacity="0.15">D</text>
+</svg>
