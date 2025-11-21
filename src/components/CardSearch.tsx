@@ -260,9 +260,11 @@ const CardSearch = () => {
                       onChange={() => setColors({ ...colors, [color]: !active })}
                       className="rounded border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
-                    <span style={{ fontSize: '1.5em' }}>
-                      {color === 'W' ? '⚪' : color === 'U' ? '🔵' : color === 'B' ? '⚫' : color === 'R' ? '🔴' : color === 'G' ? '🟢' : '🟤'}
-                    </span>
+                    {getManaIconPath(color) ? (
+                      <img src={getManaIconPath(color)!} alt={color} className="w-6 h-6" />
+                    ) : (
+                      <span className="w-6 h-6 flex items-center justify-center bg-gray-500 text-white font-bold rounded-full text-sm">{color}</span>
+                    )}
                   </label>
                 ))}
               </div>
@@ -286,9 +288,11 @@ const CardSearch = () => {
                       onChange={() => setCommanderColors({ ...commanderColors, [color]: !active })}
                       className="rounded border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
-                    <span style={{ fontSize: '1.5em' }}>
-                      {color === 'W' ? '⚪' : color === 'U' ? '🔵' : color === 'B' ? '⚫' : color === 'R' ? '🔴' : color === 'G' ? '🟢' : '🟤'}
-                    </span>
+                    {getManaIconPath(color) ? (
+                      <img src={getManaIconPath(color)!} alt={color} className="w-6 h-6" />
+                    ) : (
+                      <span className="w-6 h-6 flex items-center justify-center bg-gray-500 text-white font-bold rounded-full text-sm">{color}</span>
+                    )}
                   </label>
                 ))}
               </div>
