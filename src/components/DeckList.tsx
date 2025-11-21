@@ -90,7 +90,7 @@ const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
       {decks.map((deck) => (
         <DeckCard key={deck.id} deck={deck} onEdit={onDeckEdit} />
       ))}
@@ -98,15 +98,15 @@ const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
       {/* Create New Deck Card */}
       <button
         onClick={onCreateDeck}
-        className="bg-gray-800 rounded-xl overflow-hidden shadow-lg hover:shadow-2xl border-2 border-dashed border-gray-600 hover:border-blue-500 transition-all duration-300 hover:scale-105 cursor-pointer group min-h-[300px] flex flex-col items-center justify-center gap-4 p-8"
+        className="bg-gray-800 rounded-lg overflow-hidden shadow-lg hover:shadow-xl border-2 border-dashed border-gray-600 hover:border-blue-500 transition-all duration-300 hover:scale-105 cursor-pointer group aspect-[5/7] flex flex-col items-center justify-center gap-3 p-4"
       >
-        <PlusCircle size={64} className="text-gray-600 group-hover:text-blue-500 transition-colors" />
+        <PlusCircle size={48} className="text-gray-600 group-hover:text-blue-500 transition-colors" />
         <div className="text-center">
-          <h3 className="text-xl font-bold text-gray-400 group-hover:text-blue-400 transition-colors">
+          <h3 className="text-sm sm:text-base font-bold text-gray-400 group-hover:text-blue-400 transition-colors">
             Create New Deck
           </h3>
-          <p className="text-sm text-gray-500 mt-2">
-            Start building your collection
+          <p className="text-xs text-gray-500 mt-1 hidden sm:block">
+            Start building
           </p>
         </div>
       </button>

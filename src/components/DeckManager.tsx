@@ -96,6 +96,7 @@ const suggestLandCountAndDistribution = (
 };
 
 export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
+  const [currentDeckId, setCurrentDeckId] = useState<string | null>(initialDeck?.id || null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Card[]>([]);
   const [selectedCards, setSelectedCards] = useState<{
@@ -310,8 +311,9 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
     setIsSaving(true);
     try {
+      const deckId = currentDeckId || crypto.randomUUID();
       const deckToSave: Deck = {
-        id: initialDeck?.id || crypto.randomUUID(),
+        id: deckId,
         name: deckName,
         format: deckFormat,
         cards: selectedCards,
@@ -337,9 +339,14 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
       if (deckError) throw deckError;
 
+      // Update current deck ID if this was a new deck
+      if (!currentDeckId) {
+        setCurrentDeckId(deckId);
+      }
+
       // Delete existing cards if updating
-      if (initialDeck) {
-        await supabase.from('deck_cards').delete().eq('deck_id', initialDeck.id);
+      if (currentDeckId) {
+        await supabase.from('deck_cards').delete().eq('deck_id', currentDeckId);
       }
 
       // Save the deck cards
@@ -495,30 +502,38 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Card Search Section */}
           <div className="lg:col-span-2 space-y-6">
-            <form onSubmit={handleSearch} className="flex gap-2">
-              <div className="relative flex-1">
-                <Search
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                  size={20}
-                />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
-                  placeholder="Search for cards..."
-                />
-              </div>
+            {/* Mobile-First Search Bar */}
+            <form onSubmit={handleSearch} className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-24 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 text-white"
+                placeholder="Rechercher une carte..."
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSearchResults([]);
+                  }}
+                  className="absolute right-14 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+                >
+                  <XCircle size={20} />
+                </button>
+              )}
               <button
                 type="submit"
-                className="min-h-[44px] px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-2"
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-blue-600 hover:bg-blue-700 rounded-md"
               >
                 <Search size={20} />
-                <span className="hidden sm:inline">Search</span>
               </button>
             </form>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {/* Vertical Card List for Mobile */}
+            <div className="space-y-2">
               {searchResults.map(card => {
                 const currentFaceIndex = getCurrentFaceIndex(card.id);
                 const isMultiFaced = isDoubleFaced(card);
@@ -532,17 +547,18 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                 return (
                   <div
                     key={card.id}
-                    className="bg-gray-800 rounded-lg overflow-hidden hover:ring-2 hover:ring-blue-500 transition-all"
+                    className="bg-gray-800 rounded-lg p-3 flex items-center gap-3 hover:bg-gray-750 transition-colors"
                   >
-                    <div className="relative">
+                    {/* Card Thumbnail */}
+                    <div className="relative flex-shrink-0 w-16 h-22 rounded overflow-hidden">
                       {getCardImageUri(card, currentFaceIndex) ? (
                         <img
                           src={getCardImageUri(card, currentFaceIndex)}
                           alt={displayName}
-                          className="w-full h-auto"
+                          className="w-full h-full object-cover"
                         />
                       ) : (
-                        <MagicCard card={card} />
+                        <div className="w-full h-full bg-gray-700" />
                       )}
                       {isMultiFaced && (
                         <button
@@ -550,48 +566,53 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                             e.stopPropagation();
                             toggleCardFace(card.id, card.card_faces!.length);
                           }}
-                          className="absolute bottom-2 right-2 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full shadow-lg transition-all"
-                          title="Flip card"
+                          className="absolute bottom-0 right-0 bg-purple-600 text-white p-1 rounded-tl"
                         >
-                          <RefreshCw size={16} />
+                          <RefreshCw size={10} />
                         </button>
                       )}
                     </div>
-                    <div className="p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-bold">{displayName}</h3>
-                        {inCollection > 0 && (
-                          <span className="text-xs bg-green-600 px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <CheckCircle size={12} />
-                            x{inCollection}
-                          </span>
+
+                    {/* Card Info */}
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-sm truncate">{displayName}</h3>
+                      <div className="flex items-center gap-2 mt-1">
+                        {card.mana_cost && (
+                          <div className="text-xs text-gray-400">{card.mana_cost}</div>
+                        )}
+                        {card.prices?.usd && (
+                          <div className="text-xs text-gray-400">${card.prices.usd}</div>
                         )}
                       </div>
-                      {card.prices?.usd && (
-                        <div className="text-sm text-gray-400 mb-2">${card.prices.usd}</div>
+                      {inCollection > 0 && (
+                        <div className="text-xs text-green-400 mt-1">
+                          <CheckCircle size={12} className="inline mr-1" />
+                          x{inCollection} in collection
+                        </div>
                       )}
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => addCardToDeck(card)}
-                          className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center justify-center gap-2"
-                        >
-                          <Plus size={20} />
-                          Add to Deck
-                        </button>
-                        <button
-                          onClick={() => handleAddCardToCollection(card.id, 1)}
-                          disabled={isAddingThisCard}
-                          className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2"
-                          title="Add to collection"
-                        >
-                          {isAddingThisCard ? (
-                            <Loader2 className="animate-spin" size={20} />
-                          ) : (
-                            <PackagePlus size={20} />
-                          )}
-                        </button>
-                      </div>
                     </div>
+
+                    {/* Add Button */}
+                    <button
+                      onClick={() => addCardToDeck(card)}
+                      className="flex-shrink-0 w-10 h-10 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center transition-colors"
+                    >
+                      <Plus size={20} />
+                    </button>
+
+                    {/* Add to Collection Button (hidden on mobile by default) */}
+                    <button
+                      onClick={() => handleAddCardToCollection(card.id, 1)}
+                      disabled={isAddingThisCard}
+                      className="hidden sm:flex flex-shrink-0 w-10 h-10 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-full items-center justify-center transition-colors"
+                      title="Add to collection"
+                    >
+                      {isAddingThisCard ? (
+                        <Loader2 className="animate-spin" size={20} />
+                      ) : (
+                        <PackagePlus size={20} />
+                      )}
+                    </button>
                   </div>
                 );
               })}

@@ -22,55 +22,52 @@ export default function DeckCard({ deck, onEdit }: DeckCardProps) {
 
   return (
     <div
-      className="bg-gray-800 rounded-xl overflow-hidden shadow-lg card-hover cursor-pointer animate-scale-in"
+      className="bg-gray-800 rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-all cursor-pointer group"
       onClick={() => onEdit?.(deck.id)}
     >
-      <div className="relative h-32 sm:h-40 md:h-48 overflow-hidden">
+      {/* Full Card Art */}
+      <div className="relative aspect-[5/7] overflow-hidden">
         <img
           src={commander?.image_uris?.normal || deck.cards[0]?.card.image_uris?.normal}
           alt={commander?.name || deck.cards[0]?.card.name}
-          className="w-full object-cover object-top transform translate-y-[-12%]"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-gray-900 to-transparent" />
-      </div>
-      
-      <div className="p-4">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xl font-bold text-white">{deck.name}</h3>
-          {validation.isValid ? (
-            <div className="flex items-center text-green-400">
-              <Check size={16} className="mr-1" />
-              <span className="text-sm">Legal</span>
-            </div>
-          ) : (
-            <div className="flex items-center text-yellow-400" title={validation.errors.join(', ')}>
-              <AlertTriangle size={16} className="mr-1" />
-              <span className="text-sm">Issues</span>
+        {/* Overlay for text readability */}
+        <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/60 to-transparent" />
+
+        {/* Deck info overlay */}
+        <div className="absolute bottom-0 left-0 right-0 p-3">
+          <div className="flex items-start justify-between mb-1">
+            <h3 className="text-base sm:text-lg font-bold text-white line-clamp-2 flex-1">{deck.name}</h3>
+            {validation.isValid ? (
+              <Check size={16} className="text-green-400 ml-2 flex-shrink-0" />
+            ) : (
+              <AlertTriangle size={16} className="text-yellow-400 ml-2 flex-shrink-0" title={validation.errors.join(', ')} />
+            )}
+          </div>
+
+          <div className="flex items-center justify-between text-xs text-gray-300 mb-2">
+            <span className="capitalize">{deck.format}</span>
+            <span>{deck.cards.reduce((acc, curr) => acc + curr.quantity, 0)} cards</span>
+          </div>
+
+          {commander && (
+            <div className="text-xs text-blue-300 mb-2 truncate">
+              <span className="font-semibold">Commander:</span> {commander.name}
             </div>
           )}
-        </div>
-        
-        <div className="flex items-center justify-between text-sm text-gray-400">
-          <span className="capitalize">{deck.format}</span>
-          <span>{deck.cards.reduce((acc, curr) => acc + curr.quantity, 0)} cards</span>
-        </div>
-        
-        {commander && (
-          <div className="mt-2 text-sm text-gray-300">
-            <span className="text-blue-400">Commander:</span> {commander.name}
-          </div>
-        )}
 
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit?.(deck.id);
-          }}
-          className="mt-4 w-full min-h-[44px] px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center justify-center gap-2 text-white btn-ripple transition-smooth glow-on-hover"
-        >
-          <Edit size={20} />
-          Edit Deck
-        </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit?.(deck.id);
+            }}
+            className="w-full min-h-[36px] px-3 py-2 bg-blue-600/90 hover:bg-blue-600 rounded-md flex items-center justify-center gap-2 text-white text-sm font-medium transition-colors backdrop-blur-sm"
+          >
+            <Edit size={16} />
+            <span>Edit</span>
+          </button>
+        </div>
       </div>
     </div>
   );
