@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Save, Trash2, Upload, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Search, Save, Trash2, Loader2, CheckCircle, XCircle, AlertCircle, PackagePlus } from 'lucide-react';
 import { Card, Deck } from '../types';
-import { searchCards } from '../services/api';
+import { searchCards, getUserCollection, addCardToCollection, addMultipleCardsToCollection } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { validateDeck } from '../utils/deckValidation';
@@ -12,38 +12,33 @@ interface DeckManagerProps {
   onSave?: () => void;
 }
 
-const calculateManaCurve = (cards: { card; quantity: number }[]) => {
-  const manaValues = cards.map(({ card }) => {
-    if (!card.mana_cost) return 0;
-    // Basic heuristic: count mana symbols
-    return (card.mana_cost.match(/\{WUBRG0-9]\}/g) || []).length;
-  });
+// const calculateManaCurve = (cards: { card; quantity: number }[]) => {
+//   const manaValues = cards.map(({ card }) => {
+//     if (!card.mana_cost) return 0;
+//     // Basic heuristic: count mana symbols
+//     return (card.mana_cost.match(/\{WUBRG0-9]\}/g) || []).length;
+//   });
 
-  const averageManaValue = manaValues.reduce((a, b) => a + b, 0) / manaValues.length;
-  return averageManaValue;
-};
+//   const averageManaValue = manaValues.reduce((a, b) => a + b, 0) / manaValues.length;
+//   return averageManaValue;
+// };
 
 const suggestLandCountAndDistribution = (
   cards: { card; quantity: number }[],
   format: string
 ) => {
   const formatRules = {
-    standard: { minCards: 60, targetLands: 24.5 },
-    modern: { minCards: 60, targetLands: 24.5 },
-    commander: { minCards: 100, targetLands: 36.5 },
-    legacy: { minCards: 60, targetLands: 24.5 },
-    vintage: { minCards: 60, targetLands: 24.5 },
-    pauper: { minCards: 60, targetLands: 24.5 },
+    standard: { minCards: 60 },
+    modern: { minCards: 60 },
+    commander: { minCards: 100 },
+    legacy: { minCards: 60 },
+    vintage: { minCards: 60 },
+    pauper: { minCards: 60 },
   };
 
-  const { minCards, targetLands } =
+  const { minCards } =
     formatRules[format as keyof typeof formatRules] || formatRules.standard;
   const deckSize = cards.reduce((acc, { quantity }) => acc + quantity, 0);
-  const nonLandCards = cards.reduce(
-    (acc, { card, quantity }) =>
-      card.type_line?.toLowerCase().includes('land') ? acc : acc + quantity,
-    0
-  );
   const landsToAdd = Math.max(0, minCards - deckSize);
 
   const colorCounts = { W: 0, U: 0, B: 0, R: 0, G: 0 };
@@ -77,7 +72,7 @@ const suggestLandCountAndDistribution = (
     landDistribution[color] = Math.round(landsToAdd * proportion);
   }
 
-  let totalDistributed = Object.values(landDistribution).reduce(
+  const totalDistributed = Object.values(landDistribution).reduce(
     (acc, count) => acc + count,
     0
   );
@@ -119,6 +114,119 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const [isImporting, setIsImporting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [snackbar, setSnackbar] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // Collection management state
+  const [userCollection, setUserCollection] = useState<Map<string, number>>(new Map());
+  const [isLoadingCollection, setIsLoadingCollection] = useState(true);
+  const [addingCardId, setAddingCardId] = useState<string | null>(null);
+  const [isAddingAll, setIsAddingAll] = useState(false);
+
+  // Load user collection on component mount
+  useEffect(() => {
+    const loadUserCollection = async () => {
+      if (!user) return;
+
+      try {
+        setIsLoadingCollection(true);
+        const collection = await getUserCollection(user.id);
+        setUserCollection(collection);
+      } catch (error) {
+        console.error('Error loading user collection:', error);
+        setSnackbar({ message: 'Failed to load collection', type: 'error' });
+      } finally {
+        setIsLoadingCollection(false);
+      }
+    };
+
+    loadUserCollection();
+  }, [user]);
+
+  // Helper function to check if a card is in the collection
+  const isCardInCollection = (cardId: string, requiredQuantity: number = 1): boolean => {
+    const ownedQuantity = userCollection.get(cardId) || 0;
+    return ownedQuantity >= requiredQuantity;
+  };
+
+  // Helper function to get missing cards
+  const getMissingCards = () => {
+    return selectedCards.filter(({ card, quantity }) => {
+      return !isCardInCollection(card.id, quantity);
+    });
+  };
+
+  // Add single card to collection
+  const handleAddCardToCollection = async (cardId: string, quantity: number) => {
+    if (!user) return;
+
+    try {
+      setAddingCardId(cardId);
+      await addCardToCollection(user.id, cardId, quantity);
+
+      // Update local collection state
+      setUserCollection(prev => {
+        const newMap = new Map(prev);
+        const currentQty = newMap.get(cardId) || 0;
+        newMap.set(cardId, currentQty + quantity);
+        return newMap;
+      });
+
+      setSnackbar({ message: 'Card added to collection!', type: 'success' });
+    } catch (error) {
+      console.error('Error adding card to collection:', error);
+      setSnackbar({ message: 'Failed to add card to collection', type: 'error' });
+    } finally {
+      setAddingCardId(null);
+      setTimeout(() => setSnackbar(null), 3000);
+    }
+  };
+
+  // Add all missing cards to collection
+  const handleAddAllMissingCards = async () => {
+    if (!user) return;
+
+    const missingCards = getMissingCards();
+    if (missingCards.length === 0) {
+      setSnackbar({ message: 'All cards are already in your collection!', type: 'success' });
+      setTimeout(() => setSnackbar(null), 3000);
+      return;
+    }
+
+    try {
+      setIsAddingAll(true);
+
+      const cardsToAdd = missingCards.map(({ card, quantity }) => {
+        const ownedQuantity = userCollection.get(card.id) || 0;
+        const neededQuantity = Math.max(0, quantity - ownedQuantity);
+        return {
+          cardId: card.id,
+          quantity: neededQuantity,
+        };
+      }).filter(c => c.quantity > 0);
+
+      await addMultipleCardsToCollection(user.id, cardsToAdd);
+
+      // Update local collection state
+      setUserCollection(prev => {
+        const newMap = new Map(prev);
+        cardsToAdd.forEach(({ cardId, quantity }) => {
+          const currentQty = newMap.get(cardId) || 0;
+          newMap.set(cardId, currentQty + quantity);
+        });
+        return newMap;
+      });
+
+      setSnackbar({
+        message: `Successfully added ${cardsToAdd.length} card(s) to collection!`,
+        type: 'success'
+      });
+    } catch (error) {
+      console.error('Error adding cards to collection:', error);
+      setSnackbar({ message: 'Failed to add cards to collection', type: 'error' });
+    } finally {
+      setIsAddingAll(false);
+      setTimeout(() => setSnackbar(null), 3000);
+    }
+  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -162,12 +270,6 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     setSelectedCards(prev => {
       return prev.map(c => {
         if (c.card.id === cardId) {
-          const isBasicLand =
-            c.card.name === 'Plains' ||
-            c.card.name === 'Island' ||
-            c.card.name === 'Swamp' ||
-            c.card.name === 'Mountain' ||
-            c.card.name === 'Forest';
           return { ...c, quantity: quantity };
         }
         return c;
@@ -189,8 +291,6 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         createdAt: initialDeck?.createdAt || new Date(),
         updatedAt: new Date(),
       };
-
-      const validation = validateDeck(deckToSave);
 
       const deckData = {
         id: deckToSave.id,
@@ -492,42 +592,114 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
               )}
 
               <div className="space-y-2">
-                <h3 className="font-bold text-xl mb-4">
-                  Cards ({selectedCards.reduce((acc, curr) => acc + curr.quantity, 0)})
-                </h3>
-                {selectedCards.map(({ card, quantity }) => (
-                  <div
-                    key={card.id}
-                    className="flex items-center gap-4 bg-gray-700 p-2 rounded-lg"
-                  >
-                    <img
-                      src={card.image_uris?.art_crop}
-                      alt={card.name}
-                      className="w-12 h-12 rounded"
-                    />
-                    <div className="flex-1">
-                      <h4 className="font-medium">{card.name}</h4>
-                      {card.prices?.usd && (
-                        <div className="text-sm text-gray-400">${card.prices.usd}</div>
-                      )}
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold text-xl">
+                    Cards ({selectedCards.reduce((acc, curr) => acc + curr.quantity, 0)})
+                  </h3>
+                  {!isLoadingCollection && getMissingCards().length > 0 && (
+                    <div className="flex items-center gap-2 text-sm text-yellow-500">
+                      <AlertCircle size={16} />
+                      <span>{getMissingCards().length} missing</span>
                     </div>
-                    <input
-                      type="number"
-                      value={quantity}
-                      onChange={e =>
-                        updateCardQuantity(card.id, parseInt(e.target.value))
-                      }
-                      min="1"
-                      className="w-16 px-2 py-1 bg-gray-600 border border-gray-500 rounded text-center"
-                    />
-                    <button
-                      onClick={() => removeCardFromDeck(card.id)}
-                      className="text-red-500 hover:text-red-400"
+                  )}
+                </div>
+
+                {!isLoadingCollection && getMissingCards().length > 0 && (
+                  <button
+                    onClick={handleAddAllMissingCards}
+                    disabled={isAddingAll}
+                    className="w-full px-4 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 mb-3 relative"
+                  >
+                    {isAddingAll ? (
+                      <>
+                        <Loader2 className="animate-spin" size={20} />
+                        <span>Adding to collection...</span>
+                      </>
+                    ) : (
+                      <>
+                        <PackagePlus size={20} />
+                        <span>Add All Missing Cards to Collection</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {selectedCards.map(({ card, quantity }) => {
+                  const ownedQuantity = userCollection.get(card.id) || 0;
+                  const isMissing = !isCardInCollection(card.id, quantity);
+                  const neededQuantity = Math.max(0, quantity - ownedQuantity);
+
+                  return (
+                    <div
+                      key={card.id}
+                      className={`flex items-center gap-4 p-2 rounded-lg ${
+                        isMissing
+                          ? 'bg-yellow-900/20 border border-yellow-700/50'
+                          : 'bg-gray-700'
+                      }`}
                     >
-                      <Trash2 size={20} />
-                    </button>
-                  </div>
-                ))}
+                      <img
+                        src={card.image_uris?.art_crop}
+                        alt={card.name}
+                        className="w-12 h-12 rounded"
+                      />
+                      <div className="flex-1">
+                        <h4 className="font-medium flex items-center gap-2">
+                          {card.name}
+                          {isMissing && (
+                            <span className="text-xs bg-yellow-600 px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <AlertCircle size={12} />
+                              Missing {neededQuantity}
+                            </span>
+                          )}
+                          {!isMissing && ownedQuantity > 0 && (
+                            <span className="text-xs bg-green-600 px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <CheckCircle size={12} />
+                              Owned ({ownedQuantity})
+                            </span>
+                          )}
+                        </h4>
+                        {card.prices?.usd && (
+                          <div className="text-sm text-gray-400">${card.prices.usd}</div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isMissing && (
+                          <button
+                            onClick={() => handleAddCardToCollection(card.id, neededQuantity)}
+                            disabled={addingCardId === card.id}
+                            className="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-sm flex items-center gap-1"
+                            title={`Add ${neededQuantity} to collection`}
+                          >
+                            {addingCardId === card.id ? (
+                              <Loader2 className="animate-spin" size={16} />
+                            ) : (
+                              <>
+                                <Plus size={16} />
+                                <span className="hidden sm:inline">Add</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+                        <input
+                          type="number"
+                          value={quantity}
+                          onChange={e =>
+                            updateCardQuantity(card.id, parseInt(e.target.value))
+                          }
+                          min="1"
+                          className="w-16 px-2 py-1 bg-gray-600 border border-gray-500 rounded text-center"
+                        />
+                        <button
+                          onClick={() => removeCardFromDeck(card.id)}
+                          className="text-red-500 hover:text-red-400"
+                        >
+                          <Trash2 size={20} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="font-bold text-xl">
