@@ -192,7 +192,7 @@ const CardSearch = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-3 sm:p-6 md:pt-16 pb-16 md:pb-0">
+    <div className="bg-gray-900 text-white p-3 sm:p-6">
       <div className="max-w-7xl mx-auto">
         <h1 className="text-2xl md:text-3xl font-bold mb-4 md:mb-6">Card Search</h1>
         <form onSubmit={handleSearch} className="mb-8 space-y-4">
@@ -219,7 +219,7 @@ const CardSearch = () => {
               className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Rules Text (~ for card name)"
             />
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 value={typeLine}
@@ -313,7 +313,7 @@ const CardSearch = () => {
           </div>
 
           {/* Stats */}
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <select
               value={manaValueComparison}
               onChange={(e) => setManaValueComparison(e.target.value)}
@@ -354,7 +354,7 @@ const CardSearch = () => {
           </div>
 
           {/* Formats */}
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <select
               value={format}
               onChange={(e) => setFormat(e.target.value)}
@@ -396,7 +396,7 @@ const CardSearch = () => {
           </div>
 
           {/* Sets */}
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
               value={set}
@@ -432,7 +432,7 @@ const CardSearch = () => {
           </div>
 
           {/* Criteria */}
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
               value={criteria}
@@ -459,7 +459,7 @@ const CardSearch = () => {
           </div>
 
           {/* Prices */}
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <select
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}

@@ -191,9 +191,6 @@ import React, { useState, useRef, useEffect } from 'react';
               </div>
             </div>
           </nav>
-
-          {/* Content Padding */}
-          <div className="md:pt-16 pb-16 md:pb-0" />
         </>
       );
     }

@@ -490,7 +490,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-3 sm:p-6 md:pt-16 pb-16 md:pb-0">
+    <div className="bg-gray-900 text-white p-3 sm:p-6">
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Card Search Section */}

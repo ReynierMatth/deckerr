@@ -189,7 +189,7 @@ export default function Collection() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-3 sm:p-6 md:pt-16 pb-16 md:pb-0">
+    <div className="bg-gray-900 text-white p-3 sm:p-6">
       <div className="max-w-7xl mx-auto">
         <h1 className="text-2xl md:text-3xl font-bold mb-4 md:mb-6">My Collection</h1>
 
