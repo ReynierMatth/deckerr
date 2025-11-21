@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { validateDeck } from '../utils/deckValidation';
 import MagicCard from './MagicCard';
+import { ManaCost } from './ManaCost';
 
 interface DeckManagerProps {
   initialDeck?: Deck;
@@ -580,7 +581,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                       <h3 className="font-medium text-sm truncate">{displayName}</h3>
                       <div className="flex items-center gap-2 mt-1">
                         {card.mana_cost && (
-                          <div className="text-xs text-gray-400">{card.mana_cost}</div>
+                          <ManaCost cost={card.mana_cost} size={14} />
                         )}
                         {card.prices?.usd && (
                           <div className="text-xs text-gray-400">${card.prices.usd}</div>
@@ -729,110 +730,43 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                   <h3 className="font-bold text-xl">
                     Cards ({selectedCards.reduce((acc, curr) => acc + curr.quantity, 0)})
                   </h3>
-                  {!isLoadingCollection && getMissingCards().length > 0 && (
-                    <div className="flex items-center gap-2 text-sm text-yellow-500">
-                      <AlertCircle size={16} />
-                      <span>{getMissingCards().length} missing</span>
-                    </div>
-                  )}
                 </div>
 
-                {!isLoadingCollection && getMissingCards().length > 0 && (
-                  <button
-                    onClick={handleAddAllMissingCards}
-                    disabled={isAddingAll}
-                    className="w-full px-4 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 mb-3 relative"
+                {selectedCards.map(({ card, quantity }) => (
+                  <div
+                    key={card.id}
+                    className="flex items-center gap-3 p-2 rounded-lg bg-gray-700"
                   >
-                    {isAddingAll ? (
-                      <>
-                        <Loader2 className="animate-spin" size={20} />
-                        <span>Adding to collection...</span>
-                      </>
-                    ) : (
-                      <>
-                        <PackagePlus size={20} />
-                        <span>Add All Missing Cards to Collection</span>
-                      </>
-                    )}
-                  </button>
-                )}
-
-                {selectedCards.map(({ card, quantity }) => {
-                  const ownedQuantity = userCollection.get(card.id) || 0;
-                  const isMissing = !isCardInCollection(card.id, quantity);
-                  const neededQuantity = Math.max(0, quantity - ownedQuantity);
-
-                  return (
-                    <div
-                      key={card.id}
-                      className={`flex items-center gap-4 p-2 rounded-lg ${
-                        isMissing
-                          ? 'bg-yellow-900/20 border border-yellow-700/50'
-                          : 'bg-gray-700'
-                      }`}
-                    >
-                      <img
-                        src={card.image_uris?.art_crop}
-                        alt={card.name}
-                        className="w-12 h-12 rounded"
-                      />
-                      <div className="flex-1">
-                        <h4 className="font-medium flex items-center gap-2">
-                          {card.name}
-                          {isMissing && (
-                            <span className="text-xs bg-yellow-600 px-2 py-0.5 rounded-full flex items-center gap-1">
-                              <AlertCircle size={12} />
-                              Missing {neededQuantity}
-                            </span>
-                          )}
-                          {!isMissing && ownedQuantity > 0 && (
-                            <span className="text-xs bg-green-600 px-2 py-0.5 rounded-full flex items-center gap-1">
-                              <CheckCircle size={12} />
-                              Owned ({ownedQuantity})
-                            </span>
-                          )}
-                        </h4>
-                        {card.prices?.usd && (
-                          <div className="text-sm text-gray-400">${card.prices.usd}</div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {isMissing && (
-                          <button
-                            onClick={() => handleAddCardToCollection(card.id, neededQuantity)}
-                            disabled={addingCardId === card.id}
-                            className="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-sm flex items-center gap-1"
-                            title={`Add ${neededQuantity} to collection`}
-                          >
-                            {addingCardId === card.id ? (
-                              <Loader2 className="animate-spin" size={16} />
-                            ) : (
-                              <>
-                                <Plus size={16} />
-                                <span className="hidden sm:inline">Add</span>
-                              </>
-                            )}
-                          </button>
-                        )}
-                        <input
-                          type="number"
-                          value={quantity}
-                          onChange={e =>
-                            updateCardQuantity(card.id, parseInt(e.target.value))
-                          }
-                          min="1"
-                          className="w-16 px-2 py-1 bg-gray-600 border border-gray-500 rounded text-center"
-                        />
-                        <button
-                          onClick={() => removeCardFromDeck(card.id)}
-                          className="text-red-500 hover:text-red-400"
-                        >
-                          <Trash2 size={20} />
-                        </button>
-                      </div>
+                    <img
+                      src={card.image_uris?.art_crop}
+                      alt={card.name}
+                      className="w-10 h-10 rounded"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium text-sm truncate">{card.name}</h4>
+                      {card.prices?.usd && (
+                        <div className="text-xs text-gray-400">${card.prices.usd}</div>
+                      )}
                     </div>
-                  );
-                })}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={quantity}
+                        onChange={e =>
+                          updateCardQuantity(card.id, parseInt(e.target.value))
+                        }
+                        min="1"
+                        className="w-14 px-2 py-1 bg-gray-600 border border-gray-500 rounded text-center text-sm"
+                      />
+                      <button
+                        onClick={() => removeCardFromDeck(card.id)}
+                        className="text-red-500 hover:text-red-400"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
 
               <div className="font-bold text-xl">
@@ -860,25 +794,44 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                 </button>
               )}
 
-              <button
-                onClick={saveDeck}
-                disabled={
-                  !deckName.trim() || selectedCards.length === 0 || isSaving
-                }
-                className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 relative"
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="animate-spin text-white absolute left-2 top-1/2 -translate-y-1/2" size={20} />
-                    <span className="opacity-0">Save Deck</span>
-                  </>
-                ) : (
-                  <>
-                    <Save size={20} />
-                    <span>{initialDeck ? 'Update Deck' : 'Save Deck'}</span>
-                  </>
+              <div className="flex gap-2">
+                {!isLoadingCollection && getMissingCards().length > 0 && (
+                  <button
+                    onClick={handleAddAllMissingCards}
+                    disabled={isAddingAll}
+                    className="flex-1 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2"
+                    title="Add missing cards to collection"
+                  >
+                    {isAddingAll ? (
+                      <Loader2 className="animate-spin" size={20} />
+                    ) : (
+                      <>
+                        <PackagePlus size={20} />
+                        <span className="hidden sm:inline">Add Missing</span>
+                      </>
+                    )}
+                  </button>
                 )}
-              </button>
+                <button
+                  onClick={saveDeck}
+                  disabled={
+                    !deckName.trim() || selectedCards.length === 0 || isSaving
+                  }
+                  className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 relative"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="animate-spin text-white absolute left-2 top-1/2 -translate-y-1/2" size={20} />
+                      <span className="opacity-0">Save Deck</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save size={20} />
+                      <span>{initialDeck ? 'Update Deck' : 'Save Deck'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

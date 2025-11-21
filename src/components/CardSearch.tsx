@@ -4,6 +4,7 @@ import { searchCards, getUserCollection, addCardToCollection } from '../services
 import { Card } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import MagicCard from './MagicCard';
+import { getManaIconPath } from './ManaCost';
 
 const CardSearch = () => {
   const { user } = useAuth();
@@ -296,20 +297,27 @@ const CardSearch = () => {
 
           {/* Mana Cost */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-            {Object.entries(manaCost).map(([color, count]) => (
-              <div key={color} className="flex items-center space-x-2">
-                <span style={{ fontSize: '1.2em' }} className="md:text-[1.5em]">
-                  {color === 'W' ? '⚪' : color === 'U' ? '🔵' : color === 'B' ? '⚫' : color === 'R' ? '🔴' : color === 'G' ? '🟢' : '🟤'}
-                </span>
-                <input
-                  type="number"
-                  value={count}
-                  onChange={(e) => setManaCost({ ...manaCost, [color]: parseInt(e.target.value) })}
-                  className="w-14 sm:w-16 px-2 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
-                  min="0"
-                />
-              </div>
-            ))}
+            {Object.entries(manaCost).map(([color, count]) => {
+              const iconPath = getManaIconPath(color);
+              return (
+                <div key={color} className="flex items-center space-x-2">
+                  {iconPath ? (
+                    <img src={iconPath} alt={color} className="w-6 h-6 md:w-8 md:h-8" />
+                  ) : (
+                    <span className="w-6 h-6 md:w-8 md:h-8 flex items-center justify-center bg-gray-500 text-white font-bold rounded-full text-sm">
+                      {color}
+                    </span>
+                  )}
+                  <input
+                    type="number"
+                    value={count}
+                    onChange={(e) => setManaCost({ ...manaCost, [color]: parseInt(e.target.value) })}
+                    className="w-14 sm:w-16 px-2 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
+                    min="0"
+                  />
+                </div>
+              );
+            })}
           </div>
 
           {/* Stats */}
