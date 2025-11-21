@@ -4,6 +4,7 @@ import { Card } from '../types';
 import { getUserCollection, getCardsByIds, addCardToCollection } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import ConfirmModal from './ConfirmModal';
 
 export default function Collection() {
   const { user } = useAuth();
@@ -16,6 +17,11 @@ export default function Collection() {
   const [cardFaceIndex, setCardFaceIndex] = useState<Map<string, number>>(new Map());
   const [snackbar, setSnackbar] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    cardId: string;
+    cardName: string;
+  }>({ isOpen: false, cardId: '', cardName: '' });
 
   // Helper function to check if a card has an actual back face (not adventure/split/etc)
   const isDoubleFaced = (card: Card) => {
@@ -429,9 +435,11 @@ export default function Collection() {
                     {/* Remove from collection button */}
                     <button
                       onClick={() => {
-                        if (window.confirm(`Remove ${displayName} from your collection?`)) {
-                          updateCardQuantity(selectedCard.card.id, 0);
-                        }
+                        setConfirmModal({
+                          isOpen: true,
+                          cardId: selectedCard.card.id,
+                          cardName: displayName,
+                        });
                       }}
                       disabled={isUpdating}
                       className="w-full mt-3 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
@@ -446,6 +454,22 @@ export default function Collection() {
           </>
         );
       })()}
+
+      {/* Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ isOpen: false, cardId: '', cardName: '' })}
+        onConfirm={() => {
+          updateCardQuantity(confirmModal.cardId, 0);
+          setConfirmModal({ isOpen: false, cardId: '', cardName: '' });
+        }}
+        title="Remove from Collection"
+        message={`Are you sure you want to remove "${confirmModal.cardName}" from your collection? This action cannot be undone.`}
+        confirmText="Remove"
+        cancelText="Cancel"
+        variant="danger"
+        isLoading={isUpdating}
+      />
 
       {/* Snackbar */}
       {snackbar && (

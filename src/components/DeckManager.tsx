@@ -456,11 +456,11 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
               cardsToAdd.push({ card, quantity });
             } else {
               console.warn(`Card not found: ${cardName}`);
-              alert(`Card not found: ${cardName}`);
+              setSnackbar({ message: `Card not found: ${cardName}`, type: 'error' });
             }
           } catch (error) {
             console.error(`Failed to search card ${cardName}:`, error);
-            alert(`Failed to search card ${cardName}: ${error}`);
+            setSnackbar({ message: `Failed to import card: ${cardName}`, type: 'error' });
           }
         }
 
