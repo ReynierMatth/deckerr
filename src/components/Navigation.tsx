@@ -51,8 +51,7 @@ import React, { useState, useRef, useEffect } from 'react';
       }, []);
 
       const navItems = [
-        { id: 'home' as const, label: 'Home', icon: Home },
-        { id: 'deck' as const, label: 'New Deck', icon: PlusSquare },
+        { id: 'home' as const, label: 'Decks', icon: Library },
         { id: 'collection' as const, label: 'Collection', icon: Library },
         { id: 'search' as const, label: 'Search', icon: Search },
         { id: 'life-counter' as const, label: 'Life Counter', icon: Heart },
@@ -140,52 +139,59 @@ import React, { useState, useRef, useEffect } from 'react';
           </nav>
 
           {/* Mobile Navigation - Bottom */}
-          <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 z-50 animate-slide-in-right">
-            <div className="flex justify-between items-center h-16 px-4">
-              <span className="text-2xl font-bold text-orange-500 animate-bounce-in">Deckerr</span>
-              <div className="relative" ref={mobileMenuRef}>
+          <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 z-50 safe-area-bottom">
+            <div className="flex justify-around items-center h-16 px-2">
+              {navItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setCurrentPage(item.id)}
+                  className={`flex flex-col items-center justify-center flex-1 h-full transition-colors ${
+                    currentPage === item.id
+                      ? 'text-blue-500'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  <item.icon size={20} />
+                  <span className="text-xs mt-1">{item.label}</span>
+                </button>
+              ))}
+
+              {/* Settings with dropdown */}
+              <div className="relative flex-1 h-full" ref={mobileMenuRef}>
                 <button
                   onClick={() => setShowMobileMenu(!showMobileMenu)}
-                  className="text-gray-300 hover:text-white"
+                  className={`flex flex-col items-center justify-center w-full h-full transition-colors ${
+                    currentPage === 'profile' || showMobileMenu
+                      ? 'text-blue-500'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
                 >
-                  <Menu size={24} />
+                  <Settings size={20} />
+                  <span className="text-xs mt-1">Settings</span>
                 </button>
+
                 {showMobileMenu && (
-                  <div className="absolute right-0 bottom-16 w-48 bg-gray-800 rounded-md shadow-lg py-1 border border-gray-700 animate-scale-in glass-effect">
-                    {navItems.map((item) => (
-                      <button
-                        key={item.id}
-                        onClick={() => {
-                          setCurrentPage(item.id);
-                          setShowMobileMenu(false);
-                        }}
-                        className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-smooth"
-                      >
-                        <item.icon size={16} />
-                        <span>{item.label}</span>
-                      </button>
-                    ))}
-                    {user && (
-                      <>
-                        <button
-                          onClick={() => {
-                            setCurrentPage('profile');
-                            setShowMobileMenu(false);
-                          }}
-                          className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-smooth"
-                        >
-                          <Settings size={16} />
-                          <span>Profile Settings</span>
-                        </button>
-                        <button
-                          onClick={handleSignOut}
-                          className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-smooth"
-                        >
-                          <LogOut size={16} />
-                          <span>Sign Out</span>
-                        </button>
-                      </>
-                    )}
+                  <div className="absolute right-0 bottom-full mb-2 w-48 bg-gray-800 rounded-lg shadow-xl py-1 border border-gray-700 animate-scale-in">
+                    <button
+                      onClick={() => {
+                        setCurrentPage('profile');
+                        setShowMobileMenu(false);
+                      }}
+                      className="flex items-center space-x-3 w-full px-4 py-3 text-sm text-gray-300 hover:bg-gray-700 transition-colors"
+                    >
+                      <Settings size={18} />
+                      <span>Profile</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleSignOut();
+                        setShowMobileMenu(false);
+                      }}
+                      className="flex items-center space-x-3 w-full px-4 py-3 text-sm text-red-400 hover:bg-gray-700 transition-colors"
+                    >
+                      <LogOut size={18} />
+                      <span>Sign Out</span>
+                    </button>
                   </div>
                 )}
               </div>

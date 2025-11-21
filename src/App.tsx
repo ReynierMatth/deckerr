@@ -42,7 +42,10 @@ import React, { useState } from 'react';
               <div className="bg-gray-900 text-white p-3 sm:p-6 animate-fade-in">
                 <div className="max-w-7xl mx-auto">
                   <h1 className="text-2xl md:text-3xl font-bold mb-4 md:mb-6 animate-slide-in-left">My Decks</h1>
-                  <DeckList onDeckEdit={handleDeckEdit} />
+                  <DeckList
+                    onDeckEdit={handleDeckEdit}
+                    onCreateDeck={() => setCurrentPage('deck')}
+                  />
                 </div>
               </div>
             );

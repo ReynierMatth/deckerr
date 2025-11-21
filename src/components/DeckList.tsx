@@ -3,12 +3,14 @@ import { getCardById, getCardsByIds } from '../services/api';
 import { Deck } from '../types';
 import { supabase } from "../lib/supabase";
 import DeckCard from "./DeckCard";
+import { PlusCircle } from 'lucide-react';
 
 interface DeckListProps {
   onDeckEdit?: (deckId: string) => void;
+  onCreateDeck?: () => void;
 }
 
-const DeckList = ({ onDeckEdit }: DeckListProps) => {
+const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -92,6 +94,22 @@ const DeckList = ({ onDeckEdit }: DeckListProps) => {
       {decks.map((deck) => (
         <DeckCard key={deck.id} deck={deck} onEdit={onDeckEdit} />
       ))}
+
+      {/* Create New Deck Card */}
+      <button
+        onClick={onCreateDeck}
+        className="bg-gray-800 rounded-xl overflow-hidden shadow-lg hover:shadow-2xl border-2 border-dashed border-gray-600 hover:border-blue-500 transition-all duration-300 hover:scale-105 cursor-pointer group min-h-[300px] flex flex-col items-center justify-center gap-4 p-8"
+      >
+        <PlusCircle size={64} className="text-gray-600 group-hover:text-blue-500 transition-colors" />
+        <div className="text-center">
+          <h3 className="text-xl font-bold text-gray-400 group-hover:text-blue-400 transition-colors">
+            Create New Deck
+          </h3>
+          <p className="text-sm text-gray-500 mt-2">
+            Start building your collection
+          </p>
+        </div>
+      </button>
     </div>
   );
 };
