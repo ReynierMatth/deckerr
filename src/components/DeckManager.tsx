@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Save, Trash2, Loader2, CheckCircle, XCircle, AlertCircle, PackagePlus } from 'lucide-react';
+import { Plus, Search, Save, Trash2, Loader2, CheckCircle, XCircle, AlertCircle, PackagePlus, RefreshCw } from 'lucide-react';
 import { Card, Deck } from '../types';
 import { searchCards, getUserCollection, addCardToCollection, addMultipleCardsToCollection } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -120,6 +120,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const [isLoadingCollection, setIsLoadingCollection] = useState(true);
   const [addingCardId, setAddingCardId] = useState<string | null>(null);
   const [isAddingAll, setIsAddingAll] = useState(false);
+  const [cardFaceIndex, setCardFaceIndex] = useState<Map<string, number>>(new Map());
 
   // Load user collection on component mount
   useEffect(() => {
@@ -140,6 +141,33 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
     loadUserCollection();
   }, [user]);
+
+  // Helper functions for double-faced cards
+  const isDoubleFaced = (card: Card) => {
+    const backFaceLayouts = ['transform', 'modal_dfc', 'double_faced_token', 'reversible_card'];
+    return card.card_faces && card.card_faces.length > 1 && backFaceLayouts.includes(card.layout);
+  };
+
+  const getCurrentFaceIndex = (cardId: string) => {
+    return cardFaceIndex.get(cardId) || 0;
+  };
+
+  const toggleCardFace = (cardId: string, totalFaces: number) => {
+    setCardFaceIndex(prev => {
+      const newMap = new Map(prev);
+      const currentIndex = prev.get(cardId) || 0;
+      const nextIndex = (currentIndex + 1) % totalFaces;
+      newMap.set(cardId, nextIndex);
+      return newMap;
+    });
+  };
+
+  const getCardImageUri = (card: Card, faceIndex: number = 0) => {
+    if (isDoubleFaced(card) && card.card_faces) {
+      return card.card_faces[faceIndex]?.image_uris?.normal || card.card_faces[faceIndex]?.image_uris?.small;
+    }
+    return card.image_uris?.normal || card.image_uris?.small || card.card_faces?.[0]?.image_uris?.normal;
+  };
 
   // Helper function to check if a card is in the collection
   const isCardInCollection = (cardId: string, requiredQuantity: number = 1): boolean => {
@@ -428,11 +456,11 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
               cardsToAdd.push({ card, quantity });
             } else {
               console.warn(`Card not found: ${cardName}`);
-              alert(`Card not found: ${cardName}`);
+              setSnackbar({ message: `Card not found: ${cardName}`, type: 'error' });
             }
           } catch (error) {
             console.error(`Failed to search card ${cardName}:`, error);
-            alert(`Failed to search card ${cardName}: ${error}`);
+            setSnackbar({ message: `Failed to import card: ${cardName}`, type: 'error' });
           }
         }
 
@@ -491,24 +519,82 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
             </form>
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {searchResults.map(card => (
-                <div
-                  key={card.id}
-                  className="bg-gray-800 rounded-lg overflow-hidden hover:ring-2 hover:ring-blue-500 transition-all"
-                >
-                  <MagicCard card={card} />
-                  <div className="p-4">
-                    <h3 className="font-bold mb-2">{card.name}</h3>
-                    <button
-                      onClick={() => addCardToDeck(card)}
-                      className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center justify-center gap-2"
-                    >
-                      <Plus size={20} />
-                      Add to Deck
-                    </button>
+              {searchResults.map(card => {
+                const currentFaceIndex = getCurrentFaceIndex(card.id);
+                const isMultiFaced = isDoubleFaced(card);
+                const inCollection = userCollection.get(card.id) || 0;
+                const isAddingThisCard = addingCardId === card.id;
+
+                const displayName = isMultiFaced && card.card_faces
+                  ? card.card_faces[currentFaceIndex]?.name || card.name
+                  : card.name;
+
+                return (
+                  <div
+                    key={card.id}
+                    className="bg-gray-800 rounded-lg overflow-hidden hover:ring-2 hover:ring-blue-500 transition-all"
+                  >
+                    <div className="relative">
+                      {getCardImageUri(card, currentFaceIndex) ? (
+                        <img
+                          src={getCardImageUri(card, currentFaceIndex)}
+                          alt={displayName}
+                          className="w-full h-auto"
+                        />
+                      ) : (
+                        <MagicCard card={card} />
+                      )}
+                      {isMultiFaced && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleCardFace(card.id, card.card_faces!.length);
+                          }}
+                          className="absolute bottom-2 right-2 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full shadow-lg transition-all"
+                          title="Flip card"
+                        >
+                          <RefreshCw size={16} />
+                        </button>
+                      )}
+                    </div>
+                    <div className="p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-bold">{displayName}</h3>
+                        {inCollection > 0 && (
+                          <span className="text-xs bg-green-600 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <CheckCircle size={12} />
+                            x{inCollection}
+                          </span>
+                        )}
+                      </div>
+                      {card.prices?.usd && (
+                        <div className="text-sm text-gray-400 mb-2">${card.prices.usd}</div>
+                      )}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => addCardToDeck(card)}
+                          className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center justify-center gap-2"
+                        >
+                          <Plus size={20} />
+                          Add to Deck
+                        </button>
+                        <button
+                          onClick={() => handleAddCardToCollection(card.id, 1)}
+                          disabled={isAddingThisCard}
+                          className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2"
+                          title="Add to collection"
+                        >
+                          {isAddingThisCard ? (
+                            <Loader2 className="animate-spin" size={20} />
+                          ) : (
+                            <PackagePlus size={20} />
+                          )}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 

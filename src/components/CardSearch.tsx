@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
-import { searchCards } from '../services/api';
+import React, { useState, useEffect } from 'react';
+import { RefreshCw, PackagePlus, Loader2, CheckCircle, XCircle, Trash2 } from 'lucide-react';
+import { searchCards, getUserCollection, addCardToCollection } from '../services/api';
 import { Card } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 import MagicCard from './MagicCard';
 
 const CardSearch = () => {
+  const { user } = useAuth();
   const [cardName, setCardName] = useState('');
   const [text, setText] = useState('');
   const [rulesText, setRulesText] = useState('');
@@ -39,6 +42,85 @@ const CardSearch = () => {
   const [searchResults, setSearchResults] = useState<Card[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Collection state
+  const [userCollection, setUserCollection] = useState<Map<string, number>>(new Map());
+  const [addingCardId, setAddingCardId] = useState<string | null>(null);
+  const [cardFaceIndex, setCardFaceIndex] = useState<Map<string, number>>(new Map());
+  const [snackbar, setSnackbar] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // Load user collection
+  useEffect(() => {
+    const loadUserCollection = async () => {
+      if (!user) return;
+      try {
+        const collection = await getUserCollection(user.id);
+        setUserCollection(collection);
+      } catch (error) {
+        console.error('Error loading user collection:', error);
+      }
+    };
+    loadUserCollection();
+  }, [user]);
+
+  // Helper function to check if a card has an actual back face
+  const isDoubleFaced = (card: Card) => {
+    const backFaceLayouts = ['transform', 'modal_dfc', 'double_faced_token', 'reversible_card'];
+    return card.card_faces && card.card_faces.length > 1 && backFaceLayouts.includes(card.layout);
+  };
+
+  // Get current face index for a card
+  const getCurrentFaceIndex = (cardId: string) => {
+    return cardFaceIndex.get(cardId) || 0;
+  };
+
+  // Toggle card face
+  const toggleCardFace = (cardId: string, totalFaces: number) => {
+    setCardFaceIndex(prev => {
+      const newMap = new Map(prev);
+      const currentIndex = prev.get(cardId) || 0;
+      const nextIndex = (currentIndex + 1) % totalFaces;
+      newMap.set(cardId, nextIndex);
+      return newMap;
+    });
+  };
+
+  // Get card image for current face
+  const getCardImageUri = (card: Card, faceIndex: number = 0) => {
+    if (isDoubleFaced(card) && card.card_faces) {
+      return card.card_faces[faceIndex]?.image_uris?.normal || card.card_faces[faceIndex]?.image_uris?.small;
+    }
+    return card.image_uris?.normal || card.image_uris?.small || card.card_faces?.[0]?.image_uris?.normal;
+  };
+
+  // Add card to collection
+  const handleAddCardToCollection = async (cardId: string) => {
+    if (!user) {
+      setSnackbar({ message: 'Please log in to add cards to your collection', type: 'error' });
+      setTimeout(() => setSnackbar(null), 3000);
+      return;
+    }
+
+    try {
+      setAddingCardId(cardId);
+      await addCardToCollection(user.id, cardId, 1);
+
+      setUserCollection(prev => {
+        const newMap = new Map(prev);
+        const currentQty = newMap.get(cardId) || 0;
+        newMap.set(cardId, currentQty + 1);
+        return newMap;
+      });
+
+      setSnackbar({ message: 'Card added to collection!', type: 'success' });
+    } catch (error) {
+      console.error('Error adding card to collection:', error);
+      setSnackbar({ message: 'Failed to add card to collection', type: 'error' });
+    } finally {
+      setAddingCardId(null);
+      setTimeout(() => setSnackbar(null), 3000);
+    }
+  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -524,18 +606,107 @@ const CardSearch = () => {
 
         {searchResults && searchResults.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {searchResults.map((card) => (
-              <div key={card.id} className="bg-gray-800 rounded-lg overflow-hidden">
-                <MagicCard card={card} />
-                <div className="p-4">
-                  <h3 className="font-bold mb-2">{card.name}</h3>
-                  <p className="text-gray-400 text-sm">{card.type_line}</p>
+            {searchResults.map((card) => {
+              const currentFaceIndex = getCurrentFaceIndex(card.id);
+              const isMultiFaced = isDoubleFaced(card);
+              const inCollection = userCollection.get(card.id) || 0;
+              const isAddingThisCard = addingCardId === card.id;
+
+              const displayName = isMultiFaced && card.card_faces
+                ? card.card_faces[currentFaceIndex]?.name || card.name
+                : card.name;
+
+              return (
+                <div key={card.id} className="bg-gray-800 rounded-lg overflow-hidden hover:ring-2 hover:ring-blue-500 transition-all">
+                  <div className="relative">
+                    {getCardImageUri(card, currentFaceIndex) ? (
+                      <img
+                        src={getCardImageUri(card, currentFaceIndex)}
+                        alt={displayName}
+                        className="w-full h-auto"
+                      />
+                    ) : (
+                      <MagicCard card={card} />
+                    )}
+                    {isMultiFaced && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleCardFace(card.id, card.card_faces!.length);
+                        }}
+                        className="absolute bottom-2 right-2 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full shadow-lg transition-all"
+                        title="Flip card"
+                      >
+                        <RefreshCw size={16} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-bold">{displayName}</h3>
+                      {inCollection > 0 && (
+                        <span className="text-xs bg-green-600 px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <CheckCircle size={12} />
+                          x{inCollection}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-gray-400 text-sm mb-3">
+                      {isMultiFaced && card.card_faces
+                        ? card.card_faces[currentFaceIndex]?.type_line || card.type_line
+                        : card.type_line}
+                    </p>
+                    {card.prices?.usd && (
+                      <div className="text-sm text-gray-400 mb-2">${card.prices.usd}</div>
+                    )}
+                    <button
+                      onClick={() => handleAddCardToCollection(card.id)}
+                      disabled={isAddingThisCard}
+                      className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2"
+                      title="Add to collection"
+                    >
+                      {isAddingThisCard ? (
+                        <>
+                          <Loader2 className="animate-spin" size={20} />
+                          Adding...
+                        </>
+                      ) : (
+                        <>
+                          <PackagePlus size={20} />
+                          Add to Collection
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
+
+      {/* Snackbar */}
+      {snackbar && (
+        <div
+          className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg transition-all duration-300 ${
+            snackbar.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+          } text-white z-50`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              {snackbar.type === 'success' ? (
+                <CheckCircle className="mr-2" size={20} />
+              ) : (
+                <XCircle className="mr-2" size={20} />
+              )}
+              <span>{snackbar.message}</span>
+            </div>
+            <button onClick={() => setSnackbar(null)} className="ml-4 text-gray-200 hover:text-white focus:outline-none">
+              <Trash2 size={16} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

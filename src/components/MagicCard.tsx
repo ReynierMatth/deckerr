@@ -6,11 +6,14 @@ interface MagicCardProps {
 }
 
 const MagicCard = ({ card }: MagicCardProps) => {
+  // Handle both regular cards and double-faced cards (transform, modal_dfc, etc)
+  const imageUri = card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal;
+
   return (
     <div className="relative card-hover animate-fade-in">
-      {card.image_uris?.normal ? (
+      {imageUri ? (
         <img
-          src={card.image_uris.normal}
+          src={imageUri}
           alt={card.name}
           className="w-full h-auto rounded-lg transition-smooth"
         />
