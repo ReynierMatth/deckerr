@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Loader2, Trash2, CheckCircle, XCircle } from 'lucide-react';
+import { Search, Loader2, Trash2, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { Card } from '../types';
 import { getUserCollection, getCardsByIds } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,7 +11,47 @@ export default function Collection() {
   const [filteredCollection, setFilteredCollection] = useState<{ card: Card; quantity: number }[]>([]);
   const [isLoadingCollection, setIsLoadingCollection] = useState(true);
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
+  const [cardFaceIndex, setCardFaceIndex] = useState<Map<string, number>>(new Map());
   const [snackbar, setSnackbar] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // Helper function to check if a card has an actual back face (not adventure/split/etc)
+  const isDoubleFaced = (card: Card) => {
+    // Only show flip for cards with physical back sides
+    const backFaceLayouts = ['transform', 'modal_dfc', 'double_faced_token', 'reversible_card'];
+    return card.card_faces && card.card_faces.length > 1 && backFaceLayouts.includes(card.layout);
+  };
+
+  // Helper function to get the current face index for a card
+  const getCurrentFaceIndex = (cardId: string) => {
+    return cardFaceIndex.get(cardId) || 0;
+  };
+
+  // Helper function to get the image URI for a card (handling both single and double-faced)
+  const getCardImageUri = (card: Card, faceIndex: number = 0) => {
+    if (isDoubleFaced(card) && card.card_faces) {
+      return card.card_faces[faceIndex]?.image_uris?.normal || card.card_faces[faceIndex]?.image_uris?.small;
+    }
+    return card.image_uris?.normal || card.image_uris?.small;
+  };
+
+  // Helper function to get the large image URI for hover preview
+  const getCardLargeImageUri = (card: Card, faceIndex: number = 0) => {
+    if (isDoubleFaced(card) && card.card_faces) {
+      return card.card_faces[faceIndex]?.image_uris?.large || card.card_faces[faceIndex]?.image_uris?.normal;
+    }
+    return card.image_uris?.large || card.image_uris?.normal;
+  };
+
+  // Toggle card face
+  const toggleCardFace = (cardId: string, totalFaces: number) => {
+    setCardFaceIndex(prev => {
+      const newMap = new Map(prev);
+      const currentIndex = prev.get(cardId) || 0;
+      const nextIndex = (currentIndex + 1) % totalFaces;
+      newMap.set(cardId, nextIndex);
+      return newMap;
+    });
+  };
 
   // Load user's collection from Supabase on mount
   useEffect(() => {
@@ -115,63 +155,103 @@ export default function Collection() {
             </div>
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-3">
-              {filteredCollection.map(({ card, quantity }) => (
-                <div
-                  key={card.id}
-                  className="relative group cursor-pointer"
-                  onMouseEnter={() => setHoveredCard(card)}
-                  onMouseLeave={() => setHoveredCard(null)}
-                >
-                  {/* Small card thumbnail */}
-                  <div className="relative rounded-lg overflow-hidden shadow-lg transition-all group-hover:ring-2 group-hover:ring-blue-500">
-                    <img
-                      src={card.image_uris?.normal || card.image_uris?.small}
-                      alt={card.name}
-                      className="w-full h-auto"
-                    />
-                    {/* Quantity badge */}
-                    <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
-                      x{quantity}
+              {filteredCollection.map(({ card, quantity }) => {
+                const currentFaceIndex = getCurrentFaceIndex(card.id);
+                const isMultiFaced = isDoubleFaced(card);
+                const displayName = isMultiFaced && card.card_faces
+                  ? card.card_faces[currentFaceIndex]?.name || card.name
+                  : card.name;
+
+                return (
+                  <div
+                    key={card.id}
+                    className="relative group cursor-pointer"
+                    onMouseEnter={() => setHoveredCard(card)}
+                    onMouseLeave={() => setHoveredCard(null)}
+                  >
+                    {/* Small card thumbnail */}
+                    <div className="relative rounded-lg overflow-hidden shadow-lg transition-all group-hover:ring-2 group-hover:ring-blue-500">
+                      <img
+                        src={getCardImageUri(card, currentFaceIndex)}
+                        alt={displayName}
+                        className="w-full h-auto"
+                      />
+                      {/* Quantity badge */}
+                      <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
+                        x{quantity}
+                      </div>
+                      {/* Flip button for double-faced cards */}
+                      {isMultiFaced && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleCardFace(card.id, card.card_faces!.length);
+                          }}
+                          className="absolute bottom-1 right-1 bg-purple-600 hover:bg-purple-700 text-white p-1 rounded-full shadow-lg transition-all"
+                          title="Flip card"
+                        >
+                          <RefreshCw size={12} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Card name below thumbnail */}
+                    <div className="mt-1 text-xs text-center truncate px-1">
+                      {displayName}
                     </div>
                   </div>
-
-                  {/* Card name below thumbnail */}
-                  <div className="mt-1 text-xs text-center truncate px-1">
-                    {card.name}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
       </div>
 
       {/* Hover Card Preview */}
-      {hoveredCard && (
-        <div className="fixed top-1/2 right-8 transform -translate-y-1/2 z-50 pointer-events-none">
-          <div className="bg-gray-800 rounded-lg shadow-2xl p-4 max-w-md">
-            <img
-              src={hoveredCard.image_uris?.large || hoveredCard.image_uris?.normal}
-              alt={hoveredCard.name}
-              className="w-full h-auto rounded-lg shadow-lg"
-            />
-            <div className="mt-3 space-y-2">
-              <h3 className="text-xl font-bold">{hoveredCard.name}</h3>
-              <p className="text-sm text-gray-400">{hoveredCard.type_line}</p>
-              {hoveredCard.oracle_text && (
-                <p className="text-sm text-gray-300 border-t border-gray-700 pt-2">
-                  {hoveredCard.oracle_text}
-                </p>
-              )}
-              {hoveredCard.prices?.usd && (
-                <div className="text-sm text-green-400 font-semibold border-t border-gray-700 pt-2">
-                  ${hoveredCard.prices.usd}
-                </div>
-              )}
+      {hoveredCard && (() => {
+        const currentFaceIndex = getCurrentFaceIndex(hoveredCard.id);
+        const isMultiFaced = isDoubleFaced(hoveredCard);
+        const currentFace = isMultiFaced && hoveredCard.card_faces
+          ? hoveredCard.card_faces[currentFaceIndex]
+          : null;
+
+        const displayName = currentFace?.name || hoveredCard.name;
+        const displayTypeLine = currentFace?.type_line || hoveredCard.type_line;
+        const displayOracleText = currentFace?.oracle_text || hoveredCard.oracle_text;
+
+        return (
+          <div className="fixed top-1/2 right-8 transform -translate-y-1/2 z-50 pointer-events-none">
+            <div className="bg-gray-800 rounded-lg shadow-2xl p-4 max-w-md">
+              <div className="relative">
+                <img
+                  src={getCardLargeImageUri(hoveredCard, currentFaceIndex)}
+                  alt={displayName}
+                  className="w-full h-auto rounded-lg shadow-lg"
+                />
+                {isMultiFaced && (
+                  <div className="absolute top-2 right-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
+                    Face {currentFaceIndex + 1}/{hoveredCard.card_faces!.length}
+                  </div>
+                )}
+              </div>
+              <div className="mt-3 space-y-2">
+                <h3 className="text-xl font-bold">{displayName}</h3>
+                <p className="text-sm text-gray-400">{displayTypeLine}</p>
+                {displayOracleText && (
+                  <p className="text-sm text-gray-300 border-t border-gray-700 pt-2">
+                    {displayOracleText}
+                  </p>
+                )}
+                {hoveredCard.prices?.usd && (
+                  <div className="text-sm text-green-400 font-semibold border-t border-gray-700 pt-2">
+                    ${hoveredCard.prices.usd}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Snackbar */}
       {snackbar && (
