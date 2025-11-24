@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, Clock, History, UserPlus, UserMinus, Check, X, Send, Settings, Save } from 'lucide-react';
+import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, Clock, History, UserPlus, UserMinus, Check, X, Send, Settings, Save, ChevronLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
@@ -44,9 +44,9 @@ type FriendsSubTab = 'list' | 'requests' | 'search';
 type TradesSubTab = 'pending' | 'history';
 
 const VISIBILITY_OPTIONS = [
-  { value: 'public', label: 'Public', description: 'Anyone can view your collection' },
-  { value: 'friends', label: 'Friends Only', description: 'Only friends can view' },
-  { value: 'private', label: 'Private', description: 'Only you can view' },
+  { value: 'public', label: 'Public', description: 'Anyone can view' },
+  { value: 'friends', label: 'Friends', description: 'Friends only' },
+  { value: 'private', label: 'Private', description: 'Only you' },
 ] as const;
 
 export default function Community() {
@@ -214,7 +214,7 @@ export default function Community() {
     setConfirmModal({
       isOpen: true,
       title: 'Remove Friend',
-      message: `Are you sure you want to remove ${friendName} from your friends?`,
+      message: `Remove ${friendName} from your friends?`,
       variant: 'danger',
       onConfirm: async () => {
         try {
@@ -264,9 +264,9 @@ export default function Community() {
       const success = await acceptTrade(tradeId);
       if (success) {
         await loadTradesData();
-        toast.success('Trade accepted! Cards have been exchanged.');
+        toast.success('Trade accepted! Cards exchanged.');
       } else {
-        toast.error('Failed to execute trade. Check your collection.');
+        toast.error('Failed. Check your collection.');
       }
     } catch (error) {
       toast.error('Error accepting trade');
@@ -292,7 +292,7 @@ export default function Community() {
     setConfirmModal({
       isOpen: true,
       title: 'Cancel Trade',
-      message: 'Are you sure you want to cancel this trade offer?',
+      message: 'Cancel this trade offer?',
       variant: 'warning',
       onConfirm: async () => {
         setProcessingTradeId(tradeId);
@@ -350,21 +350,18 @@ export default function Community() {
   const renderTradeItems = (items: TradeItem[] | undefined, ownerId: string, label: string) => {
     const ownerItems = items?.filter((i) => i.owner_id === ownerId) || [];
     if (ownerItems.length === 0) {
-      return <div className="text-gray-500 text-sm italic">{label}: Nothing (gift)</div>;
+      return <p className="text-gray-500 text-xs">{label}: Gift</p>;
     }
 
     return (
       <div>
-        <div className="text-gray-400 text-sm mb-1">{label}:</div>
-        <div className="flex flex-wrap gap-2">
+        <p className="text-gray-400 text-xs mb-1">{label}:</p>
+        <div className="flex flex-wrap gap-1">
           {ownerItems.map((item) => {
             const card = tradeCardDetails.get(item.card_id);
             return (
-              <div key={item.id} className="flex items-center gap-2 bg-gray-700 px-2 py-1 rounded text-sm">
-                {card?.image_uris?.small && (
-                  <img src={card.image_uris.small} alt={card.name} className="w-8 h-11 rounded" />
-                )}
-                <span>{card?.name || item.card_id}</span>
+              <div key={item.id} className="flex items-center gap-1 bg-gray-700 px-2 py-0.5 rounded text-xs">
+                <span className="truncate max-w-[100px]">{card?.name || 'Card'}</span>
                 {item.quantity > 1 && <span className="text-gray-400">x{item.quantity}</span>}
               </div>
             );
@@ -374,71 +371,78 @@ export default function Community() {
     );
   };
 
+  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div>
+        <Loader2 className="animate-spin text-blue-500" size={48} />
       </div>
     );
   }
 
-  // Viewing a user's collection
+  // ============ USER COLLECTION VIEW ============
   if (selectedUser) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <button
-                onClick={() => { setSelectedUser(null); setSelectedUserCollection([]); }}
-                className="text-blue-400 hover:text-blue-300 mb-2"
-              >
-                ← Back
-              </button>
-              <h1 className="text-3xl font-bold">{selectedUser.username}'s Collection</h1>
-            </div>
+      <div className="bg-gray-900 text-white min-h-screen">
+        {/* Header */}
+        <div className="sticky top-0 bg-gray-900/95 backdrop-blur border-b border-gray-800 p-3 z-10">
+          <div className="flex items-center justify-between gap-2">
+            <button
+              onClick={() => { setSelectedUser(null); setSelectedUserCollection([]); }}
+              className="flex items-center gap-1 text-blue-400 text-sm min-w-0"
+            >
+              <ChevronLeft size={20} />
+              <span className="hidden sm:inline">Back</span>
+            </button>
+            <h1 className="text-lg font-bold truncate flex-1 text-center">{selectedUser.username}</h1>
             <button
               onClick={() => setShowTradeCreator(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition"
+              className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm whitespace-nowrap"
             >
-              <ArrowLeftRight size={20} />
-              Propose Trade
+              <ArrowLeftRight size={16} />
+              <span className="hidden sm:inline">Trade</span>
             </button>
           </div>
+        </div>
 
+        {/* Collection Grid */}
+        <div className="p-3">
           {loadingCollection ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="animate-spin text-blue-500" size={48} />
+            <div className="flex justify-center py-12">
+              <Loader2 className="animate-spin text-blue-500" size={32} />
             </div>
           ) : selectedUserCollection.length === 0 ? (
-            <p className="text-gray-400 text-center py-12">This collection is empty</p>
+            <p className="text-gray-400 text-center py-12">Empty collection</p>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-9 gap-2 sm:gap-3">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
               {selectedUserCollection.map(({ card, quantity }) => (
                 <div key={card.id} className="relative">
-                  <div className="rounded-lg overflow-hidden shadow-lg">
-                    <img src={card.image_uris?.normal || card.image_uris?.small} alt={card.name} className="w-full h-auto" />
-                    <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full">x{quantity}</div>
-                  </div>
-                  <div className="mt-1 text-xs text-center truncate px-1">{card.name}</div>
+                  <img
+                    src={card.image_uris?.small || card.image_uris?.normal}
+                    alt={card.name}
+                    className="w-full h-auto rounded-lg"
+                  />
+                  <span className="absolute top-1 right-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    x{quantity}
+                  </span>
                 </div>
               ))}
             </div>
           )}
-
-          {showTradeCreator && (
-            <TradeCreator
-              receiverId={selectedUser.id}
-              receiverUsername={selectedUser.username || 'Unknown'}
-              receiverCollection={selectedUserCollection}
-              onClose={() => setShowTradeCreator(false)}
-              onTradeCreated={() => {
-                setShowTradeCreator(false);
-                toast.success('Trade proposal sent!');
-              }}
-            />
-          )}
         </div>
+
+        {showTradeCreator && (
+          <TradeCreator
+            receiverId={selectedUser.id}
+            receiverUsername={selectedUser.username || 'Unknown'}
+            receiverCollection={selectedUserCollection}
+            onClose={() => setShowTradeCreator(false)}
+            onTradeCreated={() => {
+              setShowTradeCreator(false);
+              toast.success('Trade proposal sent!');
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -447,81 +451,112 @@ export default function Community() {
     (u) => !browseSearch || u.username?.toLowerCase().includes(browseSearch.toLowerCase())
   );
 
-  const friendProfiles: UserProfile[] = friends.map((f) => ({
-    id: f.id,
-    username: f.username,
-    collection_visibility: 'friends',
-  }));
-
+  // ============ MAIN VIEW ============
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Community</h1>
+    <div className="bg-gray-900 text-white min-h-screen">
+      {/* Header */}
+      <div className="sticky top-0 bg-gray-900/95 backdrop-blur border-b border-gray-800 p-3 z-10">
+        <h1 className="text-xl font-bold mb-3">Community</h1>
 
-        {/* Main Tabs */}
-        <div className="flex flex-wrap gap-2 mb-6">
+        {/* Tabs - Scrollable on mobile */}
+        <div className="flex gap-1 overflow-x-auto pb-1 -mx-3 px-3 scrollbar-hide">
           {[
             { id: 'browse' as Tab, label: 'Browse', icon: Globe },
-            { id: 'friends' as Tab, label: `Friends (${friends.length})`, icon: Users },
-            { id: 'trades' as Tab, label: `Trades (${pendingTrades.length})`, icon: ArrowLeftRight },
+            { id: 'friends' as Tab, label: `Friends`, count: friends.length, icon: Users },
+            { id: 'trades' as Tab, label: `Trades`, count: pendingTrades.length, icon: ArrowLeftRight },
             { id: 'profile' as Tab, label: 'Profile', icon: Settings },
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${
-                activeTab === tab.id ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm whitespace-nowrap transition flex-shrink-0 ${
+                activeTab === tab.id
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-800 text-gray-300 active:bg-gray-700'
               }`}
             >
-              <tab.icon size={18} />
-              {tab.label}
+              <tab.icon size={16} />
+              <span>{tab.label}</span>
+              {tab.count !== undefined && tab.count > 0 && (
+                <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                  activeTab === tab.id ? 'bg-blue-500' : 'bg-gray-700'
+                }`}>
+                  {tab.count}
+                </span>
+              )}
             </button>
           ))}
         </div>
+      </div>
 
+      {/* Content */}
+      <div className="p-3">
         {/* ============ BROWSE TAB ============ */}
         {activeTab === 'browse' && (
-          <div className="space-y-4">
+          <div className="space-y-3">
+            {/* Search */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input
                 type="text"
                 value={browseSearch}
                 onChange={(e) => setBrowseSearch(e.target.value)}
-                placeholder="Search public collections..."
-                className="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="Search users..."
+                className="w-full pl-10 pr-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
-            <div className="flex gap-2 mb-4">
-              <button className="px-3 py-1 bg-blue-600 rounded-lg text-sm">Public ({filteredPublicUsers.length})</button>
-              <button
-                onClick={() => setActiveTab('friends')}
-                className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm"
-              >
-                Friends ({friendProfiles.length})
-              </button>
-            </div>
-
+            {/* Users List */}
             {filteredPublicUsers.length === 0 ? (
-              <p className="text-gray-400 text-center py-8">No public collections found</p>
+              <p className="text-gray-400 text-center py-8 text-sm">No public collections</p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {filteredPublicUsers.map((userProfile) => (
-                  <div key={userProfile.id} className="flex items-center justify-between bg-gray-800 p-4 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Globe size={20} className="text-green-400" />
-                      <span className="font-medium">{userProfile.username || 'Unknown'}</span>
+                  <button
+                    key={userProfile.id}
+                    onClick={() => { setSelectedUser(userProfile); loadUserCollection(userProfile.id); }}
+                    className="w-full flex items-center justify-between bg-gray-800 p-3 rounded-lg active:bg-gray-700 transition"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Globe size={18} className="text-green-400 flex-shrink-0" />
+                      <span className="font-medium truncate">{userProfile.username || 'Unknown'}</span>
                     </div>
-                    <button
-                      onClick={() => { setSelectedUser(userProfile); loadUserCollection(userProfile.id); }}
-                      className="flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition text-sm"
-                    >
-                      <Eye size={16} />
-                      View
-                    </button>
-                  </div>
+                    <Eye size={18} className="text-gray-400 flex-shrink-0" />
+                  </button>
                 ))}
+              </div>
+            )}
+
+            {/* Friends shortcut */}
+            {friends.length > 0 && (
+              <div className="pt-3 border-t border-gray-800">
+                <p className="text-xs text-gray-500 mb-2">Your friends</p>
+                <div className="space-y-2">
+                  {friends.slice(0, 3).map((friend) => (
+                    <button
+                      key={friend.id}
+                      onClick={() => {
+                        setSelectedUser({ id: friend.id, username: friend.username, collection_visibility: 'friends' });
+                        loadUserCollection(friend.id);
+                      }}
+                      className="w-full flex items-center justify-between bg-gray-800 p-3 rounded-lg active:bg-gray-700 transition"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Users size={18} className="text-blue-400 flex-shrink-0" />
+                        <span className="font-medium truncate">{friend.username || 'Unknown'}</span>
+                      </div>
+                      <Eye size={18} className="text-gray-400 flex-shrink-0" />
+                    </button>
+                  ))}
+                  {friends.length > 3 && (
+                    <button
+                      onClick={() => setActiveTab('friends')}
+                      className="w-full text-center text-blue-400 text-sm py-2"
+                    >
+                      View all {friends.length} friends
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -529,121 +564,142 @@ export default function Community() {
 
         {/* ============ FRIENDS TAB ============ */}
         {activeTab === 'friends' && (
-          <div className="space-y-4">
-            <div className="flex gap-2 mb-4">
-              {(['list', 'requests', 'search'] as FriendsSubTab[]).map((tab) => (
+          <div className="space-y-3">
+            {/* Sub tabs */}
+            <div className="flex gap-1">
+              {[
+                { id: 'list' as FriendsSubTab, label: 'List' },
+                { id: 'requests' as FriendsSubTab, label: 'Requests', count: pendingRequests.length },
+                { id: 'search' as FriendsSubTab, label: 'Add' },
+              ].map((tab) => (
                 <button
-                  key={tab}
-                  onClick={() => setFriendsSubTab(tab)}
-                  className={`px-3 py-1 rounded-lg text-sm capitalize ${
-                    friendsSubTab === tab ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'
+                  key={tab.id}
+                  onClick={() => setFriendsSubTab(tab.id)}
+                  className={`px-3 py-1.5 rounded-lg text-sm flex-1 ${
+                    friendsSubTab === tab.id ? 'bg-blue-600' : 'bg-gray-800 active:bg-gray-700'
                   }`}
                 >
-                  {tab === 'requests' ? `Requests (${pendingRequests.length})` : tab}
+                  {tab.label}
+                  {tab.count !== undefined && tab.count > 0 && (
+                    <span className="ml-1 text-xs">({tab.count})</span>
+                  )}
                 </button>
               ))}
             </div>
 
+            {/* Friends List */}
             {friendsSubTab === 'list' && (
-              <div className="space-y-3">
-                {friends.length === 0 ? (
-                  <p className="text-gray-400 text-center py-8">No friends yet. Search for users to add them!</p>
-                ) : (
-                  friends.map((friend) => (
-                    <div key={friend.id} className="flex items-center justify-between bg-gray-800 p-4 rounded-lg">
-                      <span className="font-medium">{friend.username || 'Unknown'}</span>
-                      <div className="flex gap-2">
+              friends.length === 0 ? (
+                <p className="text-gray-400 text-center py-8 text-sm">No friends yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {friends.map((friend) => (
+                    <div key={friend.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
+                      <span className="font-medium truncate">{friend.username || 'Unknown'}</span>
+                      <div className="flex gap-1">
                         <button
-                          onClick={() => { setSelectedUser({ id: friend.id, username: friend.username, collection_visibility: 'friends' }); loadUserCollection(friend.id); }}
-                          className="p-2 text-blue-400 hover:bg-blue-400/20 rounded-lg transition"
-                          title="View collection"
+                          onClick={() => {
+                            setSelectedUser({ id: friend.id, username: friend.username, collection_visibility: 'friends' });
+                            loadUserCollection(friend.id);
+                          }}
+                          className="p-2 text-blue-400 active:bg-blue-400/20 rounded-lg"
                         >
-                          <Eye size={20} />
+                          <Eye size={18} />
                         </button>
                         <button
-                          onClick={() => handleRemoveFriend(friend.friendshipId, friend.username || 'this user')}
-                          className="p-2 text-red-400 hover:bg-red-400/20 rounded-lg transition"
-                          title="Remove friend"
+                          onClick={() => handleRemoveFriend(friend.friendshipId, friend.username || 'user')}
+                          className="p-2 text-red-400 active:bg-red-400/20 rounded-lg"
                         >
-                          <UserMinus size={20} />
+                          <UserMinus size={18} />
                         </button>
                       </div>
                     </div>
-                  ))
+                  ))}
+                </div>
+              )
+            )}
+
+            {/* Requests */}
+            {friendsSubTab === 'requests' && (
+              <div className="space-y-4">
+                {pendingRequests.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-2">Received</p>
+                    <div className="space-y-2">
+                      {pendingRequests.map((req) => (
+                        <div key={req.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
+                          <span className="font-medium truncate">{req.username || 'Unknown'}</span>
+                          <div className="flex gap-1">
+                            <button onClick={() => handleAcceptRequest(req.friendshipId)} className="p-2 text-green-400 active:bg-green-400/20 rounded-lg">
+                              <Check size={18} />
+                            </button>
+                            <button onClick={() => handleDeclineRequest(req.friendshipId)} className="p-2 text-red-400 active:bg-red-400/20 rounded-lg">
+                              <X size={18} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {sentRequests.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-2">Sent</p>
+                    <div className="space-y-2">
+                      {sentRequests.map((req) => (
+                        <div key={req.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <Send size={14} className="text-gray-500" />
+                            <span className="font-medium truncate">{req.username || 'Unknown'}</span>
+                          </div>
+                          <span className="text-xs text-yellow-500">Pending</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {pendingRequests.length === 0 && sentRequests.length === 0 && (
+                  <p className="text-gray-400 text-center py-8 text-sm">No requests</p>
                 )}
               </div>
             )}
 
-            {friendsSubTab === 'requests' && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-semibold mb-3 text-gray-300">Received</h3>
-                  {pendingRequests.length === 0 ? (
-                    <p className="text-gray-500 text-sm">No pending requests</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {pendingRequests.map((req) => (
-                        <div key={req.id} className="flex items-center justify-between bg-gray-800 p-4 rounded-lg">
-                          <span className="font-medium">{req.username || 'Unknown'}</span>
-                          <div className="flex gap-2">
-                            <button onClick={() => handleAcceptRequest(req.friendshipId)} className="p-2 text-green-400 hover:bg-green-400/20 rounded-lg"><Check size={20} /></button>
-                            <button onClick={() => handleDeclineRequest(req.friendshipId)} className="p-2 text-red-400 hover:bg-red-400/20 rounded-lg"><X size={20} /></button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold mb-3 text-gray-300">Sent</h3>
-                  {sentRequests.length === 0 ? (
-                    <p className="text-gray-500 text-sm">No sent requests</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {sentRequests.map((req) => (
-                        <div key={req.id} className="flex items-center justify-between bg-gray-800 p-4 rounded-lg">
-                          <div className="flex items-center gap-2">
-                            <Send size={16} className="text-gray-500" />
-                            <span className="font-medium">{req.username || 'Unknown'}</span>
-                          </div>
-                          <span className="text-sm text-yellow-500">Pending</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
+            {/* Search/Add */}
             {friendsSubTab === 'search' && (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={friendSearch}
                     onChange={(e) => setFriendSearch(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSearchFriends()}
-                    placeholder="Search by username..."
-                    className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Username..."
+                    className="flex-1 px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm"
                   />
                   <button
                     onClick={handleSearchFriends}
                     disabled={searchingFriends || friendSearch.trim().length < 2}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded-lg"
+                    className="px-4 py-2.5 bg-blue-600 disabled:bg-gray-600 rounded-lg"
                   >
-                    {searchingFriends ? <Loader2 className="animate-spin" size={20} /> : <Search size={20} />}
+                    {searchingFriends ? <Loader2 className="animate-spin" size={18} /> : <Search size={18} />}
                   </button>
                 </div>
+
                 {friendSearchResults.length > 0 && (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {friendSearchResults.map((result) => (
-                      <div key={result.id} className="flex items-center justify-between bg-gray-800 p-4 rounded-lg">
-                        <span className="font-medium">{result.username || 'Unknown'}</span>
+                      <div key={result.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
+                        <span className="font-medium truncate">{result.username || 'Unknown'}</span>
                         {isAlreadyFriendOrPending(result.id) ? (
-                          <span className="text-sm text-gray-500">Already connected</span>
+                          <span className="text-xs text-gray-500">Connected</span>
                         ) : (
-                          <button onClick={() => handleSendRequest(result.id)} className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">
-                            <UserPlus size={16} />
+                          <button
+                            onClick={() => handleSendRequest(result.id)}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 rounded-lg text-sm"
+                          >
+                            <UserPlus size={14} />
                             Add
                           </button>
                         )}
@@ -658,75 +714,99 @@ export default function Community() {
 
         {/* ============ TRADES TAB ============ */}
         {activeTab === 'trades' && (
-          <div className="space-y-4">
-            <div className="flex gap-2 mb-4">
+          <div className="space-y-3">
+            {/* Sub tabs */}
+            <div className="flex gap-1">
               <button
                 onClick={() => setTradesSubTab('pending')}
-                className={`flex items-center gap-2 px-3 py-1 rounded-lg text-sm ${tradesSubTab === 'pending' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'}`}
+                className={`flex-1 flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-sm ${
+                  tradesSubTab === 'pending' ? 'bg-blue-600' : 'bg-gray-800'
+                }`}
               >
-                <Clock size={16} />
+                <Clock size={14} />
                 Pending ({pendingTrades.length})
               </button>
               <button
                 onClick={() => setTradesSubTab('history')}
-                className={`flex items-center gap-2 px-3 py-1 rounded-lg text-sm ${tradesSubTab === 'history' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'}`}
+                className={`flex-1 flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-sm ${
+                  tradesSubTab === 'history' ? 'bg-blue-600' : 'bg-gray-800'
+                }`}
               >
-                <History size={16} />
+                <History size={14} />
                 History
               </button>
             </div>
 
+            {/* Trades List */}
             {(tradesSubTab === 'pending' ? pendingTrades : tradeHistory).length === 0 ? (
-              <p className="text-gray-400 text-center py-8">
-                {tradesSubTab === 'pending' ? 'No pending trades' : 'No trade history'}
+              <p className="text-gray-400 text-center py-8 text-sm">
+                {tradesSubTab === 'pending' ? 'No pending trades' : 'No history'}
               </p>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {(tradesSubTab === 'pending' ? pendingTrades : tradeHistory).map((trade) => {
                   const isSender = trade.sender_id === user?.id;
                   const otherUser = isSender ? trade.receiver : trade.sender;
-                  const statusColor = trade.status === 'accepted' ? 'text-green-400' : trade.status === 'declined' ? 'text-red-400' : trade.status === 'cancelled' ? 'text-gray-400' : 'text-yellow-400';
+                  const statusColors: Record<string, string> = {
+                    accepted: 'text-green-400',
+                    declined: 'text-red-400',
+                    cancelled: 'text-gray-400',
+                    pending: 'text-yellow-400',
+                  };
 
                   return (
-                    <div key={trade.id} className="bg-gray-800 rounded-lg p-4 space-y-4">
+                    <div key={trade.id} className="bg-gray-800 rounded-lg p-3 space-y-2">
+                      {/* Header */}
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <ArrowLeftRight size={18} className="text-blue-400" />
-                          <span className="font-medium">{isSender ? `To: ${otherUser?.username}` : `From: ${otherUser?.username}`}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <ArrowLeftRight size={16} className="text-blue-400 flex-shrink-0" />
+                          <span className="text-sm truncate">
+                            {isSender ? 'To' : 'From'}: <strong>{otherUser?.username}</strong>
+                          </span>
                         </div>
-                        <span className={`text-sm capitalize ${statusColor}`}>{trade.status}</span>
+                        <span className={`text-xs capitalize ${statusColors[trade.status]}`}>
+                          {trade.status}
+                        </span>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {renderTradeItems(trade.items, trade.sender_id, isSender ? 'You give' : 'They give')}
-                        {renderTradeItems(trade.items, trade.receiver_id, isSender ? 'You receive' : 'They receive')}
+                      {/* Items */}
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        {renderTradeItems(trade.items, trade.sender_id, isSender ? 'Give' : 'Receive')}
+                        {renderTradeItems(trade.items, trade.receiver_id, isSender ? 'Get' : 'Send')}
                       </div>
 
-                      {trade.message && <div className="text-gray-400 text-sm"><span className="text-gray-500">Message:</span> {trade.message}</div>}
-
+                      {/* Actions */}
                       {tradesSubTab === 'pending' && (
                         <div className="flex gap-2 pt-2 border-t border-gray-700">
                           {isSender ? (
-                            <button onClick={() => handleCancelTrade(trade.id)} disabled={processingTradeId === trade.id} className="flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm">
-                              <X size={16} />
-                              Cancel
+                            <button
+                              onClick={() => handleCancelTrade(trade.id)}
+                              disabled={processingTradeId === trade.id}
+                              className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-gray-700 rounded-lg text-sm"
+                            >
+                              <X size={14} /> Cancel
                             </button>
                           ) : (
                             <>
-                              <button onClick={() => handleAcceptTrade(trade.id)} disabled={processingTradeId === trade.id} className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm">
-                                {processingTradeId === trade.id ? <Loader2 className="animate-spin" size={16} /> : <Check size={16} />}
+                              <button
+                                onClick={() => handleAcceptTrade(trade.id)}
+                                disabled={processingTradeId === trade.id}
+                                className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-green-600 rounded-lg text-sm"
+                              >
+                                {processingTradeId === trade.id ? <Loader2 className="animate-spin" size={14} /> : <Check size={14} />}
                                 Accept
                               </button>
-                              <button onClick={() => handleDeclineTrade(trade.id)} disabled={processingTradeId === trade.id} className="flex items-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm">
-                                <X size={16} />
-                                Decline
+                              <button
+                                onClick={() => handleDeclineTrade(trade.id)}
+                                disabled={processingTradeId === trade.id}
+                                className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-red-600 rounded-lg text-sm"
+                              >
+                                <X size={14} /> Decline
                               </button>
                             </>
                           )}
                         </div>
                       )}
-
-                      <div className="text-gray-500 text-xs">{new Date(trade.created_at || '').toLocaleDateString()}</div>
                     </div>
                   );
                 })}
@@ -737,52 +817,53 @@ export default function Community() {
 
         {/* ============ PROFILE TAB ============ */}
         {activeTab === 'profile' && (
-          <div className="max-w-md space-y-6">
+          <div className="space-y-4 max-w-md">
+            {/* Username */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Username</label>
+              <label className="block text-sm text-gray-400 mb-1.5">Username</label>
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter your username"
+                className="w-full px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm"
+                placeholder="Your username"
               />
             </div>
 
+            {/* Visibility */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Collection Visibility</label>
-              <div className="space-y-2">
+              <label className="block text-sm text-gray-400 mb-1.5">Collection Visibility</label>
+              <div className="grid grid-cols-3 gap-2">
                 {VISIBILITY_OPTIONS.map((option) => (
                   <button
                     key={option.value}
-                    type="button"
                     onClick={() => setCollectionVisibility(option.value)}
-                    className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all text-left ${
+                    className={`p-3 rounded-lg border-2 transition text-center ${
                       collectionVisibility === option.value
                         ? 'border-blue-500 bg-blue-500/10'
-                        : 'border-gray-700 hover:border-gray-600 bg-gray-800'
+                        : 'border-gray-700 bg-gray-800 active:border-gray-600'
                     }`}
                   >
-                    <div>
-                      <div className="font-medium">{option.label}</div>
-                      <div className="text-sm text-gray-400">{option.description}</div>
-                    </div>
+                    <div className="font-medium text-sm">{option.label}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">{option.description}</div>
                   </button>
                 ))}
               </div>
             </div>
 
+            {/* Save */}
             <button
               onClick={handleSaveProfile}
               disabled={savingProfile}
-              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg transition"
+              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 py-3 rounded-lg font-medium"
             >
-              {savingProfile ? <Loader2 className="animate-spin" size={20} /> : <><Save size={20} /> Save Changes</>}
+              {savingProfile ? <Loader2 className="animate-spin" size={18} /> : <><Save size={18} /> Save</>}
             </button>
           </div>
         )}
       </div>
 
+      {/* Confirm Modal */}
       <ConfirmModal
         isOpen={confirmModal.isOpen}
         onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}

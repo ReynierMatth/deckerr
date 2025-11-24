@@ -80,7 +80,9 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-gray-900">
       <Navigation currentPage={currentPage} setCurrentPage={setCurrentPage} />
-      {renderPage()}
+      <main className="pt-0 pb-20 md:pt-16 md:pb-0">
+        {renderPage()}
+      </main>
       <PWAInstallPrompt />
     </div>
   );
