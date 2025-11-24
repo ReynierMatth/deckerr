@@ -465,6 +465,7 @@ export default function Community() {
             onClose={() => setShowTradeCreator(false)}
             onTradeCreated={() => {
               setShowTradeCreator(false);
+              loadTradesData();
               toast.success('Trade proposal sent!');
             }}
           />

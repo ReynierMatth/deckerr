@@ -617,7 +617,7 @@ const CardSearch = () => {
         )}
 
         {searchResults && searchResults.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3">
             {searchResults.map((card) => {
               const currentFaceIndex = getCurrentFaceIndex(card.id);
               const isMultiFaced = isDoubleFaced(card);
@@ -646,46 +646,42 @@ const CardSearch = () => {
                           e.stopPropagation();
                           toggleCardFace(card.id, card.card_faces!.length);
                         }}
-                        className="absolute bottom-2 right-2 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full shadow-lg transition-all"
+                        className="absolute bottom-1 right-1 bg-purple-600 hover:bg-purple-700 text-white p-1.5 sm:p-2 rounded-full shadow-lg transition-all"
                         title="Flip card"
                       >
-                        <RefreshCw size={16} />
+                        <RefreshCw size={12} className="sm:w-4 sm:h-4" />
                       </button>
                     )}
+                    {inCollection > 0 && (
+                      <span className="absolute top-1 right-1 text-[10px] sm:text-xs bg-green-600 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                        <CheckCircle size={10} className="hidden sm:block" />
+                        x{inCollection}
+                      </span>
+                    )}
                   </div>
-                  <div className="p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-bold">{displayName}</h3>
-                      {inCollection > 0 && (
-                        <span className="text-xs bg-green-600 px-2 py-0.5 rounded-full flex items-center gap-1">
-                          <CheckCircle size={12} />
-                          x{inCollection}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-gray-400 text-sm mb-3">
+                  <div className="p-2 sm:p-3">
+                    <h3 className="font-bold text-xs sm:text-sm truncate mb-1">{displayName}</h3>
+                    <p className="text-gray-400 text-[10px] sm:text-xs truncate mb-2 hidden sm:block">
                       {isMultiFaced && card.card_faces
                         ? card.card_faces[currentFaceIndex]?.type_line || card.type_line
                         : card.type_line}
                     </p>
                     {card.prices?.usd && (
-                      <div className="text-sm text-gray-400 mb-2">${card.prices.usd}</div>
+                      <div className="text-[10px] sm:text-xs text-gray-400 mb-1.5">${card.prices.usd}</div>
                     )}
                     <button
                       onClick={() => handleAddCardToCollection(card.id)}
                       disabled={isAddingThisCard}
-                      className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2"
+                      className="w-full px-2 py-1.5 sm:px-3 sm:py-2 bg-green-600 hover:bg-green-700 active:bg-green-800 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-1 text-xs sm:text-sm"
                       title="Add to collection"
                     >
                       {isAddingThisCard ? (
-                        <>
-                          <Loader2 className="animate-spin" size={20} />
-                          Adding...
-                        </>
+                        <Loader2 className="animate-spin" size={14} />
                       ) : (
                         <>
-                          <PackagePlus size={20} />
-                          Add to Collection
+                          <PackagePlus size={14} className="sm:w-4 sm:h-4" />
+                          <span className="hidden sm:inline">Add</span>
+                          <span className="sm:hidden">+</span>
                         </>
                       )}
                     </button>
