@@ -62,6 +62,7 @@ export default function Community() {
   const [selectedUserCollection, setSelectedUserCollection] = useState<CollectionItem[]>([]);
   const [loadingCollection, setLoadingCollection] = useState(false);
   const [showTradeCreator, setShowTradeCreator] = useState(false);
+  const [userCollectionSearch, setUserCollectionSearch] = useState('');
 
   // Friends state
   const [friendsSubTab, setFriendsSubTab] = useState<FriendsSubTab>('list');
@@ -382,13 +383,17 @@ export default function Community() {
 
   // ============ USER COLLECTION VIEW ============
   if (selectedUser) {
+    const filteredUserCollection = selectedUserCollection.filter(({ card }) =>
+      card.name.toLowerCase().includes(userCollectionSearch.toLowerCase())
+    );
+
     return (
       <div className="bg-gray-900 text-white min-h-screen">
         {/* Header */}
         <div className="sticky top-0 bg-gray-900/95 backdrop-blur border-b border-gray-800 p-3 z-10">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-2 mb-3">
             <button
-              onClick={() => { setSelectedUser(null); setSelectedUserCollection([]); }}
+              onClick={() => { setSelectedUser(null); setSelectedUserCollection([]); setUserCollectionSearch(''); }}
               className="flex items-center gap-1 text-blue-400 text-sm min-w-0"
             >
               <ChevronLeft size={20} />
@@ -403,6 +408,25 @@ export default function Community() {
               <span className="hidden sm:inline">Trade</span>
             </button>
           </div>
+          {/* Search input */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+            <input
+              type="text"
+              value={userCollectionSearch}
+              onChange={(e) => setUserCollectionSearch(e.target.value)}
+              placeholder="Search cards..."
+              className="w-full pl-9 pr-8 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            {userCollectionSearch && (
+              <button
+                onClick={() => setUserCollectionSearch('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Collection Grid */}
@@ -413,9 +437,11 @@ export default function Community() {
             </div>
           ) : selectedUserCollection.length === 0 ? (
             <p className="text-gray-400 text-center py-12">Empty collection</p>
+          ) : filteredUserCollection.length === 0 ? (
+            <p className="text-gray-400 text-center py-12">No cards match "{userCollectionSearch}"</p>
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
-              {selectedUserCollection.map(({ card, quantity }) => (
+              {filteredUserCollection.map(({ card, quantity }) => (
                 <div key={card.id} className="relative">
                   <img
                     src={card.image_uris?.small || card.image_uris?.normal}

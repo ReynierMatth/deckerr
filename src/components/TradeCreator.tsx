@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ArrowLeftRight, ArrowRight, ArrowLeft, Minus, Send, Gift, Loader2, Check } from 'lucide-react';
+import { X, ArrowLeftRight, ArrowRight, ArrowLeft, Minus, Send, Gift, Loader2, Search } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { getUserCollection, getCardsByIds } from '../services/api';
@@ -11,18 +11,159 @@ interface CollectionItem {
   quantity: number;
 }
 
+interface SelectedCard {
+  card: Card;
+  quantity: number;
+  maxQuantity: number;
+}
+
+// ============ MOVED OUTSIDE TO PREVENT RE-RENDER ============
+
+interface CollectionGridProps {
+  items: CollectionItem[];
+  selectedCards: Map<string, SelectedCard>;
+  onAdd: (card: Card, maxQty: number) => void;
+  onRemove: (cardId: string) => void;
+  emptyMessage: string;
+  selectionColor: 'green' | 'blue';
+  searchValue: string;
+  onSearchChange: (value: string) => void;
+  searchPlaceholder: string;
+}
+
+function CollectionGrid({
+  items,
+  selectedCards,
+  onAdd,
+  onRemove,
+  emptyMessage,
+  selectionColor,
+  searchValue,
+  onSearchChange,
+  searchPlaceholder,
+}: CollectionGridProps) {
+  const ringColor = selectionColor === 'green' ? 'ring-green-500' : 'ring-blue-500';
+  const badgeColor = selectionColor === 'green' ? 'bg-green-600' : 'bg-blue-500';
+
+  const filteredItems = items.filter(({ card }) =>
+    card.name.toLowerCase().includes(searchValue.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+        <input
+          type="text"
+          value={searchValue}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder={searchPlaceholder}
+          className="w-full pl-9 pr-8 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+        {searchValue && (
+          <button
+            onClick={() => onSearchChange('')}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+
+      {items.length === 0 ? (
+        <p className="text-gray-400 text-center py-8">{emptyMessage}</p>
+      ) : filteredItems.length === 0 ? (
+        <p className="text-gray-400 text-center py-8">No cards match "{searchValue}"</p>
+      ) : (
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+          {filteredItems.map(({ card, quantity }) => {
+            const selected = selectedCards.get(card.id);
+            const remainingQty = quantity - (selected?.quantity || 0);
+            return (
+              <div
+                key={card.id}
+                className={`relative cursor-pointer rounded-lg overflow-hidden transition active:scale-95 ${
+                  selected ? `ring-2 ${ringColor}` : 'active:ring-2 active:ring-gray-500'
+                }`}
+                onClick={() => remainingQty > 0 && onAdd(card, quantity)}
+              >
+                <img
+                  src={card.image_uris?.small || card.image_uris?.normal}
+                  alt={card.name}
+                  className={`w-full h-auto ${remainingQty === 0 ? 'opacity-50' : ''}`}
+                />
+                <div className="absolute top-1 right-1 bg-gray-900/80 text-white text-[10px] px-1 py-0.5 rounded">
+                  {remainingQty}/{quantity}
+                </div>
+                {selected && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemove(card.id);
+                    }}
+                    className={`absolute bottom-1 left-1 ${badgeColor} text-white text-[10px] px-1.5 py-0.5 rounded flex items-center gap-0.5`}
+                  >
+                    +{selected.quantity}
+                    <Minus size={10} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface SelectedCardsSummaryProps {
+  cards: Map<string, SelectedCard>;
+  onRemove: (cardId: string) => void;
+  label: string;
+  emptyLabel: string;
+  color: 'green' | 'blue';
+}
+
+function SelectedCardsSummary({ cards, onRemove, label, emptyLabel, color }: SelectedCardsSummaryProps) {
+  const bgColor = color === 'green' ? 'bg-green-900/50' : 'bg-blue-900/50';
+  const textColor = color === 'green' ? 'text-green-400' : 'text-blue-400';
+
+  return (
+    <div>
+      <h4 className={`text-xs font-semibold ${textColor} mb-1`}>{label}:</h4>
+      {cards.size === 0 ? (
+        <p className="text-gray-500 text-xs">{emptyLabel}</p>
+      ) : (
+        <div className="flex flex-wrap gap-1">
+          {Array.from(cards.values()).map((item) => (
+            <div
+              key={item.card.id}
+              className={`flex items-center gap-1 ${bgColor} px-1.5 py-0.5 rounded text-xs`}
+            >
+              <span className="truncate max-w-[80px]">{item.card.name}</span>
+              <span className={textColor}>x{item.quantity}</span>
+              <button
+                onClick={() => onRemove(item.card.id)}
+                className="text-red-400 active:text-red-300"
+              >
+                <Minus size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ MAIN COMPONENT ============
+
 interface TradeCreatorProps {
   receiverId: string;
   receiverUsername: string;
   receiverCollection: CollectionItem[];
   onClose: () => void;
   onTradeCreated: () => void;
-}
-
-interface SelectedCard {
-  card: Card;
-  quantity: number;
-  maxQuantity: number;
 }
 
 type MobileStep = 'want' | 'give' | 'review';
@@ -41,20 +182,19 @@ export default function TradeCreator({
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
 
-  // Mobile step state
   const [isGiftMode, setIsGiftMode] = useState(false);
   const [mobileStep, setMobileStep] = useState<MobileStep>('want');
 
-  // Cards I'm offering (from my collection)
   const [myOfferedCards, setMyOfferedCards] = useState<Map<string, SelectedCard>>(new Map());
-  // Cards I want (from their collection)
   const [wantedCards, setWantedCards] = useState<Map<string, SelectedCard>>(new Map());
+
+  const [myCollectionSearch, setMyCollectionSearch] = useState('');
+  const [theirCollectionSearch, setTheirCollectionSearch] = useState('');
 
   useEffect(() => {
     loadMyCollection();
   }, [user]);
 
-  // When gift mode is toggled, adjust mobile step
   useEffect(() => {
     if (isGiftMode) {
       setWantedCards(new Map());
@@ -186,7 +326,6 @@ export default function TradeCreator({
   const isGift = myOfferedCards.size > 0 && wantedCards.size === 0;
   const isRequest = myOfferedCards.size === 0 && wantedCards.size > 0;
 
-  // Mobile navigation
   const goToNextStep = () => {
     if (mobileStep === 'want') setMobileStep('give');
     else if (mobileStep === 'give') setMobileStep('review');
@@ -197,123 +336,8 @@ export default function TradeCreator({
     else if (mobileStep === 'give' && !isGiftMode) setMobileStep('want');
   };
 
-  const canGoNext = () => {
-    if (mobileStep === 'want') return true; // Can skip wanting cards (request nothing)
-    if (mobileStep === 'give') return true; // Can skip giving cards (gift request)
-    return false;
-  };
-
   const canSubmit = myOfferedCards.size > 0 || wantedCards.size > 0;
 
-  // Collection grid component
-  const CollectionGrid = ({
-    items,
-    selectedCards,
-    onAdd,
-    onRemove,
-    emptyMessage,
-    selectionColor,
-  }: {
-    items: CollectionItem[];
-    selectedCards: Map<string, SelectedCard>;
-    onAdd: (card: Card, maxQty: number) => void;
-    onRemove: (cardId: string) => void;
-    emptyMessage: string;
-    selectionColor: 'green' | 'blue';
-  }) => {
-    if (items.length === 0) {
-      return <p className="text-gray-400 text-center py-8">{emptyMessage}</p>;
-    }
-
-    const ringColor = selectionColor === 'green' ? 'ring-green-500' : 'ring-blue-500';
-    const badgeColor = selectionColor === 'green' ? 'bg-green-600' : 'bg-blue-500';
-
-    return (
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-        {items.map(({ card, quantity }) => {
-          const selected = selectedCards.get(card.id);
-          const remainingQty = quantity - (selected?.quantity || 0);
-          return (
-            <div
-              key={card.id}
-              className={`relative cursor-pointer rounded-lg overflow-hidden transition active:scale-95 ${
-                selected ? `ring-2 ${ringColor}` : 'active:ring-2 active:ring-gray-500'
-              }`}
-              onClick={() => remainingQty > 0 && onAdd(card, quantity)}
-            >
-              <img
-                src={card.image_uris?.small || card.image_uris?.normal}
-                alt={card.name}
-                className={`w-full h-auto ${remainingQty === 0 ? 'opacity-50' : ''}`}
-              />
-              <div className="absolute top-1 right-1 bg-gray-900/80 text-white text-[10px] px-1 py-0.5 rounded">
-                {remainingQty}/{quantity}
-              </div>
-              {selected && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemove(card.id);
-                  }}
-                  className={`absolute bottom-1 left-1 ${badgeColor} text-white text-[10px] px-1.5 py-0.5 rounded flex items-center gap-0.5`}
-                >
-                  +{selected.quantity}
-                  <Minus size={10} />
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  // Selected cards summary component
-  const SelectedCardsSummary = ({
-    cards,
-    onRemove,
-    label,
-    emptyLabel,
-    color,
-  }: {
-    cards: Map<string, SelectedCard>;
-    onRemove: (cardId: string) => void;
-    label: string;
-    emptyLabel: string;
-    color: 'green' | 'blue';
-  }) => {
-    const bgColor = color === 'green' ? 'bg-green-900/50' : 'bg-blue-900/50';
-    const textColor = color === 'green' ? 'text-green-400' : 'text-blue-400';
-
-    return (
-      <div>
-        <h4 className={`text-xs font-semibold ${textColor} mb-1`}>{label}:</h4>
-        {cards.size === 0 ? (
-          <p className="text-gray-500 text-xs">{emptyLabel}</p>
-        ) : (
-          <div className="flex flex-wrap gap-1">
-            {Array.from(cards.values()).map((item) => (
-              <div
-                key={item.card.id}
-                className={`flex items-center gap-1 ${bgColor} px-1.5 py-0.5 rounded text-xs`}
-              >
-                <span className="truncate max-w-[80px]">{item.card.name}</span>
-                <span className={textColor}>x{item.quantity}</span>
-                <button
-                  onClick={() => onRemove(item.card.id)}
-                  className="text-red-400 active:text-red-300"
-                >
-                  <Minus size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  // Loading state
   if (loading) {
     return (
       <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center">
@@ -328,7 +352,6 @@ export default function TradeCreator({
 
         {/* ============ MOBILE VIEW ============ */}
         <div className="flex flex-col h-full md:hidden">
-          {/* Mobile Header */}
           <div className="flex items-center justify-between p-3 border-b border-gray-700">
             <div className="flex items-center gap-2 min-w-0">
               <ArrowLeftRight size={20} className="text-blue-400 flex-shrink-0" />
@@ -339,7 +362,6 @@ export default function TradeCreator({
             </button>
           </div>
 
-          {/* Gift Toggle */}
           <div className="p-3 border-b border-gray-700">
             <label className="flex items-center gap-3 cursor-pointer">
               <div
@@ -356,44 +378,29 @@ export default function TradeCreator({
               </div>
               <div className="flex items-center gap-2">
                 <Gift size={18} className={isGiftMode ? 'text-purple-400' : 'text-gray-400'} />
-                <span className={isGiftMode ? 'text-purple-400' : 'text-gray-400'}>
-                  This is a gift (I don't want anything back)
+                <span className={`text-sm ${isGiftMode ? 'text-purple-400' : 'text-gray-400'}`}>
+                  Gift (I don't want anything back)
                 </span>
               </div>
             </label>
           </div>
 
-          {/* Step Indicator */}
           <div className="flex items-center justify-center gap-2 p-2 bg-gray-900/50">
             {!isGiftMode && (
               <>
-                <div
-                  className={`w-2 h-2 rounded-full ${mobileStep === 'want' ? 'bg-blue-500' : 'bg-gray-600'}`}
-                />
-                <span className={`text-xs ${mobileStep === 'want' ? 'text-blue-400' : 'text-gray-500'}`}>
-                  I Want
-                </span>
+                <div className={`w-2 h-2 rounded-full ${mobileStep === 'want' ? 'bg-blue-500' : 'bg-gray-600'}`} />
+                <span className={`text-xs ${mobileStep === 'want' ? 'text-blue-400' : 'text-gray-500'}`}>I Want</span>
                 <ArrowRight size={14} className="text-gray-500" />
               </>
             )}
-            <div
-              className={`w-2 h-2 rounded-full ${mobileStep === 'give' ? 'bg-green-500' : 'bg-gray-600'}`}
-            />
-            <span className={`text-xs ${mobileStep === 'give' ? 'text-green-400' : 'text-gray-500'}`}>
-              I Give
-            </span>
+            <div className={`w-2 h-2 rounded-full ${mobileStep === 'give' ? 'bg-green-500' : 'bg-gray-600'}`} />
+            <span className={`text-xs ${mobileStep === 'give' ? 'text-green-400' : 'text-gray-500'}`}>I Give</span>
             <ArrowRight size={14} className="text-gray-500" />
-            <div
-              className={`w-2 h-2 rounded-full ${mobileStep === 'review' ? 'bg-purple-500' : 'bg-gray-600'}`}
-            />
-            <span className={`text-xs ${mobileStep === 'review' ? 'text-purple-400' : 'text-gray-500'}`}>
-              Review
-            </span>
+            <div className={`w-2 h-2 rounded-full ${mobileStep === 'review' ? 'bg-purple-500' : 'bg-gray-600'}`} />
+            <span className={`text-xs ${mobileStep === 'review' ? 'text-purple-400' : 'text-gray-500'}`}>Review</span>
           </div>
 
-          {/* Mobile Content */}
           <div className="flex-1 overflow-y-auto p-3">
-            {/* Step: Want (their collection) */}
             {mobileStep === 'want' && !isGiftMode && (
               <div>
                 <h3 className="text-sm font-semibold text-blue-400 mb-3">
@@ -406,37 +413,35 @@ export default function TradeCreator({
                   onRemove={removeFromWanted}
                   emptyMessage="Their collection is empty"
                   selectionColor="blue"
+                  searchValue={theirCollectionSearch}
+                  onSearchChange={setTheirCollectionSearch}
+                  searchPlaceholder="Search their cards..."
                 />
               </div>
             )}
 
-            {/* Step: Give (my collection) */}
             {mobileStep === 'give' && (
               <div>
                 <h3 className="text-sm font-semibold text-green-400 mb-3">
                   Select cards to {isGiftMode ? 'gift' : 'offer'}
                 </h3>
-                {myCollection.length === 0 ? (
-                  <p className="text-gray-400 text-center py-8">Your collection is empty</p>
-                ) : (
-                  <CollectionGrid
-                    items={myCollection}
-                    selectedCards={myOfferedCards}
-                    onAdd={addToOffer}
-                    onRemove={removeFromOffer}
-                    emptyMessage="Your collection is empty"
-                    selectionColor="green"
-                  />
-                )}
+                <CollectionGrid
+                  items={myCollection}
+                  selectedCards={myOfferedCards}
+                  onAdd={addToOffer}
+                  onRemove={removeFromOffer}
+                  emptyMessage="Your collection is empty"
+                  selectionColor="green"
+                  searchValue={myCollectionSearch}
+                  onSearchChange={setMyCollectionSearch}
+                  searchPlaceholder="Search my cards..."
+                />
               </div>
             )}
 
-            {/* Step: Review */}
             {mobileStep === 'review' && (
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-purple-400">Review Trade</h3>
-
-                {/* Summary */}
                 <div className="bg-gray-900/50 rounded-lg p-3 space-y-3">
                   <SelectedCardsSummary
                     cards={myOfferedCards}
@@ -455,8 +460,6 @@ export default function TradeCreator({
                     />
                   )}
                 </div>
-
-                {/* Message */}
                 <div>
                   <label className="text-xs text-gray-400 mb-1 block">Message (optional)</label>
                   <input
@@ -471,9 +474,7 @@ export default function TradeCreator({
             )}
           </div>
 
-          {/* Mobile Footer */}
           <div className="border-t border-gray-700 p-3 flex gap-2">
-            {/* Back button */}
             {(mobileStep !== 'want' && !isGiftMode) || (mobileStep !== 'give' && isGiftMode) ? (
               <button
                 onClick={goToPrevStep}
@@ -492,7 +493,6 @@ export default function TradeCreator({
               </button>
             )}
 
-            {/* Next/Submit button */}
             {mobileStep === 'review' ? (
               <button
                 onClick={handleSubmit}
@@ -532,7 +532,6 @@ export default function TradeCreator({
 
         {/* ============ DESKTOP VIEW ============ */}
         <div className="hidden md:flex md:flex-col h-full">
-          {/* Desktop Header */}
           <div className="flex items-center justify-between p-4 border-b border-gray-700">
             <div className="flex items-center gap-3">
               <ArrowLeftRight size={24} className="text-blue-400" />
@@ -551,9 +550,7 @@ export default function TradeCreator({
                   />
                 </div>
                 <Gift size={16} className={isGiftMode ? 'text-purple-400' : 'text-gray-400'} />
-                <span className={`text-sm ${isGiftMode ? 'text-purple-400' : 'text-gray-400'}`}>
-                  Gift mode
-                </span>
+                <span className={`text-sm ${isGiftMode ? 'text-purple-400' : 'text-gray-400'}`}>Gift mode</span>
               </label>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-gray-700 rounded-lg transition">
@@ -561,13 +558,9 @@ export default function TradeCreator({
             </button>
           </div>
 
-          {/* Desktop Content */}
           <div className="flex-1 overflow-hidden flex">
-            {/* My Collection (Left) */}
             <div className="flex-1 p-4 border-r border-gray-700 overflow-y-auto">
-              <h3 className="text-lg font-semibold mb-3 text-green-400">
-                My Collection (I give)
-              </h3>
+              <h3 className="text-lg font-semibold mb-3 text-green-400">My Collection (I give)</h3>
               <CollectionGrid
                 items={myCollection}
                 selectedCards={myOfferedCards}
@@ -575,10 +568,12 @@ export default function TradeCreator({
                 onRemove={removeFromOffer}
                 emptyMessage="Your collection is empty"
                 selectionColor="green"
+                searchValue={myCollectionSearch}
+                onSearchChange={setMyCollectionSearch}
+                searchPlaceholder="Search my cards..."
               />
             </div>
 
-            {/* Their Collection (Right) */}
             {!isGiftMode && (
               <div className="flex-1 p-4 overflow-y-auto">
                 <h3 className="text-lg font-semibold mb-3 text-blue-400">
@@ -591,12 +586,14 @@ export default function TradeCreator({
                   onRemove={removeFromWanted}
                   emptyMessage="Their collection is empty"
                   selectionColor="blue"
+                  searchValue={theirCollectionSearch}
+                  onSearchChange={setTheirCollectionSearch}
+                  searchPlaceholder="Search their cards..."
                 />
               </div>
             )}
           </div>
 
-          {/* Desktop Footer */}
           <div className="border-t border-gray-700 p-4">
             <div className="flex gap-6 mb-4">
               <SelectedCardsSummary
