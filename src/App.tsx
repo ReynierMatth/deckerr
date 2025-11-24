@@ -8,10 +8,13 @@ import React, { useState } from 'react';
     import Profile from './components/Profile';
     import CardSearch from './components/CardSearch';
     import LifeCounter from './components/LifeCounter';
+    import Friends from './components/Friends';
+    import Trades from './components/Trades';
+    import Community from './components/Community';
     import PWAInstallPrompt from './components/PWAInstallPrompt';
     import { AuthProvider, useAuth } from './contexts/AuthContext';
 
-    type Page = 'home' | 'deck' | 'login' | 'collection' | 'edit-deck' | 'profile' | 'search' | 'life-counter';
+    type Page = 'home' | 'deck' | 'login' | 'collection' | 'edit-deck' | 'profile' | 'search' | 'life-counter' | 'friends' | 'trades' | 'community';
 
     function AppContent() {
       const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -69,6 +72,12 @@ import React, { useState } from 'react';
             return <CardSearch />;
           case 'life-counter':
             return <LifeCounter />;
+          case 'friends':
+            return <Friends />;
+          case 'trades':
+            return <Trades />;
+          case 'community':
+            return <Community />;
           case 'login':
             return <LoginForm />;
           default:

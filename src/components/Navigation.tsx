@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-    import { Home, PlusSquare, Library, LogOut, Settings, ChevronDown, Search, Heart, Menu } from 'lucide-react';
+    import { Home, PlusSquare, Library, LogOut, Settings, ChevronDown, Search, Heart, Menu, Users, ArrowLeftRight, Globe } from 'lucide-react';
     import { useAuth } from '../contexts/AuthContext';
     import { supabase } from '../lib/supabase';
 
-    type Page = 'home' | 'deck' | 'login' | 'collection' | 'profile' | 'search' | 'life-counter';
+    type Page = 'home' | 'deck' | 'login' | 'collection' | 'profile' | 'search' | 'life-counter' | 'friends' | 'trades' | 'community';
 
     interface NavigationProps {
       currentPage: Page;
@@ -53,8 +53,11 @@ import React, { useState, useRef, useEffect } from 'react';
       const navItems = [
         { id: 'home' as const, label: 'Decks', icon: Library },
         { id: 'collection' as const, label: 'Collection', icon: Library },
+        { id: 'community' as const, label: 'Community', icon: Globe },
+        { id: 'friends' as const, label: 'Friends', icon: Users },
+        { id: 'trades' as const, label: 'Trades', icon: ArrowLeftRight },
         { id: 'search' as const, label: 'Search', icon: Search },
-        { id: 'life-counter' as const, label: 'Life Counter', icon: Heart },
+        { id: 'life-counter' as const, label: 'Life', icon: Heart },
       ];
 
       const handleSignOut = async () => {

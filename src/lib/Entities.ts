@@ -143,6 +143,7 @@ export type Database = {
                     theme_color: string | null
                     updated_at: string | null
                     username: string | null
+                    collection_visibility: 'public' | 'friends' | 'private' | null
                 }
                 Insert: {
                     created_at?: string | null
@@ -150,6 +151,7 @@ export type Database = {
                     theme_color?: string | null
                     updated_at?: string | null
                     username?: string | null
+                    collection_visibility?: 'public' | 'friends' | 'private' | null
                 }
                 Update: {
                     created_at?: string | null
@@ -157,8 +159,138 @@ export type Database = {
                     theme_color?: string | null
                     updated_at?: string | null
                     username?: string | null
+                    collection_visibility?: 'public' | 'friends' | 'private' | null
                 }
                 Relationships: []
+            }
+            friendships: {
+                Row: {
+                    id: string
+                    requester_id: string
+                    addressee_id: string
+                    status: 'pending' | 'accepted' | 'declined'
+                    created_at: string | null
+                    updated_at: string | null
+                }
+                Insert: {
+                    id?: string
+                    requester_id: string
+                    addressee_id: string
+                    status?: 'pending' | 'accepted' | 'declined'
+                    created_at?: string | null
+                    updated_at?: string | null
+                }
+                Update: {
+                    id?: string
+                    requester_id?: string
+                    addressee_id?: string
+                    status?: 'pending' | 'accepted' | 'declined'
+                    created_at?: string | null
+                    updated_at?: string | null
+                }
+                Relationships: [
+                    {
+                        foreignKeyName: "friendships_requester_id_fkey"
+                        columns: ["requester_id"]
+                        isOneToOne: false
+                        referencedRelation: "profiles"
+                        referencedColumns: ["id"]
+                    },
+                    {
+                        foreignKeyName: "friendships_addressee_id_fkey"
+                        columns: ["addressee_id"]
+                        isOneToOne: false
+                        referencedRelation: "profiles"
+                        referencedColumns: ["id"]
+                    }
+                ]
+            }
+            trades: {
+                Row: {
+                    id: string
+                    sender_id: string
+                    receiver_id: string
+                    status: 'pending' | 'accepted' | 'declined' | 'cancelled'
+                    message: string | null
+                    created_at: string | null
+                    updated_at: string | null
+                }
+                Insert: {
+                    id?: string
+                    sender_id: string
+                    receiver_id: string
+                    status?: 'pending' | 'accepted' | 'declined' | 'cancelled'
+                    message?: string | null
+                    created_at?: string | null
+                    updated_at?: string | null
+                }
+                Update: {
+                    id?: string
+                    sender_id?: string
+                    receiver_id?: string
+                    status?: 'pending' | 'accepted' | 'declined' | 'cancelled'
+                    message?: string | null
+                    created_at?: string | null
+                    updated_at?: string | null
+                }
+                Relationships: [
+                    {
+                        foreignKeyName: "trades_sender_id_fkey"
+                        columns: ["sender_id"]
+                        isOneToOne: false
+                        referencedRelation: "profiles"
+                        referencedColumns: ["id"]
+                    },
+                    {
+                        foreignKeyName: "trades_receiver_id_fkey"
+                        columns: ["receiver_id"]
+                        isOneToOne: false
+                        referencedRelation: "profiles"
+                        referencedColumns: ["id"]
+                    }
+                ]
+            }
+            trade_items: {
+                Row: {
+                    id: string
+                    trade_id: string
+                    owner_id: string
+                    card_id: string
+                    quantity: number
+                    created_at: string | null
+                }
+                Insert: {
+                    id?: string
+                    trade_id: string
+                    owner_id: string
+                    card_id: string
+                    quantity?: number
+                    created_at?: string | null
+                }
+                Update: {
+                    id?: string
+                    trade_id?: string
+                    owner_id?: string
+                    card_id?: string
+                    quantity?: number
+                    created_at?: string | null
+                }
+                Relationships: [
+                    {
+                        foreignKeyName: "trade_items_trade_id_fkey"
+                        columns: ["trade_id"]
+                        isOneToOne: false
+                        referencedRelation: "trades"
+                        referencedColumns: ["id"]
+                    },
+                    {
+                        foreignKeyName: "trade_items_owner_id_fkey"
+                        columns: ["owner_id"]
+                        isOneToOne: false
+                        referencedRelation: "profiles"
+                        referencedColumns: ["id"]
+                    }
+                ]
             }
         }
         Views: {

@@ -1,14 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Save } from 'lucide-react';
+import { Save, Globe, Users, Lock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
 const THEME_COLORS = ['red', 'green', 'blue', 'yellow', 'grey', 'purple'];
 
+const VISIBILITY_OPTIONS = [
+  { value: 'public', label: 'Public', icon: Globe, description: 'Anyone can view your collection' },
+  { value: 'friends', label: 'Friends Only', icon: Users, description: 'Only friends can view your collection' },
+  { value: 'private', label: 'Private', icon: Lock, description: 'Only you can view your collection' },
+] as const;
+
+type CollectionVisibility = 'public' | 'friends' | 'private';
+
 export default function Profile() {
   const { user } = useAuth();
   const [username, setUsername] = useState('');
   const [themeColor, setThemeColor] = useState('blue');
+  const [collectionVisibility, setCollectionVisibility] = useState<CollectionVisibility>('private');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -17,13 +26,14 @@ export default function Profile() {
       if (user) {
         const { data, error } = await supabase
           .from('profiles')
-          .select('username, theme_color')
+          .select('username, theme_color, collection_visibility')
           .eq('id', user.id)
           .single();
 
         if (data) {
           setUsername(data.username || '');
           setThemeColor(data.theme_color || 'blue');
+          setCollectionVisibility((data.collection_visibility as CollectionVisibility) || 'private');
         }
         setLoading(false);
       }
@@ -44,6 +54,7 @@ export default function Profile() {
           id: user.id,
           username,
           theme_color: themeColor,
+          collection_visibility: collectionVisibility,
           updated_at: new Date()
         });
 
@@ -104,6 +115,35 @@ export default function Profile() {
                   {color}
                 </button>
               ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Collection Visibility
+            </label>
+            <div className="space-y-2">
+              {VISIBILITY_OPTIONS.map((option) => {
+                const Icon = option.icon;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setCollectionVisibility(option.value)}
+                    className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all text-left
+                      ${collectionVisibility === option.value
+                        ? 'border-blue-500 bg-blue-500/10'
+                        : 'border-gray-700 hover:border-gray-600 bg-gray-800'
+                      }`}
+                  >
+                    <Icon size={20} className={collectionVisibility === option.value ? 'text-blue-400' : 'text-gray-400'} />
+                    <div>
+                      <div className="font-medium">{option.label}</div>
+                      <div className="text-sm text-gray-400">{option.description}</div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
