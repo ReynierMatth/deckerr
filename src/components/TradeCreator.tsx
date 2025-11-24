@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, ArrowLeftRight, Plus, Minus, Send, Gift } from 'lucide-react';
+import { X, ArrowLeftRight, Plus, Minus, Send, Gift, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { getUserCollection, getCardsByIds } from '../services/api';
 import { createTrade } from '../services/tradesService';
 import { Card } from '../types';
@@ -32,6 +33,7 @@ export default function TradeCreator({
   onTradeCreated,
 }: TradeCreatorProps) {
   const { user } = useAuth();
+  const toast = useToast();
   const [myCollection, setMyCollection] = useState<CollectionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -133,7 +135,7 @@ export default function TradeCreator({
 
     // At least one side should have cards (allowing gifts)
     if (myOfferedCards.size === 0 && wantedCards.size === 0) {
-      alert('Please select at least one card to trade or gift');
+      toast.warning('Please select at least one card to trade or gift');
       return;
     }
 
@@ -160,7 +162,7 @@ export default function TradeCreator({
       onTradeCreated();
     } catch (error) {
       console.error('Error creating trade:', error);
-      alert('Failed to create trade');
+      toast.error('Failed to create trade');
     } finally {
       setSubmitting(false);
     }

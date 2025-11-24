@@ -140,7 +140,6 @@ export type Database = {
                 Row: {
                     created_at: string | null
                     id: string
-                    theme_color: string | null
                     updated_at: string | null
                     username: string | null
                     collection_visibility: 'public' | 'friends' | 'private' | null
@@ -148,7 +147,6 @@ export type Database = {
                 Insert: {
                     created_at?: string | null
                     id: string
-                    theme_color?: string | null
                     updated_at?: string | null
                     username?: string | null
                     collection_visibility?: 'public' | 'friends' | 'private' | null
@@ -156,7 +154,6 @@ export type Database = {
                 Update: {
                     created_at?: string | null
                     id?: string
-                    theme_color?: string | null
                     updated_at?: string | null
                     username?: string | null
                     collection_visibility?: 'public' | 'friends' | 'private' | null

@@ -34,13 +34,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const { error } = await supabase
             .from('profiles')
             .upsert(
-              { 
-                id: session.user.id,
-                theme_color: 'blue' // Default theme color
+              {
+                id: session.user.id
               },
               { onConflict: 'id' }
             );
-          
+
           if (error) {
             console.error('Error creating profile:', error);
           }
@@ -65,8 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { error: profileError } = await supabase
           .from('profiles')
           .insert({
-            id: data.user!.id,
-            theme_color: 'blue' // Default theme color
+            id: data.user!.id
           });
 
         if (profileError) {
