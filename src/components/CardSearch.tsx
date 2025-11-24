@@ -94,6 +94,14 @@ const CardSearch = () => {
     return card.image_uris?.normal || card.image_uris?.small || card.card_faces?.[0]?.image_uris?.normal;
   };
 
+  // Get card art crop for current face
+  const getCardArtCrop = (card: Card, faceIndex: number = 0) => {
+    if (isDoubleFaced(card) && card.card_faces) {
+      return card.card_faces[faceIndex]?.image_uris?.art_crop || card.card_faces[faceIndex]?.image_uris?.normal;
+    }
+    return card.image_uris?.art_crop || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.art_crop;
+  };
+
   // Add card to collection
   const handleAddCardToCollection = async (cardId: string) => {
     if (!user) {
@@ -632,12 +640,12 @@ const CardSearch = () => {
 
                 return (
                   <div key={card.id} className="flex bg-gray-800 rounded-lg overflow-hidden">
-                    {/* Card image */}
-                    <div className="relative w-16 flex-shrink-0">
+                    {/* Card art crop */}
+                    <div className="relative w-16 h-16 flex-shrink-0">
                       <img
-                        src={getCardImageUri(card, currentFaceIndex)}
+                        src={getCardArtCrop(card, currentFaceIndex)}
                         alt={displayName}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover rounded-l-lg"
                       />
                       {isMultiFaced && (
                         <button

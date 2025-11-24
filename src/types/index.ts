@@ -5,13 +5,28 @@ export interface User {
   themeColor: 'red' | 'green' | 'blue' | 'yellow' | 'grey' | 'purple';
 }
 
+export interface CardImageUris {
+  small?: string;
+  normal?: string;
+  large?: string;
+  art_crop?: string;
+  border_crop?: string;
+  png?: string;
+}
+
+export interface CardFace {
+  name?: string;
+  mana_cost?: string;
+  type_line?: string;
+  oracle_text?: string;
+  image_uris?: CardImageUris;
+}
+
 export interface Card {
   id: string;
   name: string;
-  image_uris?: {
-    normal: string;
-    art_crop: string;
-  };
+  image_uris?: CardImageUris;
+  card_faces?: CardFace[];
   mana_cost?: string;
   type_line?: string;
   oracle_text?: string;
