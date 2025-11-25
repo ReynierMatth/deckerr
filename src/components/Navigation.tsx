@@ -69,7 +69,7 @@ export default function Navigation({ currentPage, setCurrentPage }: NavigationPr
   return (
     <>
       {/* Desktop Navigation - Top */}
-      <nav className="hidden md:block fixed top-0 left-0 right-0 bg-gray-800 border-b border-gray-700 z-50 animate-slide-in-left">
+      <nav className="hidden md:block fixed top-0 left-0 right-0 bg-gray-800 border-b border-gray-700 z-[100] animate-slide-in-left">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-8">
@@ -107,7 +107,7 @@ export default function Navigation({ currentPage, setCurrentPage }: NavigationPr
                   </button>
 
                   {showDropdown && (
-                    <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-md shadow-lg py-1 border border-gray-700 animate-scale-in glass-effect">
+                    <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-md shadow-lg py-1 border border-gray-700 animate-scale-in glass-effect z-[110]">
                       <button
                         onClick={handleSignOut}
                         className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-smooth"

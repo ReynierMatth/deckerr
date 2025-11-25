@@ -40,7 +40,7 @@ function AppContent() {
     switch (currentPage) {
       case 'home':
         return (
-          <div className="bg-gray-900 text-white p-3 sm:p-6 animate-fade-in">
+          <div className="relative bg-gray-900 text-white p-3 sm:p-6 animate-fade-in md:min-h-screen">
             <div className="max-w-7xl mx-auto">
               <h1 className="text-2xl md:text-3xl font-bold mb-4 md:mb-6 animate-slide-in-left">My Decks</h1>
               <DeckList
@@ -78,10 +78,12 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen bg-gray-900 flex flex-col">
       <Navigation currentPage={currentPage} setCurrentPage={setCurrentPage} />
-      <main className="pt-0 pb-20 md:pt-16 md:pb-0">
-        {renderPage()}
+      <main className="relative flex-1 overflow-y-auto pt-0 md:pt-16">
+        <div className="relative min-h-full pb-20 md:pb-0">
+          {renderPage()}
+        </div>
       </main>
       <PWAInstallPrompt />
     </div>

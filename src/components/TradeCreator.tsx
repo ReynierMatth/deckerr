@@ -340,14 +340,14 @@ export default function TradeCreator({
 
   if (loading) {
     return (
-      <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/80 z-[110] flex items-center justify-center">
         <Loader2 className="animate-spin text-blue-500" size={48} />
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-0 md:p-4">
+    <div className="fixed inset-0 bg-black/80 z-[110] flex items-center justify-center p-0 md:p-4">
       <div className="bg-gray-800 w-full h-full md:rounded-lg md:w-full md:max-w-6xl md:max-h-[90vh] overflow-hidden flex flex-col">
 
         {/* ============ MOBILE VIEW ============ */}

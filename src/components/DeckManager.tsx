@@ -125,6 +125,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const [currentDeckId, setCurrentDeckId] = useState<string | null>(initialDeck?.id || null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Card[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [selectedCards, setSelectedCards] = useState<{
     card: Card;
     quantity: number;
@@ -296,11 +297,16 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     e.preventDefault();
     if (!searchQuery.trim()) return;
 
+    setIsSearching(true);
     try {
       const cards = await searchCards(searchQuery);
-      setSearchResults(cards);
+      setSearchResults(cards || []);
     } catch (error) {
       console.error('Failed to search cards:', error);
+      setSearchResults([]);
+      setSnackbar({ message: 'Failed to search cards', type: 'error' });
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -538,7 +544,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   };
 
   return (
-    <div className="bg-gray-900 text-white p-3 sm:p-6 pt-6 pb-20 md:pt-20 md:pb-6">
+    <div className="relative bg-gray-900 text-white p-3 sm:p-6 pt-6 pb-44 md:pt-20 md:pb-6 md:min-h-screen">
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Card Search Section */}
@@ -575,7 +581,17 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
             {/* Vertical Card List for Mobile */}
             <div className="space-y-2">
-              {searchResults.map(card => {
+              {isSearching ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="animate-spin text-blue-500" size={48} />
+                </div>
+              ) : searchResults.length === 0 && searchQuery ? (
+                <div className="text-center py-12 text-gray-400">
+                  <p className="text-lg mb-2">No cards found</p>
+                  <p className="text-sm">Try a different search term</p>
+                </div>
+              ) : (
+                searchResults.map(card => {
                 const currentFaceIndex = getCurrentFaceIndex(card.id);
                 const isMultiFaced = isDoubleFaced(card);
                 const inCollection = userCollection.get(card.id) || 0;
@@ -702,7 +718,8 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                     </button>
                   </div>
                 );
-              })}
+              })
+              )}
             </div>
           </div>
 
@@ -876,10 +893,6 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                 })}
               </div>
 
-              <div className="font-bold text-xl">
-                Total Price: ${totalPrice.toFixed(2)}
-              </div>
-
               {deckSize > 0 && suggestedLandCountValue > 0 && (
                 <div className="bg-gray-700 rounded-lg p-3">
                   <div className="flex items-center justify-between mb-2">
@@ -906,45 +919,58 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                 </div>
               )}
 
-              <div className="flex gap-2">
-                {!isLoadingCollection && getMissingCards().length > 0 && (
-                  <button
-                    onClick={handleAddAllMissingCards}
-                    disabled={isAddingAll}
-                    className="flex-1 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2"
-                    title="Add missing cards to collection"
-                  >
-                    {isAddingAll ? (
-                      <Loader2 className="animate-spin" size={20} />
-                    ) : (
-                      <>
-                        <PackagePlus size={20} />
-                        <span className="hidden sm:inline">Add Missing</span>
-                      </>
-                    )}
-                  </button>
-                )}
-                <button
-                  onClick={saveDeck}
-                  disabled={
-                    !deckName.trim() || selectedCards.length === 0 || isSaving
-                  }
-                  className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 relative"
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="animate-spin text-white absolute left-2 top-1/2 -translate-y-1/2" size={20} />
-                      <span className="opacity-0">Save Deck</span>
-                    </>
-                  ) : (
-                    <>
-                      <Save size={20} />
-                      <span>{initialDeck ? 'Update Deck' : 'Save Deck'}</span>
-                    </>
-                  )}
-                </button>
-              </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Fixed Footer with Price and Actions - Mobile First */}
+      <div className="fixed bottom-16 left-0 right-0 md:left-auto md:right-4 md:bottom-4 md:w-80 z-20 bg-gray-800 border-t border-gray-700 md:border md:rounded-lg shadow-2xl">
+        <div className="p-3 space-y-3">
+          {/* Total Price */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-gray-300">Total Price</span>
+            <span className="text-xl font-bold text-green-400">${totalPrice.toFixed(2)}</span>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-2">
+            {!isLoadingCollection && getMissingCards().length > 0 && (
+              <button
+                onClick={handleAddAllMissingCards}
+                disabled={isAddingAll}
+                className="flex-1 px-3 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors"
+                title="Add missing cards to collection"
+              >
+                {isAddingAll ? (
+                  <Loader2 className="animate-spin" size={18} />
+                ) : (
+                  <>
+                    <PackagePlus size={18} />
+                    <span className="hidden sm:inline">Add Missing</span>
+                  </>
+                )}
+              </button>
+            )}
+            <button
+              onClick={saveDeck}
+              disabled={
+                !deckName.trim() || selectedCards.length === 0 || isSaving
+              }
+              className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 text-sm font-medium relative transition-colors"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="animate-spin text-white" size={18} />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <Save size={18} />
+                  <span>{initialDeck ? 'Update' : 'Save'}</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
       </div>
@@ -962,7 +988,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         const displayOracleText = currentFace?.oracle_text || hoveredCard.oracle_text;
 
         return (
-          <div className="hidden lg:block fixed top-1/2 right-8 transform -translate-y-1/2 z-40 pointer-events-none">
+          <div className="hidden lg:block fixed top-1/2 right-8 transform -translate-y-1/2 z-30 pointer-events-none">
             <div className="bg-gray-800 rounded-lg shadow-2xl p-4 max-w-md">
               <div className="relative">
                 <img
@@ -1011,16 +1037,16 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
           <>
             {/* Backdrop */}
             <div
-              className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity duration-300"
+              className="fixed inset-0 bg-black bg-opacity-50 z-[110] transition-opacity duration-300"
               onClick={() => setSelectedCard(null)}
             />
 
             {/* Sliding Panel */}
-            <div className="fixed top-0 right-0 h-full w-full md:w-96 bg-gray-800 shadow-2xl z-50 overflow-y-auto animate-slide-in-right">
+            <div className="fixed top-0 right-0 h-full w-full md:w-96 bg-gray-800 shadow-2xl z-[120] overflow-y-auto animate-slide-in-right">
               {/* Close button */}
               <button
                 onClick={() => setSelectedCard(null)}
-                className="fixed top-4 right-4 bg-gray-700 hover:bg-gray-600 text-white p-2 md:p-1.5 rounded-full transition-colors z-[60] shadow-lg"
+                className="fixed top-4 right-4 bg-gray-700 hover:bg-gray-600 text-white p-2 md:p-1.5 rounded-full transition-colors z-[130] shadow-lg"
                 aria-label="Close"
               >
                 <X size={24} className="md:w-5 md:h-5" />
@@ -1125,7 +1151,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
       {snackbar && (
         <div
-          className={`fixed bottom-4 right-4 bg-green-500 text-white p-4 rounded-lg shadow-lg transition-all duration-300 ${
+          className={`fixed bottom-4 right-4 text-white p-4 rounded-lg shadow-lg transition-all duration-300 z-[140] ${
             snackbar.type === 'success' ? 'bg-green-500' : 'bg-red-500'
           }`}
         >

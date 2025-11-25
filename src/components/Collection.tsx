@@ -189,7 +189,7 @@ export default function Collection() {
   };
 
   return (
-    <div className="bg-gray-900 text-white p-3 sm:p-6">
+    <div className="relative bg-gray-900 text-white p-3 sm:p-6 md:min-h-screen">
       <div className="max-w-7xl mx-auto">
         <h1 className="text-2xl md:text-3xl font-bold mb-4 md:mb-6">My Collection</h1>
 
@@ -295,7 +295,7 @@ export default function Collection() {
         const displayOracleText = currentFace?.oracle_text || hoveredCard.oracle_text;
 
         return (
-          <div className="hidden lg:block fixed top-1/2 right-8 transform -translate-y-1/2 z-40 pointer-events-none">
+          <div className="hidden lg:block fixed top-1/2 right-8 transform -translate-y-1/2 z-30 pointer-events-none">
             <div className="bg-gray-800 rounded-lg shadow-2xl p-4 max-w-md">
               <div className="relative">
                 <img
@@ -344,16 +344,16 @@ export default function Collection() {
           <>
             {/* Backdrop */}
             <div
-              className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity duration-300"
+              className="fixed inset-0 bg-black bg-opacity-50 z-[110] transition-opacity duration-300"
               onClick={() => setSelectedCard(null)}
             />
 
             {/* Sliding Panel */}
-            <div className="fixed top-0 right-0 h-full w-full md:w-96 bg-gray-800 shadow-2xl z-50 overflow-y-auto animate-slide-in-right">
+            <div className="fixed top-0 right-0 h-full w-full md:w-96 bg-gray-800 shadow-2xl z-[120] overflow-y-auto animate-slide-in-right">
               {/* Close button - fixed position, stays visible when scrolling */}
               <button
                 onClick={() => setSelectedCard(null)}
-                className="fixed top-4 right-4 bg-gray-700 hover:bg-gray-600 text-white p-2 md:p-1.5 rounded-full transition-colors z-[60] shadow-lg"
+                className="fixed top-4 right-4 bg-gray-700 hover:bg-gray-600 text-white p-2 md:p-1.5 rounded-full transition-colors z-[130] shadow-lg"
                 aria-label="Close"
               >
                 <X size={24} className="md:w-5 md:h-5" />
@@ -478,7 +478,7 @@ export default function Collection() {
         <div
           className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg transition-all duration-300 ${
             snackbar.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-          } text-white z-50`}
+          } text-white z-[140]`}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center">

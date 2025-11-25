@@ -480,7 +480,7 @@ export default function Community() {
 
   // ============ MAIN VIEW ============
   return (
-    <div className="bg-gray-900 text-white min-h-screen">
+    <div className="relative bg-gray-900 text-white md:min-h-screen">
       {/* Header */}
       <div className="sticky top-0 bg-gray-900/95 backdrop-blur border-b border-gray-800 p-3 z-10">
         <h1 className="text-xl font-bold mb-3">Community</h1>

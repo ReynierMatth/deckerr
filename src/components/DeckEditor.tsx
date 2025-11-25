@@ -62,7 +62,7 @@ export default function DeckEditor({ deckId, onClose }: DeckEditorProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white p-6 flex items-center justify-center">
+      <div className="relative md:min-h-screen bg-gray-900 text-white p-6 flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div>
       </div>
     );
@@ -70,7 +70,7 @@ export default function DeckEditor({ deckId, onClose }: DeckEditorProps) {
 
   if (!deck) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white p-6">
+      <div className="relative md:min-h-screen bg-gray-900 text-white p-6">
         <div className="max-w-7xl mx-auto">
           <div className="bg-red-500/10 border border-red-500 rounded-lg p-4">
             <h2 className="text-xl font-bold text-red-500">Error</h2>

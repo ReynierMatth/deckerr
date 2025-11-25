@@ -157,7 +157,7 @@ import React, { useState, useEffect } from 'react';
       );
 
       return (
-        <div className="min-h-screen bg-gray-900 text-white p-6">
+        <div className="relative md:min-h-screen bg-gray-900 text-white p-6">
           <div className="max-w-7xl mx-auto">
             <h1 className="text-3xl font-bold mb-6">Life Counter</h1>
             {!setupComplete ? renderSetupForm() : renderLifeCounters()}

@@ -201,7 +201,7 @@ const CardSearch = () => {
   };
 
   return (
-    <div className="bg-gray-900 text-white p-3 sm:p-6">
+    <div className="relative bg-gray-900 text-white p-3 sm:p-6 md:min-h-screen">
       <div className="max-w-7xl mx-auto">
         <h1 className="text-2xl md:text-3xl font-bold mb-4 md:mb-6">Card Search</h1>
         <form onSubmit={handleSearch} className="mb-8 space-y-4">
@@ -774,7 +774,7 @@ const CardSearch = () => {
         <div
           className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg transition-all duration-300 ${
             snackbar.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-          } text-white z-50`}
+          } text-white z-[140]`}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center">

@@ -31,7 +31,7 @@ export default function DeckBuilder({
                 initial={{ x: "100%" }}
                 animate={{ x: isOpen ? "0%" : "100%" }}
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="fixed top-0 right-0 w-4/5 h-full bg-gray-800 p-6 shadow-lg md:static md:w-full md:h-auto md:p-6 md:shadow-none z-50"
+                className="fixed top-0 right-0 w-4/5 h-full bg-gray-800 p-6 shadow-lg md:static md:w-full md:h-auto md:p-6 md:shadow-none z-[110]"
             >
                 {/* Bouton de fermeture */}
                 <button

@@ -85,7 +85,7 @@ export default function PWAInstallPrompt() {
   }
 
   return (
-    <div className="fixed bottom-20 md:bottom-4 left-4 right-4 md:left-auto md:right-4 md:max-w-sm z-50 animate-slide-in-bottom">
+    <div className="fixed bottom-20 md:bottom-4 left-4 right-4 md:left-auto md:right-4 md:max-w-sm z-[105] animate-slide-in-bottom">
       <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg shadow-2xl p-4 text-white">
         <button
           onClick={handleDismiss}
