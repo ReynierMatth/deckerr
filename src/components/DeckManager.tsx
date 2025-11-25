@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, Search, Save, Trash2, Loader2, CheckCircle, XCircle, AlertCircle, PackagePlus, RefreshCw } from 'lucide-react';
+import { Plus, Minus, Search, Save, Trash2, Loader2, CheckCircle, XCircle, AlertCircle, PackagePlus, RefreshCw, X } from 'lucide-react';
 import { Card, Deck } from '../types';
 import { searchCards, getUserCollection, addCardToCollection, addMultipleCardsToCollection } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -123,6 +123,8 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const [addingCardId, setAddingCardId] = useState<string | null>(null);
   const [isAddingAll, setIsAddingAll] = useState(false);
   const [cardFaceIndex, setCardFaceIndex] = useState<Map<string, number>>(new Map());
+  const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
+  const [selectedCard, setSelectedCard] = useState<Card | null>(null);
 
   // Load user collection on component mount
   useEffect(() => {
@@ -169,6 +171,13 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       return card.card_faces[faceIndex]?.image_uris?.normal || card.card_faces[faceIndex]?.image_uris?.small;
     }
     return card.image_uris?.normal || card.image_uris?.small || card.card_faces?.[0]?.image_uris?.normal;
+  };
+
+  const getCardLargeImageUri = (card: Card, faceIndex: number = 0) => {
+    if (isDoubleFaced(card) && card.card_faces) {
+      return card.card_faces[faceIndex]?.image_uris?.large || card.card_faces[faceIndex]?.image_uris?.normal;
+    }
+    return card.image_uris?.large || card.image_uris?.normal;
   };
 
   // Helper function to check if a card is in the collection
@@ -550,10 +559,14 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                 return (
                   <div
                     key={card.id}
-                    className="bg-gray-800 rounded-lg p-3 flex items-center gap-3 hover:bg-gray-750 transition-colors"
+                    className="bg-gray-800 rounded-lg p-3 flex items-center gap-3 hover:bg-gray-750 transition-colors cursor-pointer"
+                    onMouseEnter={() => setHoveredCard(card)}
+                    onMouseLeave={() => setHoveredCard(null)}
+                    onClick={() => setSelectedCard(card)}
                   >
                     {/* Card Thumbnail */}
-                    <div className="relative flex-shrink-0 w-16 h-22 rounded overflow-hidden">
+                    <div className="relative flex-shrink-0 w-16 h-22 rounded overflow-hidden"
+                         onClick={(e) => e.stopPropagation()}>
                       {getCardImageUri(card, currentFaceIndex) ? (
                         <img
                           src={getCardImageUri(card, currentFaceIndex)}
@@ -597,7 +610,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
                     {/* Add/Quantity Controls */}
                     {quantityInDeck > 0 ? (
-                      <div className="flex-shrink-0 flex items-center gap-1">
+                      <div className="flex-shrink-0 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => {
                             if (quantityInDeck === 1) {
@@ -620,7 +633,10 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                       </div>
                     ) : (
                       <button
-                        onClick={() => addCardToDeck(card)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          addCardToDeck(card);
+                        }}
                         className="flex-shrink-0 w-10 h-10 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center transition-colors"
                       >
                         <Plus size={20} />
@@ -629,7 +645,10 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
                     {/* Add to Collection Button (hidden on mobile by default) */}
                     <button
-                      onClick={() => handleAddCardToCollection(card.id, 1)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAddCardToCollection(card.id, 1);
+                      }}
                       disabled={isAddingThisCard}
                       className="hidden sm:flex flex-shrink-0 w-10 h-10 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-full items-center justify-center transition-colors"
                       title="Add to collection"
@@ -735,7 +754,10 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                 {selectedCards.map(({ card, quantity }) => (
                   <div
                     key={card.id}
-                    className="flex items-center gap-3 p-2 rounded-lg bg-gray-700"
+                    className="flex items-center gap-3 p-2 rounded-lg bg-gray-700 cursor-pointer hover:bg-gray-650 transition-colors"
+                    onMouseEnter={() => setHoveredCard(card)}
+                    onMouseLeave={() => setHoveredCard(null)}
+                    onClick={() => setSelectedCard(card)}
                   >
                     <img
                       src={card.image_uris?.art_crop}
@@ -748,7 +770,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                         <div className="text-xs text-gray-400">${card.prices.usd}</div>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="number"
                         value={quantity}
@@ -836,6 +858,181 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
           </div>
         </div>
       </div>
+
+      {/* Hover Card Preview - only show if no card is selected */}
+      {hoveredCard && !selectedCard && (() => {
+        const currentFaceIndex = getCurrentFaceIndex(hoveredCard.id);
+        const isMultiFaced = isDoubleFaced(hoveredCard);
+        const currentFace = isMultiFaced && hoveredCard.card_faces
+          ? hoveredCard.card_faces[currentFaceIndex]
+          : null;
+
+        const displayName = currentFace?.name || hoveredCard.name;
+        const displayTypeLine = currentFace?.type_line || hoveredCard.type_line;
+        const displayOracleText = currentFace?.oracle_text || hoveredCard.oracle_text;
+
+        return (
+          <div className="hidden lg:block fixed top-1/2 right-8 transform -translate-y-1/2 z-40 pointer-events-none">
+            <div className="bg-gray-800 rounded-lg shadow-2xl p-4 max-w-md">
+              <div className="relative">
+                <img
+                  src={getCardLargeImageUri(hoveredCard, currentFaceIndex)}
+                  alt={displayName}
+                  className="w-full h-auto rounded-lg shadow-lg"
+                />
+                {isMultiFaced && (
+                  <div className="absolute top-2 right-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
+                    Face {currentFaceIndex + 1}/{hoveredCard.card_faces!.length}
+                  </div>
+                )}
+              </div>
+              <div className="mt-3 space-y-2">
+                <h3 className="text-xl font-bold">{displayName}</h3>
+                <p className="text-sm text-gray-400">{displayTypeLine}</p>
+                {displayOracleText && (
+                  <p className="text-sm text-gray-300 border-t border-gray-700 pt-2">
+                    {displayOracleText}
+                  </p>
+                )}
+                {hoveredCard.prices?.usd && (
+                  <div className="text-sm text-green-400 font-semibold border-t border-gray-700 pt-2">
+                    ${hoveredCard.prices.usd}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Card Detail Panel - slides in from right */}
+      {selectedCard && (() => {
+        const currentFaceIndex = getCurrentFaceIndex(selectedCard.id);
+        const isMultiFaced = isDoubleFaced(selectedCard);
+        const currentFace = isMultiFaced && selectedCard.card_faces
+          ? selectedCard.card_faces[currentFaceIndex]
+          : null;
+
+        const displayName = currentFace?.name || selectedCard.name;
+        const displayTypeLine = currentFace?.type_line || selectedCard.type_line;
+        const displayOracleText = currentFace?.oracle_text || selectedCard.oracle_text;
+
+        return (
+          <>
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity duration-300"
+              onClick={() => setSelectedCard(null)}
+            />
+
+            {/* Sliding Panel */}
+            <div className="fixed top-0 right-0 h-full w-full md:w-96 bg-gray-800 shadow-2xl z-50 overflow-y-auto animate-slide-in-right">
+              {/* Close button */}
+              <button
+                onClick={() => setSelectedCard(null)}
+                className="fixed top-4 right-4 bg-gray-700 hover:bg-gray-600 text-white p-2 md:p-1.5 rounded-full transition-colors z-[60] shadow-lg"
+                aria-label="Close"
+              >
+                <X size={24} className="md:w-5 md:h-5" />
+              </button>
+
+              <div className="p-4 sm:p-6">
+                {/* Card Image */}
+                <div className="relative mb-4 max-w-sm mx-auto">
+                  <img
+                    src={getCardLargeImageUri(selectedCard, currentFaceIndex)}
+                    alt={displayName}
+                    className="w-full h-auto rounded-lg shadow-lg"
+                  />
+                  {isMultiFaced && (
+                    <>
+                      <div className="absolute top-2 right-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
+                        Face {currentFaceIndex + 1}/{selectedCard.card_faces!.length}
+                      </div>
+                      <button
+                        onClick={() => toggleCardFace(selectedCard.id, selectedCard.card_faces!.length)}
+                        className="absolute bottom-2 right-2 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full shadow-lg transition-all"
+                        title="Flip card"
+                      >
+                        <RefreshCw size={20} />
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Card Info */}
+                <div className="space-y-4">
+                  <div>
+                    <h2 className="text-xl md:text-2xl font-bold text-white mb-2">{displayName}</h2>
+                    <p className="text-xs sm:text-sm text-gray-400">{displayTypeLine}</p>
+                  </div>
+
+                  {displayOracleText && (
+                    <div className="border-t border-gray-700 pt-3">
+                      <p className="text-sm text-gray-300">{displayOracleText}</p>
+                    </div>
+                  )}
+
+                  {selectedCard.prices?.usd && (
+                    <div className="border-t border-gray-700 pt-3">
+                      <div className="text-lg text-green-400 font-semibold">
+                        ${selectedCard.prices.usd} each
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Collection Status */}
+                  {userCollection.has(selectedCard.id) && (
+                    <div className="border-t border-gray-700 pt-3">
+                      <div className="text-sm text-green-400">
+                        <CheckCircle size={16} className="inline mr-1" />
+                        x{userCollection.get(selectedCard.id)} in your collection
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Deck Quantity Management */}
+                  <div className="border-t border-gray-700 pt-3">
+                    <h3 className="text-lg font-semibold mb-3">Quantity in Deck</h3>
+                    <div className="flex items-center justify-between bg-gray-900 rounded-lg p-4">
+                      <button
+                        onClick={() => {
+                          const cardInDeck = selectedCards.find(c => c.card.id === selectedCard.id);
+                          const currentQuantity = cardInDeck?.quantity || 0;
+                          if (currentQuantity === 1) {
+                            removeCardFromDeck(selectedCard.id);
+                          } else if (currentQuantity > 1) {
+                            updateCardQuantity(selectedCard.id, currentQuantity - 1);
+                          }
+                        }}
+                        disabled={!selectedCards.find(c => c.card.id === selectedCard.id)}
+                        className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-colors"
+                      >
+                        <Minus size={20} />
+                      </button>
+
+                      <div className="text-center">
+                        <div className="text-3xl font-bold">
+                          {selectedCards.find(c => c.card.id === selectedCard.id)?.quantity || 0}
+                        </div>
+                        <div className="text-xs text-gray-400">copies</div>
+                      </div>
+
+                      <button
+                        onClick={() => addCardToDeck(selectedCard)}
+                        className="bg-green-600 hover:bg-green-700 text-white p-2 rounded-lg transition-colors"
+                      >
+                        <Plus size={20} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        );
+      })()}
+
       {snackbar && (
         <div
           className={`fixed bottom-4 right-4 bg-green-500 text-white p-4 rounded-lg shadow-lg transition-all duration-300 ${

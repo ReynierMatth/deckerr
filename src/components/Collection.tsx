@@ -362,7 +362,7 @@ export default function Collection() {
               <div className="p-4 sm:p-6">
 
                 {/* Card Image */}
-                <div className="relative mb-4">
+                <div className="relative mb-4 max-w-sm mx-auto">
                   <img
                     src={getCardLargeImageUri(selectedCard.card, currentFaceIndex)}
                     alt={displayName}
