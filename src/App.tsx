@@ -80,8 +80,8 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col">
       <Navigation currentPage={currentPage} setCurrentPage={setCurrentPage} />
-      <main className="relative flex-1 overflow-y-auto pt-0 md:pt-16">
-        <div className="relative min-h-full pb-20 md:pb-0">
+      <main className="relative flex-1 overflow-y-auto">
+        <div className="relative min-h-full md:min-h-0 pt-0 md:pt-16 pb-20 md:pb-0">
           {renderPage()}
         </div>
       </main>
