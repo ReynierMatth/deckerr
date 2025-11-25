@@ -55,6 +55,11 @@ export interface Deck {
   userId: string;
   createdAt: Date;
   updatedAt: Date;
+  coverCardId?: string;
+  coverCard?: Card | null;
+  validationErrors?: string[];
+  isValid?: boolean;
+  cardCount?: number;
 }
 
 export interface CardEntity {

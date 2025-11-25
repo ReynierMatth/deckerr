@@ -363,6 +363,17 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         updatedAt: new Date(),
       };
 
+      // Calculate validation for storage
+      const validation = validateDeck(deckToSave);
+
+      // Determine cover card (commander or first card)
+      const commanderCard = deckFormat === 'commander' ? selectedCards.find(c => c.card.id === commander?.id) : null;
+      const coverCard = commanderCard?.card || selectedCards[0]?.card;
+      const coverCardId = coverCard?.id || null;
+
+      // Calculate total card count
+      const totalCardCount = selectedCards.reduce((acc, curr) => acc + curr.quantity, 0);
+
       const deckData = {
         id: deckToSave.id,
         name: deckToSave.name,
@@ -370,6 +381,10 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         user_id: deckToSave.userId,
         created_at: deckToSave.createdAt,
         updated_at: deckToSave.updatedAt,
+        cover_card_id: coverCardId,
+        validation_errors: validation.errors,
+        is_valid: validation.isValid,
+        card_count: totalCardCount,
       };
 
       // Save or update the deck

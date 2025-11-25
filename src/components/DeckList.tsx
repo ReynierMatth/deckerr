@@ -4,6 +4,7 @@ import { Deck } from '../types';
 import { supabase } from "../lib/supabase";
 import DeckCard from "./DeckCard";
 import { PlusCircle } from 'lucide-react';
+import MigrateDeckButton from "./MigrateDeckButton.tsx";
 
 interface DeckListProps {
   onDeckEdit?: (deckId: string) => void;
@@ -23,58 +24,36 @@ const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
         return;
       }
 
-      const decksWithCards = await Promise.all(decksData.map(async (deck) => {
-        const { data: cardEntities, error: cardsError } = await supabase
-          .from('deck_cards')
-          .select('*')
-          .eq('deck_id', deck.id);
+      // Get all unique cover card IDs
+      const coverCardIds = decksData
+        .map(deck => deck.cover_card_id)
+        .filter(Boolean);
 
+      // Fetch only cover cards (much lighter!)
+      const coverCards = coverCardIds.length > 0
+        ? await getCardsByIds(coverCardIds)
+        : [];
 
+      // Map decks with their cover cards
+      const decksWithCoverCards = decksData.map(deck => {
+        const coverCard = deck.cover_card_id
+          ? coverCards.find(c => c.id === deck.cover_card_id)
+          : null;
 
-        if (cardsError) {
-          console.error(`Error fetching cards for deck ${deck.id}:`, cardsError);
-          return { ...deck, cards: [] };
-        }
+        return {
+          ...deck,
+          cards: [], // Empty array, we don't load all cards here
+          coverCard: coverCard || null,
+          createdAt: new Date(deck.created_at),
+          updatedAt: new Date(deck.updated_at),
+          validationErrors: deck.validation_errors || [],
+          isValid: deck.is_valid ?? true,
+          cardCount: deck.card_count || 0,
+          coverCardId: deck.cover_card_id,
+        };
+      });
 
-        const cardIds = cardEntities.map((entity) => entity.card_id);
-        const uniqueCardIds = [...new Set(cardIds)];
-
-        if(deck.id === "410ed539-a8f4-4bc4-91f1-6c113b9b7e25"){
-          console.log("uniqueCardIds", uniqueCardIds);
-        }
-
-
-
-        try {
-          const scryfallCards = await getCardsByIds(uniqueCardIds);
-
-          if (!scryfallCards) {
-            console.error("scryfallCards is undefined after getCardsByIds");
-            return { ...deck, cards: [] };
-          }
-
-          const cards = cardEntities.map((entity) => {
-            const card = scryfallCards.find((c) => c.id === entity.card_id);
-            return {
-              card,
-              quantity: entity.quantity,
-              is_commander: entity.is_commander,
-            };
-          });
-
-          return {
-            ...deck,
-            cards,
-            createdAt: new Date(deck.created_at),
-            updatedAt: new Date(deck.updated_at),
-          };
-        } catch (error) {
-          console.error("Error fetching cards from Scryfall:", error);
-          return { ...deck, cards: [] };
-        }
-      }));
-
-      setDecks(decksWithCards);
+      setDecks(decksWithCoverCards);
       setLoading(false);
     };
 
