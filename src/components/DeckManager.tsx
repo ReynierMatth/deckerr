@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { validateDeck } from '../utils/deckValidation';
 import MagicCard from './MagicCard';
-import { ManaCost } from './ManaCost';
+import { ManaCost, ManaSymbol } from './ManaCost';
 
 interface DeckManagerProps {
   initialDeck?: Deck;
@@ -26,7 +26,8 @@ interface DeckManagerProps {
 
 const suggestLandCountAndDistribution = (
   cards: { card; quantity: number }[],
-  format: string
+  format: string,
+  commanderColors: string[] = []
 ) => {
   const formatRules = {
     standard: { minCards: 60 },
@@ -64,6 +65,16 @@ const suggestLandCountAndDistribution = (
     }
   });
 
+  // For commander, filter out colors not in commander's color identity
+  if (format === 'commander' && commanderColors.length > 0) {
+    for (const color in colorCounts) {
+      if (!commanderColors.includes(color)) {
+        totalColorSymbols -= colorCounts[color as keyof typeof colorCounts];
+        colorCounts[color as keyof typeof colorCounts] = 0;
+      }
+    }
+  }
+
   const landDistribution: { [key: string]: number } = {};
   for (const color in colorCounts) {
     const proportion =
@@ -94,6 +105,20 @@ const suggestLandCountAndDistribution = (
   }
 
   return { landCount: landsToAdd, landDistribution };
+};
+
+// Get commander color identity
+const getCommanderColors = (commander: Card | null): string[] => {
+  if (!commander) return [];
+  return commander.colors || [];
+};
+
+// Check if a card's colors are valid for the commander
+const isCardValidForCommander = (card: Card, commanderColors: string[]): boolean => {
+  if (commanderColors.length === 0) return true; // No commander restriction
+  const cardColors = card.colors || [];
+  // Every color in the card must be in the commander's colors
+  return cardColors.every(color => commanderColors.includes(color));
 };
 
 export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
@@ -396,11 +421,17 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
   const validation = validateDeck(currentDeck);
 
+  // Commander color identity validation
+  const commanderColors = deckFormat === 'commander' ? getCommanderColors(commander) : [];
+  const invalidCards = deckFormat === 'commander' && commander
+    ? selectedCards.filter(({ card }) => !isCardValidForCommander(card, commanderColors))
+    : [];
+
   const deckSize = selectedCards.reduce((acc, curr) => acc + curr.quantity, 0);
   const {
     landCount: suggestedLandCountValue,
     landDistribution: suggestedLands,
-  } = suggestLandCountAndDistribution(selectedCards, deckFormat);
+  } = suggestLandCountAndDistribution(selectedCards, deckFormat, commanderColors);
 
   const totalPrice = selectedCards.reduce((acc, { card, quantity }) => {
     const isBasicLand =
@@ -556,10 +587,14 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                   ? card.card_faces[currentFaceIndex]?.name || card.name
                   : card.name;
 
+                const isValidForCommander = deckFormat !== 'commander' || !commander || isCardValidForCommander(card, commanderColors);
+
                 return (
                   <div
                     key={card.id}
-                    className="bg-gray-800 rounded-lg p-3 flex items-center gap-3 hover:bg-gray-750 transition-colors cursor-pointer"
+                    className={`bg-gray-800 rounded-lg p-3 flex items-center gap-3 hover:bg-gray-750 transition-colors cursor-pointer ${
+                      !isValidForCommander ? 'border border-yellow-500/50' : ''
+                    }`}
                     onMouseEnter={() => setHoveredCard(card)}
                     onMouseLeave={() => setHoveredCard(null)}
                     onClick={() => setSelectedCard(card)}
@@ -604,6 +639,12 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                         <div className="text-xs text-green-400 mt-1">
                           <CheckCircle size={12} className="inline mr-1" />
                           x{inCollection} in collection
+                        </div>
+                      )}
+                      {!isValidForCommander && (
+                        <div className="text-xs text-yellow-400 mt-1 flex items-center gap-1">
+                          <AlertCircle size={12} />
+                          Not in commander colors
                         </div>
                       )}
                     </div>
@@ -690,27 +731,39 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
               </select>
 
               {deckFormat === 'commander' && (
-                <select
-                  value={commander?.id || ''}
-                  onChange={e => {
-                    const card =
-                      selectedCards.find(c => c.card.id === e.target.value)?.card ||
-                      null;
-                    setCommander(card);
-                  }}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
-                >
-                  <option value="">Select Commander</option>
-                  {selectedCards
-                    .filter(c =>
-                      c.card.type_line?.toLowerCase().includes('legendary')
-                    )
-                    .map(({ card }) => (
-                      <option key={card.id} value={card.id}>
-                        {card.name}
-                      </option>
-                    ))}
-                </select>
+                <div className="space-y-2">
+                  <select
+                    value={commander?.id || ''}
+                    onChange={e => {
+                      const card =
+                        selectedCards.find(c => c.card.id === e.target.value)?.card ||
+                        null;
+                      setCommander(card);
+                    }}
+                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
+                  >
+                    <option value="">Select Commander</option>
+                    {selectedCards
+                      .filter(c =>
+                        c.card.type_line?.toLowerCase().includes('legendary')
+                      )
+                      .map(({ card }) => (
+                        <option key={card.id} value={card.id}>
+                          {card.name}
+                        </option>
+                      ))}
+                  </select>
+                  {commander && commanderColors.length > 0 && (
+                    <div className="bg-gray-700 rounded px-3 py-2 flex items-center gap-2">
+                      <span className="text-xs text-gray-400">Commander Colors:</span>
+                      <div className="flex items-center gap-1">
+                        {commanderColors.map(color => (
+                          <ManaSymbol key={color} symbol={color} size={18} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
 
               <div className="relative">
@@ -744,6 +797,26 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                 </div>
               )}
 
+              {/* Commander Color Identity Warning */}
+              {deckFormat === 'commander' && commander && invalidCards.length > 0 && (
+                <div className="bg-yellow-500/10 border border-yellow-500 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="text-yellow-500 flex-shrink-0 mt-0.5" size={16} />
+                    <div className="text-sm">
+                      <p className="text-yellow-400 font-semibold mb-1">Commander Color Identity Warning</p>
+                      <p className="text-yellow-300 text-xs mb-2">
+                        The following cards don't match your commander's color identity:
+                      </p>
+                      <ul className="list-disc list-inside text-yellow-300 text-xs">
+                        {invalidCards.map(({ card }) => (
+                          <li key={card.id}>{card.name}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-bold text-xl">
@@ -751,69 +824,86 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                   </h3>
                 </div>
 
-                {selectedCards.map(({ card, quantity }) => (
-                  <div
-                    key={card.id}
-                    className="flex items-center gap-3 p-2 rounded-lg bg-gray-700 cursor-pointer hover:bg-gray-650 transition-colors"
-                    onMouseEnter={() => setHoveredCard(card)}
-                    onMouseLeave={() => setHoveredCard(null)}
-                    onClick={() => setSelectedCard(card)}
-                  >
-                    <img
-                      src={card.image_uris?.art_crop}
-                      alt={card.name}
-                      className="w-10 h-10 rounded"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-sm truncate">{card.name}</h4>
-                      {card.prices?.usd && (
-                        <div className="text-xs text-gray-400">${card.prices.usd}</div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="number"
-                        value={quantity}
-                        onChange={e =>
-                          updateCardQuantity(card.id, parseInt(e.target.value))
-                        }
-                        min="1"
-                        className="w-14 px-2 py-1 bg-gray-600 border border-gray-500 rounded text-center text-sm"
+                {selectedCards.map(({ card, quantity }) => {
+                  const isValidForCommander = deckFormat !== 'commander' || !commander || isCardValidForCommander(card, commanderColors);
+
+                  return (
+                    <div
+                      key={card.id}
+                      className={`flex items-center gap-3 p-2 rounded-lg bg-gray-700 cursor-pointer hover:bg-gray-650 transition-colors ${
+                        !isValidForCommander ? 'border border-yellow-500/50' : ''
+                      }`}
+                      onMouseEnter={() => setHoveredCard(card)}
+                      onMouseLeave={() => setHoveredCard(null)}
+                      onClick={() => setSelectedCard(card)}
+                    >
+                      <img
+                        src={card.image_uris?.art_crop}
+                        alt={card.name}
+                        className="w-10 h-10 rounded"
                       />
-                      <button
-                        onClick={() => removeCardFromDeck(card.id)}
-                        className="text-red-500 hover:text-red-400"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-medium text-sm truncate">{card.name}</h4>
+                        {card.prices?.usd && (
+                          <div className="text-xs text-gray-400">${card.prices.usd}</div>
+                        )}
+                        {!isValidForCommander && (
+                          <div className="text-xs text-yellow-400 flex items-center gap-1 mt-0.5">
+                            <AlertCircle size={10} />
+                            <span>Not in commander colors</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="number"
+                          value={quantity}
+                          onChange={e =>
+                            updateCardQuantity(card.id, parseInt(e.target.value))
+                          }
+                          min="1"
+                          className="w-14 px-2 py-1 bg-gray-600 border border-gray-500 rounded text-center text-sm"
+                        />
+                        <button
+                          onClick={() => removeCardFromDeck(card.id)}
+                          className="text-red-500 hover:text-red-400"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="font-bold text-xl">
                 Total Price: ${totalPrice.toFixed(2)}
               </div>
 
-              {deckSize > 0 && (
-                <div className="text-gray-400">
-                  Suggested Land Count: {suggestedLandCountValue}
-                  {Object.entries(suggestedLands).map(([landType, count]) => (
-                    <div key={landType}>
-                      {landType}: {count}
-                    </div>
-                  ))}
+              {deckSize > 0 && suggestedLandCountValue > 0 && (
+                <div className="bg-gray-700 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-gray-300">Suggested Lands</span>
+                    <span className="text-xs text-gray-400">{suggestedLandCountValue} total</span>
+                  </div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {Object.entries(suggestedLands).map(([landType, count]) =>
+                      count > 0 ? (
+                        <div key={landType} className="flex items-center gap-1.5 bg-gray-800 px-2 py-1 rounded">
+                          <ManaSymbol symbol={landType} size={20} />
+                          <span className="text-sm font-medium text-white">{count}</span>
+                        </div>
+                      ) : null
+                    )}
+                  </div>
+                  <button
+                    onClick={addSuggestedLandsToDeck}
+                    className="w-full mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Plus size={20} />
+                    Add Suggested Lands
+                  </button>
                 </div>
-              )}
-
-              {deckSize > 0 && (
-                <button
-                  onClick={addSuggestedLandsToDeck}
-                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center justify-center gap-2"
-                >
-                  <Plus size={20} />
-                  Add Suggested Lands
-                </button>
               )}
 
               <div className="flex gap-2">
