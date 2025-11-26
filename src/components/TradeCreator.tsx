@@ -95,6 +95,11 @@ function CollectionGrid({
                 <div className="absolute top-1 right-1 bg-gray-900/80 text-white text-[10px] px-1 py-0.5 rounded">
                   {remainingQty}/{quantity}
                 </div>
+                {card.prices?.usd && (
+                  <div className="absolute top-1 left-1 bg-gray-900/80 text-green-400 text-[10px] px-1 py-0.5 rounded font-semibold">
+                    ${card.prices.usd}
+                  </div>
+                )}
                 {selected && (
                   <button
                     onClick={(e) => {
@@ -128,9 +133,22 @@ function SelectedCardsSummary({ cards, onRemove, label, emptyLabel, color }: Sel
   const bgColor = color === 'green' ? 'bg-green-900/50' : 'bg-blue-900/50';
   const textColor = color === 'green' ? 'text-green-400' : 'text-blue-400';
 
+  // Calculate total price
+  const totalPrice = Array.from(cards.values()).reduce((total, item) => {
+    const price = item.card.prices?.usd ? parseFloat(item.card.prices.usd) : 0;
+    return total + (price * item.quantity);
+  }, 0);
+
   return (
     <div>
-      <h4 className={`text-xs font-semibold ${textColor} mb-1`}>{label}:</h4>
+      <div className="flex items-center justify-between mb-1">
+        <h4 className={`text-xs font-semibold ${textColor}`}>{label}:</h4>
+        {cards.size > 0 && (
+          <span className={`text-xs font-semibold ${textColor}`}>
+            ${totalPrice.toFixed(2)}
+          </span>
+        )}
+      </div>
       {cards.size === 0 ? (
         <p className="text-gray-500 text-xs">{emptyLabel}</p>
       ) : (
@@ -469,6 +487,12 @@ export default function TradeCreator({
                     placeholder="Add a message..."
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
+                  {message && (
+                    <div className="mt-2 p-2 bg-gray-900/50 rounded border border-gray-700">
+                      <p className="text-xs text-gray-400 mb-1">Preview:</p>
+                      <p className="text-sm text-gray-200">{message}</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -614,14 +638,23 @@ export default function TradeCreator({
               )}
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="space-y-2 mb-4">
               <input
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Add a message (optional)"
-                className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
+              {message && (
+                <div className="p-2 bg-gray-900/50 rounded border border-gray-700">
+                  <p className="text-xs text-gray-400 mb-1">Preview:</p>
+                  <p className="text-sm text-gray-200">{message}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-4">
               <button
                 onClick={onClose}
                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
