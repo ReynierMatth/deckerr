@@ -81,12 +81,6 @@ export default function Community() {
   const [tradeCardDetails, setTradeCardDetails] = useState<Map<string, Card>>(new Map());
   const [processingTradeId, setProcessingTradeId] = useState<string | null>(null);
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
-  const [counterOfferData, setCounterOfferData] = useState<{
-    receiverId: string;
-    receiverUsername: string;
-    receiverCollection: CollectionItem[];
-    initialOffer?: { senderCards: Card[]; receiverCards: Card[] };
-  } | null>(null);
 
   // Profile state
   const [username, setUsername] = useState('');
@@ -318,37 +312,6 @@ export default function Community() {
     });
   };
 
-  const handleCounterOffer = async (trade: Trade, senderCards: Card[], receiverCards: Card[]) => {
-    try {
-      // Decline the original trade
-      await declineTrade(trade.id);
-
-      // Load the sender's collection for the counter-offer
-      const collectionMap = await getUserCollection(trade.sender_id);
-      const cardIds = Array.from(collectionMap.keys());
-      const cards = await getCardsByIds(cardIds);
-      const senderCollection = cards.map((card) => ({
-        card,
-        quantity: collectionMap.get(card.id) || 0,
-      }));
-
-      // Set up counter-offer data (swap sender and receiver)
-      setCounterOfferData({
-        receiverId: trade.sender_id,
-        receiverUsername: trade.sender?.username || 'User',
-        receiverCollection: senderCollection,
-        initialOffer: {
-          senderCards: receiverCards, // What you want to give back
-          receiverCards: senderCards, // What you want to receive
-        },
-      });
-
-      await loadTradesData();
-    } catch (error) {
-      console.error('Error setting up counter-offer:', error);
-      toast.error('Failed to set up counter-offer');
-    }
-  };
 
   // ============ PROFILE FUNCTIONS ============
   const loadProfile = async () => {
@@ -840,7 +803,8 @@ export default function Community() {
                     pending: 'text-yellow-400',
                   };
 
-                  const canViewDetails = !isSender && trade.status === 'pending';
+                  // Both users can view details for pending trades
+                  const canViewDetails = trade.status === 'pending';
 
                   return (
                     <div
@@ -871,7 +835,7 @@ export default function Community() {
 
                       {canViewDetails && (
                         <p className="text-xs text-blue-400 text-center pt-1">
-                          Tap to view details
+                          {isSender ? 'Tap to view/edit' : 'Tap to view details'}
                         </p>
                       )}
 
@@ -950,21 +914,9 @@ export default function Community() {
           onClose={() => setSelectedTrade(null)}
           onAccept={handleAcceptTrade}
           onDecline={handleDeclineTrade}
-          onCounterOffer={handleCounterOffer}
-        />
-      )}
-
-      {/* Counter Offer Creator */}
-      {counterOfferData && (
-        <TradeCreator
-          receiverId={counterOfferData.receiverId}
-          receiverUsername={counterOfferData.receiverUsername}
-          receiverCollection={counterOfferData.receiverCollection}
-          onClose={() => setCounterOfferData(null)}
-          onTradeCreated={() => {
-            setCounterOfferData(null);
+          onTradeUpdated={() => {
+            setSelectedTrade(null);
             loadTradesData();
-            toast.success('Counter offer sent!');
           }}
         />
       )}

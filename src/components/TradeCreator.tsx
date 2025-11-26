@@ -3,7 +3,7 @@ import { X, ArrowLeftRight, ArrowRight, ArrowLeft, Minus, Send, Gift, Loader2, S
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { getUserCollection, getCardsByIds } from '../services/api';
-import { createTrade } from '../services/tradesService';
+import { createTrade, updateTrade } from '../services/tradesService';
 import { Card } from '../types';
 
 interface CollectionItem {
@@ -182,6 +182,11 @@ interface TradeCreatorProps {
   receiverCollection: CollectionItem[];
   onClose: () => void;
   onTradeCreated: () => void;
+  editMode?: boolean;
+  existingTradeId?: string;
+  initialSenderCards?: Card[];
+  initialReceiverCards?: Card[];
+  initialMessage?: string;
 }
 
 type MobileStep = 'want' | 'give' | 'review';
@@ -192,13 +197,18 @@ export default function TradeCreator({
   receiverCollection,
   onClose,
   onTradeCreated,
+  editMode = false,
+  existingTradeId,
+  initialSenderCards = [],
+  initialReceiverCards = [],
+  initialMessage = '',
 }: TradeCreatorProps) {
   const { user } = useAuth();
   const toast = useToast();
   const [myCollection, setMyCollection] = useState<CollectionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState(initialMessage);
 
   const [isGiftMode, setIsGiftMode] = useState(false);
   const [mobileStep, setMobileStep] = useState<MobileStep>('want');
@@ -221,6 +231,57 @@ export default function TradeCreator({
       setMobileStep('want');
     }
   }, [isGiftMode]);
+
+  // Pre-populate cards in edit mode
+  useEffect(() => {
+    if (!editMode || !myCollection.length || !receiverCollection.length) return;
+    if (initialSenderCards.length === 0 && initialReceiverCards.length === 0) return;
+
+    console.log('Pre-populating cards', {
+      initialSenderCards: initialSenderCards.length,
+      initialReceiverCards: initialReceiverCards.length,
+      myCollection: myCollection.length,
+      receiverCollection: receiverCollection.length
+    });
+
+    // Pre-populate sender cards with their quantities
+    const senderMap = new Map<string, SelectedCard>();
+    initialSenderCards.forEach(card => {
+      const collectionItem = myCollection.find(c => c.card.id === card.id);
+      if (collectionItem) {
+        // Find the quantity from trade items if card has quantity property
+        const quantity = (card as any).quantity || 1;
+        console.log('Adding sender card:', card.name, 'qty:', quantity);
+        senderMap.set(card.id, {
+          card: card,
+          quantity: quantity,
+          maxQuantity: collectionItem.quantity,
+        });
+      } else {
+        console.log('Card not found in my collection:', card.name, card.id);
+      }
+    });
+    setMyOfferedCards(senderMap);
+
+    // Pre-populate receiver cards with their quantities
+    const receiverMap = new Map<string, SelectedCard>();
+    initialReceiverCards.forEach(card => {
+      const collectionItem = receiverCollection.find(c => c.card.id === card.id);
+      if (collectionItem) {
+        // Find the quantity from trade items if card has quantity property
+        const quantity = (card as any).quantity || 1;
+        console.log('Adding receiver card:', card.name, 'qty:', quantity);
+        receiverMap.set(card.id, {
+          card: card,
+          quantity: quantity,
+          maxQuantity: collectionItem.quantity,
+        });
+      } else {
+        console.log('Card not found in their collection:', card.name, card.id);
+      }
+    });
+    setWantedCards(receiverMap);
+  }, [editMode, myCollection, receiverCollection, initialSenderCards, initialReceiverCards]);
 
   const loadMyCollection = async () => {
     if (!user) return;
@@ -324,18 +385,32 @@ export default function TradeCreator({
         quantity: item.quantity,
       }));
 
-      await createTrade({
-        senderId: user.id,
-        receiverId,
-        message: message || undefined,
-        senderCards,
-        receiverCards,
-      });
+      if (editMode && existingTradeId) {
+        // Update existing trade
+        await updateTrade({
+          tradeId: existingTradeId,
+          editorId: user.id,
+          message: message || undefined,
+          senderCards,
+          receiverCards,
+        });
+        toast.success('Trade updated!');
+      } else {
+        // Create new trade
+        await createTrade({
+          senderId: user.id,
+          receiverId,
+          message: message || undefined,
+          senderCards,
+          receiverCards,
+        });
+        toast.success('Trade offer sent!');
+      }
 
       onTradeCreated();
     } catch (error) {
-      console.error('Error creating trade:', error);
-      toast.error('Failed to create trade');
+      console.error('Error with trade:', error);
+      toast.error(editMode ? 'Failed to update trade' : 'Failed to create trade');
     } finally {
       setSubmitting(false);
     }
@@ -487,12 +562,6 @@ export default function TradeCreator({
                     placeholder="Add a message..."
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
-                  {message && (
-                    <div className="mt-2 p-2 bg-gray-900/50 rounded border border-gray-700">
-                      <p className="text-xs text-gray-400 mb-1">Preview:</p>
-                      <p className="text-sm text-gray-200">{message}</p>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
@@ -559,7 +628,7 @@ export default function TradeCreator({
           <div className="flex items-center justify-between p-4 border-b border-gray-700">
             <div className="flex items-center gap-3">
               <ArrowLeftRight size={24} className="text-blue-400" />
-              <h2 className="text-xl font-bold">Trade with {receiverUsername}</h2>
+              <h2 className="text-xl font-bold">{editMode ? 'Edit Trade' : `Trade with ${receiverUsername}`}</h2>
               <label className="flex items-center gap-2 ml-4 cursor-pointer">
                 <div
                   className={`relative w-10 h-5 rounded-full transition-colors ${
@@ -638,23 +707,14 @@ export default function TradeCreator({
               )}
             </div>
 
-            <div className="space-y-2 mb-4">
+            <div className="flex items-center gap-4 mb-4">
               <input
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Add a message (optional)"
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
-              {message && (
-                <div className="p-2 bg-gray-900/50 rounded border border-gray-700">
-                  <p className="text-xs text-gray-400 mb-1">Preview:</p>
-                  <p className="text-sm text-gray-200">{message}</p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-4">
               <button
                 onClick={onClose}
                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
