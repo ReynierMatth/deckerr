@@ -150,6 +150,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const [isAddingAll, setIsAddingAll] = useState(false);
   const [cardFaceIndex, setCardFaceIndex] = useState<Map<string, number>>(new Map());
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
+  const [hoverSource, setHoverSource] = useState<'search' | 'deck' | null>(null);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
 
   // Load user collection on component mount
@@ -623,8 +624,14 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                     className={`bg-gray-800 rounded-lg p-3 flex items-center gap-3 hover:bg-gray-750 transition-colors cursor-pointer ${
                       !isValidForCommander ? 'border border-yellow-500/50' : ''
                     }`}
-                    onMouseEnter={() => setHoveredCard(card)}
-                    onMouseLeave={() => setHoveredCard(null)}
+                    onMouseEnter={() => {
+                      setHoveredCard(card);
+                      setHoverSource('search');
+                    }}
+                    onMouseLeave={() => {
+                      setHoveredCard(null);
+                      setHoverSource(null);
+                    }}
                     onClick={() => setSelectedCard(card)}
                   >
                     {/* Card Thumbnail */}
@@ -842,8 +849,14 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                       className={`flex items-center gap-3 p-2 rounded-lg bg-gray-700 cursor-pointer hover:bg-gray-650 transition-colors ${
                         !isValidForCommander ? 'border border-yellow-500/50' : ''
                       }`}
-                      onMouseEnter={() => setHoveredCard(card)}
-                      onMouseLeave={() => setHoveredCard(null)}
+                      onMouseEnter={() => {
+                        setHoveredCard(card);
+                        setHoverSource('deck');
+                      }}
+                      onMouseLeave={() => {
+                        setHoveredCard(null);
+                        setHoverSource(null);
+                      }}
                       onClick={() => setSelectedCard(card)}
                     >
                       <img
@@ -979,8 +992,11 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         const displayTypeLine = currentFace?.type_line || hoveredCard.type_line;
         const displayOracleText = currentFace?.oracle_text || hoveredCard.oracle_text;
 
+        // Position preview based on hover source
+        const positionClass = hoverSource === 'deck' ? 'left-8' : 'right-8';
+
         return (
-          <div className="hidden lg:block fixed top-1/2 right-8 transform -translate-y-1/2 z-30 pointer-events-none">
+          <div className={`hidden lg:block fixed top-1/2 ${positionClass} transform -translate-y-1/2 z-30 pointer-events-none`}>
             <div className="bg-gray-800 rounded-lg shadow-2xl p-4 max-w-md">
               <div className="relative">
                 <img
