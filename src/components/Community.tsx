@@ -102,6 +102,126 @@ export default function Community() {
     }
   }, [user]);
 
+  // ============ REALTIME SUBSCRIPTIONS ============
+  // Subscribe to trade changes
+  useEffect(() => {
+    if (!user) return;
+
+    const tradesChannel = supabase
+      .channel('trades-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'trades',
+        },
+        (payload: any) => {
+          // Filter for trades involving this user
+          const newData = payload.new || payload.old;
+          if (newData && (newData.user1_id === user.id || newData.user2_id === user.id)) {
+            console.log('Trade change:', payload);
+            loadTradesData();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(tradesChannel);
+    };
+  }, [user]);
+
+  // Subscribe to friendship changes
+  useEffect(() => {
+    if (!user) return;
+
+    const friendshipsChannel = supabase
+      .channel('friendships-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'friendships',
+        },
+        (payload: any) => {
+          // Filter for friendships involving this user
+          const newData = payload.new || payload.old;
+          if (newData && (newData.requester_id === user.id || newData.addressee_id === user.id)) {
+            console.log('Friendship change:', payload);
+            loadFriendsData();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(friendshipsChannel);
+    };
+  }, [user]);
+
+  // Subscribe to profile changes (for visibility updates)
+  useEffect(() => {
+    if (!user) return;
+
+    const profilesChannel = supabase
+      .channel('profiles-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+        },
+        (payload: any) => {
+          console.log('Profile change:', payload);
+          // Reload public users if a profile's visibility changed
+          if (payload.new && payload.old && payload.new.collection_visibility !== payload.old.collection_visibility) {
+            loadPublicUsers();
+          }
+          // Reload own profile if it's the current user
+          if (payload.new && payload.new.id === user.id) {
+            loadProfile();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profilesChannel);
+    };
+  }, [user]);
+
+  // Subscribe to collection changes when viewing someone's collection
+  useEffect(() => {
+    if (!user || !selectedUser) return;
+
+    const collectionsChannel = supabase
+      .channel(`collections-${selectedUser.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'collections',
+        },
+        (payload: any) => {
+          // Filter for the selected user's collections
+          const data = payload.new || payload.old;
+          if (data && data.user_id === selectedUser.id) {
+            console.log('Collection change for viewed user:', payload);
+            loadUserCollection(selectedUser.id);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(collectionsChannel);
+    };
+  }, [user, selectedUser]);
+
   const loadAllData = async () => {
     if (!user) return;
     setLoading(true);
@@ -502,13 +622,13 @@ export default function Community() {
 
   // ============ MAIN VIEW ============
   return (
-    <div className="relative bg-gray-900 text-white md:min-h-screen">
-      {/* Header */}
-      <div className="sticky top-0 bg-gray-900/95 backdrop-blur border-b border-gray-800 p-3 z-10">
-        <h1 className="text-xl font-bold mb-3">Community</h1>
+    <div className="relative bg-gray-900 text-white p-3 sm:p-6 md:min-h-screen">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <h1 className="text-2xl md:text-3xl font-bold mb-4 md:mb-6">Community</h1>
 
-        {/* Tabs - Scrollable on mobile */}
-        <div className="flex gap-1 overflow-x-auto pb-1 -mx-3 px-3 scrollbar-hide">
+        {/* Tabs */}
+        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide mb-4 md:mb-6">
           {[
             { id: 'browse' as Tab, label: 'Browse', icon: Globe },
             { id: 'friends' as Tab, label: `Friends`, count: friends.length, icon: Users },
@@ -536,10 +656,7 @@ export default function Community() {
             </button>
           ))}
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="p-3">
         {/* ============ BROWSE TAB ============ */}
         {activeTab === 'browse' && (
           <div className="space-y-3">
@@ -907,31 +1024,31 @@ export default function Community() {
             </button>
           </div>
         )}
-      </div>
 
-      {/* Trade Detail Modal */}
-      {selectedTrade && (
-        <TradeDetail
-          trade={selectedTrade}
-          onClose={() => setSelectedTrade(null)}
-          onAccept={handleAcceptTrade}
-          onDecline={handleDeclineTrade}
-          onTradeUpdated={() => {
-            setSelectedTrade(null);
-            loadTradesData();
-          }}
+        {/* Trade Detail Modal */}
+        {selectedTrade && (
+          <TradeDetail
+            trade={selectedTrade}
+            onClose={() => setSelectedTrade(null)}
+            onAccept={handleAcceptTrade}
+            onDecline={handleDeclineTrade}
+            onTradeUpdated={() => {
+              setSelectedTrade(null);
+              loadTradesData();
+            }}
+          />
+        )}
+
+        {/* Confirm Modal */}
+        <ConfirmModal
+          isOpen={confirmModal.isOpen}
+          onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+          onConfirm={confirmModal.onConfirm}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          variant={confirmModal.variant}
         />
-      )}
-
-      {/* Confirm Modal */}
-      <ConfirmModal
-        isOpen={confirmModal.isOpen}
-        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
-        onConfirm={confirmModal.onConfirm}
-        title={confirmModal.title}
-        message={confirmModal.message}
-        variant={confirmModal.variant}
-      />
+      </div>
     </div>
   );
 }
