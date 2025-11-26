@@ -26,6 +26,7 @@ import {
 import { getUserCollection, getCardsByIds } from '../services/api';
 import { Card } from '../types';
 import TradeCreator from './TradeCreator';
+import TradeDetail from './TradeDetail';
 import ConfirmModal from './ConfirmModal';
 
 interface UserProfile {
@@ -79,6 +80,13 @@ export default function Community() {
   const [tradeHistory, setTradeHistory] = useState<Trade[]>([]);
   const [tradeCardDetails, setTradeCardDetails] = useState<Map<string, Card>>(new Map());
   const [processingTradeId, setProcessingTradeId] = useState<string | null>(null);
+  const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
+  const [counterOfferData, setCounterOfferData] = useState<{
+    receiverId: string;
+    receiverUsername: string;
+    receiverCollection: CollectionItem[];
+    initialOffer?: { senderCards: Card[]; receiverCards: Card[] };
+  } | null>(null);
 
   // Profile state
   const [username, setUsername] = useState('');
@@ -310,6 +318,38 @@ export default function Community() {
     });
   };
 
+  const handleCounterOffer = async (trade: Trade, senderCards: Card[], receiverCards: Card[]) => {
+    try {
+      // Decline the original trade
+      await declineTrade(trade.id);
+
+      // Load the sender's collection for the counter-offer
+      const collectionMap = await getUserCollection(trade.sender_id);
+      const cardIds = Array.from(collectionMap.keys());
+      const cards = await getCardsByIds(cardIds);
+      const senderCollection = cards.map((card) => ({
+        card,
+        quantity: collectionMap.get(card.id) || 0,
+      }));
+
+      // Set up counter-offer data (swap sender and receiver)
+      setCounterOfferData({
+        receiverId: trade.sender_id,
+        receiverUsername: trade.sender?.username || 'User',
+        receiverCollection: senderCollection,
+        initialOffer: {
+          senderCards: receiverCards, // What you want to give back
+          receiverCards: senderCards, // What you want to receive
+        },
+      });
+
+      await loadTradesData();
+    } catch (error) {
+      console.error('Error setting up counter-offer:', error);
+      toast.error('Failed to set up counter-offer');
+    }
+  };
+
   // ============ PROFILE FUNCTIONS ============
   const loadProfile = async () => {
     if (!user) return;
@@ -348,15 +388,34 @@ export default function Community() {
   };
 
   // ============ RENDER HELPERS ============
+  const calculateTradeItemsPrice = (items: TradeItem[] | undefined, ownerId: string): number => {
+    const ownerItems = items?.filter((i) => i.owner_id === ownerId) || [];
+    return ownerItems.reduce((total, item) => {
+      const card = tradeCardDetails.get(item.card_id);
+      const price = card?.prices?.usd ? parseFloat(card.prices.usd) : 0;
+      return total + (price * item.quantity);
+    }, 0);
+  };
+
   const renderTradeItems = (items: TradeItem[] | undefined, ownerId: string, label: string) => {
     const ownerItems = items?.filter((i) => i.owner_id === ownerId) || [];
+    const totalPrice = calculateTradeItemsPrice(items, ownerId);
+
     if (ownerItems.length === 0) {
-      return <p className="text-gray-500 text-xs">{label}: Gift</p>;
+      return (
+        <div>
+          <p className="text-gray-400 text-xs mb-1">{label}:</p>
+          <p className="text-gray-500 text-xs">Gift</p>
+        </div>
+      );
     }
 
     return (
       <div>
-        <p className="text-gray-400 text-xs mb-1">{label}:</p>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-gray-400 text-xs">{label}:</p>
+          <p className="text-green-400 text-xs font-semibold">${totalPrice.toFixed(2)}</p>
+        </div>
         <div className="flex flex-wrap gap-1">
           {ownerItems.map((item) => {
             const card = tradeCardDetails.get(item.card_id);
@@ -781,8 +840,16 @@ export default function Community() {
                     pending: 'text-yellow-400',
                   };
 
+                  const canViewDetails = !isSender && trade.status === 'pending';
+
                   return (
-                    <div key={trade.id} className="bg-gray-800 rounded-lg p-3 space-y-2">
+                    <div
+                      key={trade.id}
+                      className={`bg-gray-800 rounded-lg p-3 space-y-2 ${
+                        canViewDetails ? 'cursor-pointer hover:bg-gray-750 transition-colors' : ''
+                      }`}
+                      onClick={() => canViewDetails && setSelectedTrade(trade)}
+                    >
                       {/* Header */}
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 min-w-0">
@@ -802,36 +869,22 @@ export default function Community() {
                         {renderTradeItems(trade.items, trade.receiver_id, isSender ? 'Get' : 'Send')}
                       </div>
 
-                      {/* Actions */}
-                      {tradesSubTab === 'pending' && (
-                        <div className="flex gap-2 pt-2 border-t border-gray-700">
-                          {isSender ? (
-                            <button
-                              onClick={() => handleCancelTrade(trade.id)}
-                              disabled={processingTradeId === trade.id}
-                              className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-gray-700 rounded-lg text-sm"
-                            >
-                              <X size={14} /> Cancel
-                            </button>
-                          ) : (
-                            <>
-                              <button
-                                onClick={() => handleAcceptTrade(trade.id)}
-                                disabled={processingTradeId === trade.id}
-                                className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-green-600 rounded-lg text-sm"
-                              >
-                                {processingTradeId === trade.id ? <Loader2 className="animate-spin" size={14} /> : <Check size={14} />}
-                                Accept
-                              </button>
-                              <button
-                                onClick={() => handleDeclineTrade(trade.id)}
-                                disabled={processingTradeId === trade.id}
-                                className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-red-600 rounded-lg text-sm"
-                              >
-                                <X size={14} /> Decline
-                              </button>
-                            </>
-                          )}
+                      {canViewDetails && (
+                        <p className="text-xs text-blue-400 text-center pt-1">
+                          Tap to view details
+                        </p>
+                      )}
+
+                      {/* Actions - Only show quick actions for sender (cancel) */}
+                      {tradesSubTab === 'pending' && isSender && (
+                        <div className="flex gap-2 pt-2 border-t border-gray-700" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => handleCancelTrade(trade.id)}
+                            disabled={processingTradeId === trade.id}
+                            className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-gray-700 rounded-lg text-sm"
+                          >
+                            <X size={14} /> Cancel
+                          </button>
                         </div>
                       )}
                     </div>
@@ -889,6 +942,32 @@ export default function Community() {
           </div>
         )}
       </div>
+
+      {/* Trade Detail Modal */}
+      {selectedTrade && (
+        <TradeDetail
+          trade={selectedTrade}
+          onClose={() => setSelectedTrade(null)}
+          onAccept={handleAcceptTrade}
+          onDecline={handleDeclineTrade}
+          onCounterOffer={handleCounterOffer}
+        />
+      )}
+
+      {/* Counter Offer Creator */}
+      {counterOfferData && (
+        <TradeCreator
+          receiverId={counterOfferData.receiverId}
+          receiverUsername={counterOfferData.receiverUsername}
+          receiverCollection={counterOfferData.receiverCollection}
+          onClose={() => setCounterOfferData(null)}
+          onTradeCreated={() => {
+            setCounterOfferData(null);
+            loadTradesData();
+            toast.success('Counter offer sent!');
+          }}
+        />
+      )}
 
       {/* Confirm Modal */}
       <ConfirmModal
