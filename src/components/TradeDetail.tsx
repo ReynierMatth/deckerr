@@ -151,24 +151,8 @@ export default function TradeDetail({
     }
   };
 
-  const handleCounterOffer = async () => {
-    try {
-      // For counter-offer, load the other user's collection
-      const collectionMap = await getUserCollection(otherUserId);
-      const cardIds = Array.from(collectionMap.keys());
-      const cards = await getCardsByIds(cardIds);
-      const collection = cards.map((card) => ({
-        card,
-        quantity: collectionMap.get(card.id) || 0,
-      }));
-
-      setEditReceiverCollection(collection);
-      setShowEditMode('counter');
-    } catch (error) {
-      console.error('Error loading collection for counter-offer:', error);
-      toast.error('Failed to load collection');
-    }
-  };
+  // In the symmetric model, counter-offer is the same as edit
+  const handleCounterOffer = handleEdit;
 
   // senderCards = myCards, receiverCards = theirCards (already calculated correctly)
   const yourCards = senderCards;
@@ -176,15 +160,13 @@ export default function TradeDetail({
   const yourPrice = calculateTotalPrice(yourCards);
   const theirPrice = calculateTotalPrice(theirCards);
 
-  // For edit mode, determine initial cards based on mode
+  // For edit mode, pre-populate with current cards
+  // In the symmetric model, both edit and counter-offer use the same perspective:
+  // - Your cards (what you're offering)
+  // - Their cards (what you want)
   // Include quantity in the card object so TradeCreator can preserve it
-  const isCounterOffer = showEditMode === 'counter';
-  const editInitialSenderCards = isCounterOffer
-    ? theirCards.map(c => ({ ...c.card, quantity: c.quantity }))
-    : yourCards.map(c => ({ ...c.card, quantity: c.quantity }));
-  const editInitialReceiverCards = isCounterOffer
-    ? yourCards.map(c => ({ ...c.card, quantity: c.quantity }))
-    : theirCards.map(c => ({ ...c.card, quantity: c.quantity }));
+  const editInitialSenderCards = yourCards.map(c => ({ ...c.card, quantity: c.quantity }));
+  const editInitialReceiverCards = theirCards.map(c => ({ ...c.card, quantity: c.quantity }));
 
   if (showEditMode) {
     return (
@@ -416,10 +398,20 @@ export default function TradeDetail({
                 </button>
               </>
             ) : trade.editor_id === user?.id ? (
-              /* User made the last edit - waiting for response */
-              <p className="text-center text-gray-400 text-sm py-2">
-                Waiting for {otherUser?.username} to respond...
-              </p>
+              /* User made the last edit - can still edit while waiting for response */
+              <>
+                <p className="text-center text-gray-400 text-sm py-2">
+                  Waiting for {otherUser?.username} to respond...
+                </p>
+                <button
+                  onClick={handleEdit}
+                  disabled={processing}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded-lg font-medium transition"
+                >
+                  <Edit size={18} />
+                  Modify Your Offer
+                </button>
+              </>
             ) : (
               /* No editor yet (initial trade) */
               <>
