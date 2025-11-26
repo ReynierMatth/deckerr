@@ -794,8 +794,10 @@ export default function Community() {
             ) : (
               <div className="space-y-3">
                 {(tradesSubTab === 'pending' ? pendingTrades : tradeHistory).map((trade) => {
-                  const isSender = trade.sender_id === user?.id;
-                  const otherUser = isSender ? trade.receiver : trade.sender;
+                  const isUser1 = trade.user1_id === user?.id;
+                  const myUserId = user?.id || '';
+                  const otherUserId = isUser1 ? trade.user2_id : trade.user1_id;
+                  const otherUser = isUser1 ? trade.user2 : trade.user1;
                   const statusColors: Record<string, string> = {
                     accepted: 'text-green-400',
                     declined: 'text-red-400',
@@ -819,7 +821,7 @@ export default function Community() {
                         <div className="flex items-center gap-2 min-w-0">
                           <ArrowLeftRight size={16} className="text-blue-400 flex-shrink-0" />
                           <span className="text-sm truncate">
-                            {isSender ? 'To' : 'From'}: <strong>{otherUser?.username}</strong>
+                            With: <strong>{otherUser?.username}</strong>
                           </span>
                         </div>
                         <span className={`text-xs capitalize ${statusColors[trade.status]}`}>
@@ -829,18 +831,18 @@ export default function Community() {
 
                       {/* Items */}
                       <div className="grid grid-cols-2 gap-2 text-sm">
-                        {renderTradeItems(trade.items, trade.sender_id, isSender ? 'Give' : 'Receive')}
-                        {renderTradeItems(trade.items, trade.receiver_id, isSender ? 'Get' : 'Send')}
+                        {renderTradeItems(trade.items, myUserId, 'You Give')}
+                        {renderTradeItems(trade.items, otherUserId, 'You Get')}
                       </div>
 
                       {canViewDetails && (
                         <p className="text-xs text-blue-400 text-center pt-1">
-                          {isSender ? 'Tap to view/edit' : 'Tap to view details'}
+                          Tap to view details
                         </p>
                       )}
 
-                      {/* Actions - Only show quick actions for sender (cancel) */}
-                      {tradesSubTab === 'pending' && isSender && (
+                      {/* Actions - Allow any user to cancel pending trade */}
+                      {tradesSubTab === 'pending' && (
                         <div className="flex gap-2 pt-2 border-t border-gray-700" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => handleCancelTrade(trade.id)}

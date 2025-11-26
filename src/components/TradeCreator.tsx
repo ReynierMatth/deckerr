@@ -375,12 +375,12 @@ export default function TradeCreator({
 
     setSubmitting(true);
     try {
-      const senderCards = Array.from(myOfferedCards.values()).map((item) => ({
+      const myCards = Array.from(myOfferedCards.values()).map((item) => ({
         cardId: item.card.id,
         quantity: item.quantity,
       }));
 
-      const receiverCards = Array.from(wantedCards.values()).map((item) => ({
+      const theirCards = Array.from(wantedCards.values()).map((item) => ({
         cardId: item.card.id,
         quantity: item.quantity,
       }));
@@ -391,18 +391,18 @@ export default function TradeCreator({
           tradeId: existingTradeId,
           editorId: user.id,
           message: message || undefined,
-          senderCards,
-          receiverCards,
+          myCards,
+          theirCards,
         });
         toast.success('Trade updated!');
       } else {
         // Create new trade
         await createTrade({
-          senderId: user.id,
-          receiverId,
+          user1Id: user.id,
+          user2Id: receiverId,
           message: message || undefined,
-          senderCards,
-          receiverCards,
+          user1Cards: myCards,
+          user2Cards: theirCards,
         });
         toast.success('Trade offer sent!');
       }

@@ -10,16 +10,16 @@ export interface TradeItem {
 
 export interface Trade {
   id: string;
-  sender_id: string;
-  receiver_id: string;
+  user1_id: string;
+  user2_id: string;
   status: 'pending' | 'accepted' | 'declined' | 'cancelled';
   message: string | null;
   created_at: string | null;
   updated_at: string | null;
   version: number;
   editor_id: string | null;
-  sender?: { username: string | null };
-  receiver?: { username: string | null };
+  user1?: { username: string | null };
+  user2?: { username: string | null };
   items?: TradeItem[];
 }
 
@@ -43,19 +43,19 @@ export interface TradeHistoryItem {
 }
 
 export interface CreateTradeParams {
-  senderId: string;
-  receiverId: string;
+  user1Id: string;
+  user2Id: string;
   message?: string;
-  senderCards: { cardId: string; quantity: number }[];
-  receiverCards: { cardId: string; quantity: number }[];
+  user1Cards: { cardId: string; quantity: number }[];
+  user2Cards: { cardId: string; quantity: number }[];
 }
 
 export interface UpdateTradeParams {
   tradeId: string;
   editorId: string;
   message?: string;
-  senderCards: { cardId: string; quantity: number }[];
-  receiverCards: { cardId: string; quantity: number }[];
+  myCards: { cardId: string; quantity: number }[];
+  theirCards: { cardId: string; quantity: number }[];
 }
 
 // Get all trades for a user
@@ -64,11 +64,11 @@ export async function getTrades(userId: string): Promise<Trade[]> {
     .from('trades')
     .select(`
       *,
-      sender:profiles!trades_sender_id_fkey(username),
-      receiver:profiles!trades_receiver_id_fkey(username),
+      user1:profiles!trades_user1_id_fkey(username),
+      user2:profiles!trades_user2_id_fkey(username),
       items:trade_items(*)
     `)
-    .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+    .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -81,12 +81,12 @@ export async function getPendingTrades(userId: string): Promise<Trade[]> {
     .from('trades')
     .select(`
       *,
-      sender:profiles!trades_sender_id_fkey(username),
-      receiver:profiles!trades_receiver_id_fkey(username),
+      user1:profiles!trades_user1_id_fkey(username),
+      user2:profiles!trades_user2_id_fkey(username),
       items:trade_items(*)
     `)
     .eq('status', 'pending')
-    .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+    .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -99,8 +99,8 @@ export async function getTradeById(tradeId: string): Promise<Trade | null> {
     .from('trades')
     .select(`
       *,
-      sender:profiles!trades_sender_id_fkey(username),
-      receiver:profiles!trades_receiver_id_fkey(username),
+      user1:profiles!trades_user1_id_fkey(username),
+      user2:profiles!trades_user2_id_fkey(username),
       items:trade_items(*)
     `)
     .eq('id', tradeId)
@@ -112,39 +112,40 @@ export async function getTradeById(tradeId: string): Promise<Trade | null> {
 
 // Create a new trade with items
 export async function createTrade(params: CreateTradeParams): Promise<Trade> {
-  const { senderId, receiverId, message, senderCards, receiverCards } = params;
+  const { user1Id, user2Id, message, user1Cards, user2Cards } = params;
 
   // Create the trade
   const { data: trade, error: tradeError } = await supabase
     .from('trades')
     .insert({
-      sender_id: senderId,
-      receiver_id: receiverId,
+      user1_id: user1Id,
+      user2_id: user2Id,
       message,
       status: 'pending',
+      // editor_id starts as null - gets set when someone edits the trade
     })
     .select()
     .single();
 
   if (tradeError) throw tradeError;
 
-  // Add sender's cards
-  const senderItems = senderCards.map((card) => ({
+  // Add user1's cards
+  const user1Items = user1Cards.map((card) => ({
     trade_id: trade.id,
-    owner_id: senderId,
+    owner_id: user1Id,
     card_id: card.cardId,
     quantity: card.quantity,
   }));
 
-  // Add receiver's cards (what sender wants)
-  const receiverItems = receiverCards.map((card) => ({
+  // Add user2's cards
+  const user2Items = user2Cards.map((card) => ({
     trade_id: trade.id,
-    owner_id: receiverId,
+    owner_id: user2Id,
     card_id: card.cardId,
     quantity: card.quantity,
   }));
 
-  const allItems = [...senderItems, ...receiverItems];
+  const allItems = [...user1Items, ...user2Items];
 
   if (allItems.length > 0) {
     const { error: itemsError } = await supabase
@@ -199,11 +200,11 @@ export async function getTradeHistory(userId: string): Promise<Trade[]> {
     .from('trades')
     .select(`
       *,
-      sender:profiles!trades_sender_id_fkey(username),
-      receiver:profiles!trades_receiver_id_fkey(username),
+      user1:profiles!trades_user1_id_fkey(username),
+      user2:profiles!trades_user2_id_fkey(username),
       items:trade_items(*)
     `)
-    .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+    .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
     .in('status', ['accepted', 'declined', 'cancelled'])
     .order('updated_at', { ascending: false })
     .limit(50);
@@ -214,18 +215,23 @@ export async function getTradeHistory(userId: string): Promise<Trade[]> {
 
 // Update an existing trade (for edits and counter-offers)
 export async function updateTrade(params: UpdateTradeParams): Promise<Trade> {
-  const { tradeId, editorId, message, senderCards, receiverCards } = params;
+  const { tradeId, editorId, message, myCards, theirCards } = params;
 
   // Get current trade info
   const { data: currentTrade, error: tradeError } = await supabase
     .from('trades')
-    .select('version, sender_id, receiver_id')
+    .select('version, user1_id, user2_id')
     .eq('id', tradeId)
     .single();
 
   if (tradeError) throw tradeError;
 
   const newVersion = (currentTrade.version || 1) + 1;
+
+  // Determine the other user's ID
+  const otherUserId = currentTrade.user1_id === editorId
+    ? currentTrade.user2_id
+    : currentTrade.user1_id;
 
   // Save current state to history before updating
   const { data: historyEntry, error: historyError } = await supabase
@@ -276,22 +282,22 @@ export async function updateTrade(params: UpdateTradeParams): Promise<Trade> {
   // Delete existing items
   await supabase.from('trade_items').delete().eq('trade_id', tradeId);
 
-  // Add new items
-  const senderItems = senderCards.map((card) => ({
+  // Add new items (myCards belong to editor, theirCards belong to other user)
+  const myItems = myCards.map((card) => ({
     trade_id: tradeId,
-    owner_id: currentTrade.sender_id,
+    owner_id: editorId,
     card_id: card.cardId,
     quantity: card.quantity,
   }));
 
-  const receiverItems = receiverCards.map((card) => ({
+  const theirItems = theirCards.map((card) => ({
     trade_id: tradeId,
-    owner_id: currentTrade.receiver_id,
+    owner_id: otherUserId,
     card_id: card.cardId,
     quantity: card.quantity,
   }));
 
-  const allItems = [...senderItems, ...receiverItems];
+  const allItems = [...myItems, ...theirItems];
 
   if (allItems.length > 0) {
     const { error: itemsError } = await supabase

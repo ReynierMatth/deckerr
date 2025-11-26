@@ -50,9 +50,11 @@ export default function TradeDetail({
   const [showEditMode, setShowEditMode] = useState(false);
   const [editReceiverCollection, setEditReceiverCollection] = useState<CollectionItem[]>([]);
 
-  const isSender = trade.sender_id === user?.id;
-  const isReceiver = trade.receiver_id === user?.id;
-  const otherUser = isSender ? trade.receiver : trade.sender;
+  const isUser1 = trade.user1_id === user?.id;
+  const isUser2 = trade.user2_id === user?.id;
+  const otherUser = isUser1 ? trade.user2 : trade.user1;
+  const myUserId = user?.id || '';
+  const otherUserId = isUser1 ? trade.user2_id : trade.user1_id;
 
   useEffect(() => {
     loadTradeCards();
@@ -73,22 +75,22 @@ export default function TradeDetail({
       const cardMap = new Map<string, Card>();
       cards.forEach(card => cardMap.set(card.id, card));
 
-      const senderItems: TradeCardItem[] = [];
-      const receiverItems: TradeCardItem[] = [];
+      const myItems: TradeCardItem[] = [];
+      const theirItems: TradeCardItem[] = [];
 
       trade.items?.forEach(item => {
         const card = cardMap.get(item.card_id);
         if (!card) return;
 
-        if (item.owner_id === trade.sender_id) {
-          senderItems.push({ card, quantity: item.quantity });
+        if (item.owner_id === myUserId) {
+          myItems.push({ card, quantity: item.quantity });
         } else {
-          receiverItems.push({ card, quantity: item.quantity });
+          theirItems.push({ card, quantity: item.quantity });
         }
       });
 
-      setSenderCards(senderItems);
-      setReceiverCards(receiverItems);
+      setSenderCards(myItems);
+      setReceiverCards(theirItems);
     } catch (error) {
       console.error('Error loading trade cards:', error);
       toast.error('Failed to load trade details');
@@ -133,7 +135,6 @@ export default function TradeDetail({
   const handleEdit = async () => {
     try {
       // Load the other user's collection for editing
-      const otherUserId = isSender ? trade.receiver_id : trade.sender_id;
       const collectionMap = await getUserCollection(otherUserId);
       const cardIds = Array.from(collectionMap.keys());
       const cards = await getCardsByIds(cardIds);
@@ -152,8 +153,8 @@ export default function TradeDetail({
 
   const handleCounterOffer = async () => {
     try {
-      // For counter-offer, load sender's collection and swap the cards
-      const collectionMap = await getUserCollection(trade.sender_id);
+      // For counter-offer, load the other user's collection
+      const collectionMap = await getUserCollection(otherUserId);
       const cardIds = Array.from(collectionMap.keys());
       const cards = await getCardsByIds(cardIds);
       const collection = cards.map((card) => ({
@@ -169,13 +170,11 @@ export default function TradeDetail({
     }
   };
 
-  const senderPrice = calculateTotalPrice(senderCards);
-  const receiverPrice = calculateTotalPrice(receiverCards);
-
-  const yourCards = isSender ? senderCards : receiverCards;
-  const theirCards = isSender ? receiverCards : senderCards;
-  const yourPrice = isSender ? senderPrice : receiverPrice;
-  const theirPrice = isSender ? receiverPrice : senderPrice;
+  // senderCards = myCards, receiverCards = theirCards (already calculated correctly)
+  const yourCards = senderCards;
+  const theirCards = receiverCards;
+  const yourPrice = calculateTotalPrice(yourCards);
+  const theirPrice = calculateTotalPrice(theirCards);
 
   // For edit mode, determine initial cards based on mode
   // Include quantity in the card object so TradeCreator can preserve it
@@ -190,7 +189,7 @@ export default function TradeDetail({
   if (showEditMode) {
     return (
       <TradeCreator
-        receiverId={isSender ? trade.receiver_id : trade.sender_id}
+        receiverId={otherUserId}
         receiverUsername={otherUser?.username || 'User'}
         receiverCollection={editReceiverCollection}
         onClose={() => {
@@ -221,7 +220,7 @@ export default function TradeDetail({
             <div>
               <h2 className="text-lg font-bold">Trade Details {trade.version > 1 && `(v${trade.version})`}</h2>
               <p className="text-sm text-gray-400">
-                {isSender ? 'To' : 'From'}: {otherUser?.username}
+                With: {otherUser?.username}
               </p>
             </div>
           </div>
@@ -246,7 +245,7 @@ export default function TradeDetail({
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="font-semibold text-green-400">
-                      {isSender ? 'You Give' : 'You Receive'}
+                      You Give
                     </h3>
                     <div className="flex items-center gap-1 text-green-400 text-sm">
                       <DollarSign size={14} />
@@ -285,7 +284,7 @@ export default function TradeDetail({
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="font-semibold text-blue-400">
-                      {isSender ? 'You Receive' : 'They Give'}
+                      You Receive
                     </h3>
                     <div className="flex items-center gap-1 text-blue-400 text-sm">
                       <DollarSign size={14} />
@@ -330,13 +329,13 @@ export default function TradeDetail({
               )}
 
               {/* Price Difference */}
-              {!loading && (senderPrice > 0 || receiverPrice > 0) && (
+              {!loading && (yourPrice > 0 || theirPrice > 0) && (
                 <div className="p-3 bg-gray-800 rounded-lg">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-400">Value Difference:</span>
-                    <span className={Math.abs(senderPrice - receiverPrice) > 5 ? 'text-yellow-400' : 'text-gray-300'}>
-                      ${Math.abs(senderPrice - receiverPrice).toFixed(2)}
-                      {senderPrice > receiverPrice ? ' in sender favor' : senderPrice < receiverPrice ? ' in receiver favor' : ' (balanced)'}
+                    <span className={Math.abs(yourPrice - theirPrice) > 5 ? 'text-yellow-400' : 'text-gray-300'}>
+                      ${Math.abs(yourPrice - theirPrice).toFixed(2)}
+                      {yourPrice > theirPrice ? ' in your favor' : yourPrice < theirPrice ? ' in their favor' : ' (balanced)'}
                     </span>
                   </div>
                 </div>
@@ -422,9 +421,10 @@ export default function TradeDetail({
                 Waiting for {otherUser?.username} to respond...
               </p>
             ) : (
-              /* No editor yet (version 1) - original flow */
+              /* No editor yet (initial trade) */
               <>
-                {isSender ? (
+                {isUser1 ? (
+                  /* User1 (initiator) can edit their initial offer */
                   <button
                     onClick={handleEdit}
                     disabled={processing}
@@ -434,6 +434,7 @@ export default function TradeDetail({
                     Edit Trade Offer
                   </button>
                 ) : (
+                  /* User2 (partner) can accept/decline/counter */
                   <>
                     <div className="flex gap-2">
                       <button
