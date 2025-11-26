@@ -442,11 +442,8 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
   const validation = validateDeck(currentDeck);
 
-  // Commander color identity validation
+  // Commander color identity validation (for land suggestions)
   const commanderColors = deckFormat === 'commander' ? getCommanderColors(commander) : [];
-  const invalidCards = deckFormat === 'commander' && commander
-    ? selectedCards.filter(({ card }) => !isCardValidForCommander(card, commanderColors))
-    : [];
 
   const deckSize = selectedCards.reduce((acc, curr) => acc + curr.quantity, 0);
   const {
@@ -826,26 +823,6 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                       <li key={index}>{error}</li>
                     ))}
                   </ul>
-                </div>
-              )}
-
-              {/* Commander Color Identity Warning */}
-              {deckFormat === 'commander' && commander && invalidCards.length > 0 && (
-                <div className="bg-yellow-500/10 border border-yellow-500 rounded-lg p-3">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="text-yellow-500 flex-shrink-0 mt-0.5" size={16} />
-                    <div className="text-sm">
-                      <p className="text-yellow-400 font-semibold mb-1">Commander Color Identity Warning</p>
-                      <p className="text-yellow-300 text-xs mb-2">
-                        The following cards don't match your commander's color identity:
-                      </p>
-                      <ul className="list-disc list-inside text-yellow-300 text-xs">
-                        {invalidCards.map(({ card }) => (
-                          <li key={card.id}>{card.name}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
                 </div>
               )}
 

@@ -42,6 +42,7 @@ export default function DeckEditor({ deckId, onClose }: DeckEditorProps) {
         const cards = cardEntities.map(entity => ({
           card: scryfallCards.find(c => c.id === entity.card_id) as Card,
           quantity: entity.quantity,
+          is_commander: entity.is_commander,
         }));
 
         setDeck({
