@@ -208,6 +208,7 @@ export default function Community() {
   }, [user]);
 
   // Subscribe to collection changes when viewing someone's collection
+  // Auto-price trigger is disabled, so no more infinite loops!
   useEffect(() => {
     if (!user || !selectedUser) return;
 
@@ -221,10 +222,11 @@ export default function Community() {
           table: 'collections',
         },
         (payload: any) => {
-          // Filter for the selected user's collections
           const data = payload.new || payload.old;
           if (data && data.user_id === selectedUser.id) {
-            console.log('Collection change for viewed user:', payload);
+            console.log('Collection change for viewed user:', payload.eventType);
+            // Reload on any change (INSERT/UPDATE/DELETE)
+            // No more infinite loops since auto-price trigger is disabled
             loadUserCollection(selectedUser.id);
           }
         }
@@ -371,7 +373,13 @@ export default function Community() {
         quantity: result.items.get(card.id) || 0,
       }));
 
-      setSelectedUserCollection(prev => [...prev, ...newCards]);
+      // Deduplicate: only add cards that aren't already in the collection
+      setSelectedUserCollection(prev => {
+        const existingIds = new Set(prev.map(item => item.card.id));
+        const uniqueNewCards = newCards.filter(item => !existingIds.has(item.card.id));
+        return [...prev, ...uniqueNewCards];
+      });
+
       setUserCollectionOffset(prev => prev + PAGE_SIZE);
     } catch (error) {
       console.error('Error loading more cards:', error);

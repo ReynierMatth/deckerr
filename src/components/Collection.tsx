@@ -196,7 +196,13 @@ export default function Collection() {
         quantity: result.items.get(card.id) || 0,
       }));
 
-      setCollection(prev => [...prev, ...newCards]);
+      // Deduplicate: only add cards that aren't already in the collection
+      setCollection(prev => {
+        const existingIds = new Set(prev.map(item => item.card.id));
+        const uniqueNewCards = newCards.filter(item => !existingIds.has(item.card.id));
+        return [...prev, ...uniqueNewCards];
+      });
+
       setOffset(prev => prev + PAGE_SIZE);
     } catch (error) {
       console.error('Error loading more cards:', error);
