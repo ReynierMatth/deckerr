@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, Clock, History, UserPlus, UserMinus, Check, X, Send, Settings, Save, ChevronLeft, RefreshCw, Plus, Minus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -23,7 +23,7 @@ import {
   Trade,
   TradeItem,
 } from '../services/tradesService';
-import { getUserCollection, getCardsByIds } from '../services/api';
+import { getUserCollection, getUserCollectionPaginated, getCardsByIds } from '../services/api';
 import { Card } from '../types';
 import TradeCreator from './TradeCreator';
 import TradeDetail from './TradeDetail';
@@ -50,6 +50,8 @@ const VISIBILITY_OPTIONS = [
   { value: 'private', label: 'Private', description: 'Only you' },
 ] as const;
 
+const PAGE_SIZE = 50;
+
 export default function Community() {
   const { user } = useAuth();
   const toast = useToast();
@@ -62,11 +64,16 @@ export default function Community() {
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [selectedUserCollection, setSelectedUserCollection] = useState<CollectionItem[]>([]);
   const [loadingCollection, setLoadingCollection] = useState(false);
+  const [isLoadingMoreUserCards, setIsLoadingMoreUserCards] = useState(false);
+  const [hasMoreUserCards, setHasMoreUserCards] = useState(false);
+  const [userCollectionOffset, setUserCollectionOffset] = useState(0);
+  const [userCollectionTotalCount, setUserCollectionTotalCount] = useState(0);
   const [showTradeCreator, setShowTradeCreator] = useState(false);
   const [userCollectionSearch, setUserCollectionSearch] = useState('');
   const [hoveredUserCard, setHoveredUserCard] = useState<Card | null>(null);
   const [selectedUserCard, setSelectedUserCard] = useState<CollectionItem | null>(null);
   const [userCardFaceIndex, setUserCardFaceIndex] = useState<Map<string, number>>(new Map());
+  const userCollectionObserverTarget = useRef<HTMLDivElement>(null);
 
   // Friends state
   const [friendsSubTab, setFriendsSubTab] = useState<FriendsSubTab>('list');
@@ -298,18 +305,25 @@ export default function Community() {
 
   const loadUserCollection = async (userId: string) => {
     setLoadingCollection(true);
+    setSelectedUserCollection([]);
+    setUserCollectionOffset(0);
     try {
-      const collectionMap = await getUserCollection(userId);
-      if (collectionMap.size === 0) {
+      const result = await getUserCollectionPaginated(userId, PAGE_SIZE, 0);
+      setUserCollectionTotalCount(result.totalCount);
+      setHasMoreUserCards(result.hasMore);
+
+      if (result.items.size === 0) {
         setSelectedUserCollection([]);
         return;
       }
-      const cardIds = Array.from(collectionMap.keys());
+
+      const cardIds = Array.from(result.items.keys());
       const cards = await getCardsByIds(cardIds);
       setSelectedUserCollection(cards.map((card) => ({
         card,
-        quantity: collectionMap.get(card.id) || 0,
+        quantity: result.items.get(card.id) || 0,
       })));
+      setUserCollectionOffset(PAGE_SIZE);
     } catch (error) {
       console.error('Error loading collection:', error);
       setSelectedUserCollection([]);
@@ -317,6 +331,66 @@ export default function Community() {
       setLoadingCollection(false);
     }
   };
+
+  // Load more cards for infinite scroll in user collection view
+  const loadMoreUserCards = useCallback(async () => {
+    if (!selectedUser || isLoadingMoreUserCards || !hasMoreUserCards) return;
+
+    try {
+      setIsLoadingMoreUserCards(true);
+
+      const result = await getUserCollectionPaginated(
+        selectedUser.id,
+        PAGE_SIZE,
+        userCollectionOffset
+      );
+      setHasMoreUserCards(result.hasMore);
+
+      if (result.items.size === 0) {
+        return;
+      }
+
+      const cardIds = Array.from(result.items.keys());
+      const cards = await getCardsByIds(cardIds);
+
+      const newCards = cards.map(card => ({
+        card,
+        quantity: result.items.get(card.id) || 0,
+      }));
+
+      setSelectedUserCollection(prev => [...prev, ...newCards]);
+      setUserCollectionOffset(prev => prev + PAGE_SIZE);
+    } catch (error) {
+      console.error('Error loading more cards:', error);
+    } finally {
+      setIsLoadingMoreUserCards(false);
+    }
+  }, [selectedUser, userCollectionOffset, hasMoreUserCards, isLoadingMoreUserCards]);
+
+  // Intersection Observer for infinite scroll in user collection view
+  useEffect(() => {
+    if (!selectedUser) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMoreUserCards && !isLoadingMoreUserCards) {
+          loadMoreUserCards();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentTarget = userCollectionObserverTarget.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [selectedUser, hasMoreUserCards, isLoadingMoreUserCards, loadMoreUserCards]);
 
   // ============ FRIENDS FUNCTIONS ============
   const loadFriendsData = async () => {
@@ -617,12 +691,24 @@ export default function Community() {
 
           {/* Collection */}
           <div>
-            <h2 className="text-xl font-semibold mb-4">
-              {userCollectionSearch
-                ? `Found ${filteredUserCollection.length} card(s)`
-                : `Cards (${selectedUserCollection.length} unique, ${selectedUserCollection.reduce((acc, c) => acc + c.quantity, 0)} total)`
-              }
-            </h2>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+              <h2 className="text-xl font-semibold">
+                {userCollectionSearch
+                  ? `Found ${filteredUserCollection.length} card(s)`
+                  : `Cards (${selectedUserCollection.length} unique, ${selectedUserCollection.reduce((acc, c) => acc + c.quantity, 0)} total)`
+                }
+              </h2>
+              {/* Collection Value Summary */}
+              <div className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2">
+                <div className="text-xs text-gray-400 mb-0.5">Total Collection Value</div>
+                <div className="text-lg font-bold text-green-400">
+                  ${(userCollectionSearch ? filteredUserCollection : selectedUserCollection).reduce((total, { card, quantity }) => {
+                    const price = card.prices?.usd ? parseFloat(card.prices.usd) : 0;
+                    return total + (price * quantity);
+                  }, 0).toFixed(2)}
+                </div>
+              </div>
+            </div>
 
             {loadingCollection ? (
               <div className="flex items-center justify-center py-12">
@@ -665,6 +751,12 @@ export default function Community() {
                         <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs sm:text-sm font-bold px-2 py-1 rounded-full shadow-lg">
                           x{quantity}
                         </div>
+                        {/* Price badge */}
+                        {card.prices?.usd && (
+                          <div className="absolute bottom-1 left-1 bg-green-600 text-white text-[10px] sm:text-xs font-bold px-1.5 py-0.5 rounded shadow-lg">
+                            ${card.prices.usd}
+                          </div>
+                        )}
                         {/* Flip button for double-faced cards */}
                         {isMultiFaced && (
                           <button
@@ -687,6 +779,25 @@ export default function Community() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Infinite scroll loading indicator */}
+            {!userCollectionSearch && isLoadingMoreUserCards && (
+              <div className="flex justify-center py-8">
+                <Loader2 className="animate-spin text-blue-500" size={32} />
+              </div>
+            )}
+
+            {/* Observer target for infinite scroll */}
+            {!userCollectionSearch && hasMoreUserCards && !isLoadingMoreUserCards && (
+              <div ref={userCollectionObserverTarget} className="h-20" />
+            )}
+
+            {/* End of collection indicator */}
+            {!userCollectionSearch && !hasMoreUserCards && selectedUserCollection.length > 0 && (
+              <div className="text-center py-8 text-gray-500 text-sm">
+                End of collection • {userCollectionTotalCount} total cards
               </div>
             )}
           </div>

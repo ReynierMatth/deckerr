@@ -75,6 +75,55 @@ export const getUserCollection = async (userId: string): Promise<Map<string, num
   return collectionMap;
 };
 
+// Paginated collection API
+export interface PaginatedCollectionResult {
+  items: Map<string, number>; // card_id -> quantity
+  totalCount: number;
+  hasMore: boolean;
+}
+
+export const getUserCollectionPaginated = async (
+  userId: string,
+  pageSize: number = 50,
+  offset: number = 0
+): Promise<PaginatedCollectionResult> => {
+  // First, get the total count
+  const { count: totalCount, error: countError } = await supabase
+    .from('collections')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId);
+
+  if (countError) {
+    console.error('Error counting user collection:', countError);
+    throw countError;
+  }
+
+  // Then get the paginated data
+  const { data, error } = await supabase
+    .from('collections')
+    .select('card_id, quantity')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .range(offset, offset + pageSize - 1);
+
+  if (error) {
+    console.error('Error fetching user collection:', error);
+    throw error;
+  }
+
+  // Create a map of card_id to quantity for easy lookup
+  const collectionMap = new Map<string, number>();
+  data?.forEach((item) => {
+    collectionMap.set(item.card_id, item.quantity);
+  });
+
+  return {
+    items: collectionMap,
+    totalCount: totalCount || 0,
+    hasMore: offset + pageSize < (totalCount || 0),
+  };
+};
+
 export const addCardToCollection = async (
   userId: string,
   cardId: string,

@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Loader2, Trash2, CheckCircle, XCircle, RefreshCw, Plus, Minus, X } from 'lucide-react';
 import { Card } from '../types';
-import { getUserCollection, getCardsByIds, addCardToCollection } from '../services/api';
+import { getUserCollectionPaginated, getCardsByIds, addCardToCollection } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import ConfirmModal from './ConfirmModal';
+
+const PAGE_SIZE = 50;
 
 export default function Collection() {
   const { user } = useAuth();
@@ -12,6 +14,10 @@ export default function Collection() {
   const [collection, setCollection] = useState<{ card: Card; quantity: number }[]>([]);
   const [filteredCollection, setFilteredCollection] = useState<{ card: Card; quantity: number }[]>([]);
   const [isLoadingCollection, setIsLoadingCollection] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const [selectedCard, setSelectedCard] = useState<{ card: Card; quantity: number } | null>(null);
   const [cardFaceIndex, setCardFaceIndex] = useState<Map<string, number>>(new Map());
@@ -22,6 +28,7 @@ export default function Collection() {
     cardId: string;
     cardName: string;
   }>({ isOpen: false, cardId: '', cardName: '' });
+  const observerTarget = useRef<HTMLDivElement>(null);
 
   // Helper function to check if a card has an actual back face (not adventure/split/etc)
   const isDoubleFaced = (card: Card) => {
@@ -72,26 +79,33 @@ export default function Collection() {
 
       try {
         setIsLoadingCollection(true);
-        // Get collection from Supabase (returns Map<card_id, quantity>)
-        const collectionMap = await getUserCollection(user.id);
+        setOffset(0);
+        setCollection([]);
 
-        if (collectionMap.size === 0) {
+        // Get paginated collection from Supabase
+        const result = await getUserCollectionPaginated(user.id, PAGE_SIZE, 0);
+        setTotalCount(result.totalCount);
+        setHasMore(result.hasMore);
+
+        if (result.items.size === 0) {
           setCollection([]);
+          setFilteredCollection([]);
           return;
         }
 
-        // Get the actual card data from Scryfall for all cards in collection
-        const cardIds = Array.from(collectionMap.keys());
+        // Get the actual card data from Scryfall for all cards in this page
+        const cardIds = Array.from(result.items.keys());
         const cards = await getCardsByIds(cardIds);
 
         // Combine card data with quantities
         const collectionWithCards = cards.map(card => ({
           card,
-          quantity: collectionMap.get(card.id) || 0,
+          quantity: result.items.get(card.id) || 0,
         }));
 
         setCollection(collectionWithCards);
         setFilteredCollection(collectionWithCards);
+        setOffset(PAGE_SIZE);
       } catch (error) {
         console.error('Error loading collection:', error);
         setSnackbar({ message: 'Failed to load collection', type: 'error' });
@@ -102,6 +116,64 @@ export default function Collection() {
 
     loadCollection();
   }, [user]);
+
+  // Load more cards for infinite scroll
+  const loadMoreCards = useCallback(async () => {
+    if (!user || isLoadingMore || !hasMore) return;
+
+    try {
+      setIsLoadingMore(true);
+
+      // Get next page of collection
+      const result = await getUserCollectionPaginated(user.id, PAGE_SIZE, offset);
+      setHasMore(result.hasMore);
+
+      if (result.items.size === 0) {
+        return;
+      }
+
+      // Get card data from Scryfall
+      const cardIds = Array.from(result.items.keys());
+      const cards = await getCardsByIds(cardIds);
+
+      // Combine card data with quantities
+      const newCards = cards.map(card => ({
+        card,
+        quantity: result.items.get(card.id) || 0,
+      }));
+
+      setCollection(prev => [...prev, ...newCards]);
+      setOffset(prev => prev + PAGE_SIZE);
+    } catch (error) {
+      console.error('Error loading more cards:', error);
+      setSnackbar({ message: 'Failed to load more cards', type: 'error' });
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [user, offset, hasMore, isLoadingMore]);
+
+  // Intersection Observer for infinite scroll
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+          loadMoreCards();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentTarget = observerTarget.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [hasMore, isLoadingMore, loadMoreCards]);
 
   // Filter collection based on search query
   useEffect(() => {
@@ -209,9 +281,21 @@ export default function Collection() {
 
         {/* Collection */}
         <div>
-          <h2 className="text-xl font-semibold mb-4">
-            {searchQuery ? `Found ${filteredCollection.length} card(s)` : `My Cards (${collection.length} unique, ${collection.reduce((acc, c) => acc + c.quantity, 0)} total)`}
-          </h2>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+            <h2 className="text-xl font-semibold">
+              {searchQuery ? `Found ${filteredCollection.length} card(s)` : `My Cards (${collection.length} unique, ${collection.reduce((acc, c) => acc + c.quantity, 0)} total)`}
+            </h2>
+            {/* Collection Value Summary */}
+            <div className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2">
+              <div className="text-xs text-gray-400 mb-0.5">Total Collection Value</div>
+              <div className="text-lg font-bold text-green-400">
+                ${(searchQuery ? filteredCollection : collection).reduce((total, { card, quantity }) => {
+                  const price = card.prices?.usd ? parseFloat(card.prices.usd) : 0;
+                  return total + (price * quantity);
+                }, 0).toFixed(2)}
+              </div>
+            </div>
+          </div>
 
           {isLoadingCollection ? (
             <div className="flex items-center justify-center py-12">
@@ -255,6 +339,12 @@ export default function Collection() {
                       <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs sm:text-sm font-bold px-2 py-1 rounded-full shadow-lg">
                         x{quantity}
                       </div>
+                      {/* Price badge */}
+                      {card.prices?.usd && (
+                        <div className="absolute bottom-1 left-1 bg-green-600 text-white text-[10px] sm:text-xs font-bold px-1.5 py-0.5 rounded shadow-lg">
+                          ${card.prices.usd}
+                        </div>
+                      )}
                       {/* Flip button for double-faced cards */}
                       {isMultiFaced && (
                         <button
@@ -277,6 +367,25 @@ export default function Collection() {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Infinite scroll loading indicator */}
+          {!searchQuery && isLoadingMore && (
+            <div className="flex justify-center py-8">
+              <Loader2 className="animate-spin text-blue-500" size={32} />
+            </div>
+          )}
+
+          {/* Observer target for infinite scroll */}
+          {!searchQuery && hasMore && !isLoadingMore && (
+            <div ref={observerTarget} className="h-20" />
+          )}
+
+          {/* End of collection indicator */}
+          {!searchQuery && !hasMore && collection.length > 0 && (
+            <div className="text-center py-8 text-gray-500 text-sm">
+              End of collection • {totalCount} total cards
             </div>
           )}
         </div>
