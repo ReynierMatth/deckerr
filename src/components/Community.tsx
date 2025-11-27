@@ -73,6 +73,8 @@ export default function Community() {
   const [friendSearch, setFriendSearch] = useState('');
   const [friendSearchResults, setFriendSearchResults] = useState<{ id: string; username: string | null }[]>([]);
   const [searchingFriends, setSearchingFriends] = useState(false);
+  const [friendListFilter, setFriendListFilter] = useState('');
+  const [requestsFilter, setRequestsFilter] = useState('');
 
   // Trades state
   const [tradesSubTab, setTradesSubTab] = useState<TradesSubTab>('pending');
@@ -755,80 +757,146 @@ export default function Community() {
 
             {/* Friends List */}
             {friendsSubTab === 'list' && (
-              friends.length === 0 ? (
-                <p className="text-gray-400 text-center py-8 text-sm">No friends yet</p>
-              ) : (
-                <div className="space-y-2">
-                  {friends.map((friend) => (
-                    <div key={friend.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
-                      <span className="font-medium truncate">{friend.username || 'Unknown'}</span>
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => {
-                            setSelectedUser({ id: friend.id, username: friend.username, collection_visibility: 'friends' });
-                            loadUserCollection(friend.id);
-                          }}
-                          className="p-2 text-blue-400 active:bg-blue-400/20 rounded-lg"
-                        >
-                          <Eye size={18} />
-                        </button>
-                        <button
-                          onClick={() => handleRemoveFriend(friend.friendshipId, friend.username || 'user')}
-                          className="p-2 text-red-400 active:bg-red-400/20 rounded-lg"
-                        >
-                          <UserMinus size={18} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+              <div className="space-y-3">
+                {/* Search input */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                  <input
+                    type="text"
+                    value={friendListFilter}
+                    onChange={(e) => setFriendListFilter(e.target.value)}
+                    placeholder="Search friends..."
+                    className="w-full pl-9 pr-8 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  {friendListFilter && (
+                    <button
+                      onClick={() => setFriendListFilter('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
                 </div>
-              )
+
+                {friends.length === 0 ? (
+                  <p className="text-gray-400 text-center py-8 text-sm">No friends yet</p>
+                ) : friends.filter((f) =>
+                    !friendListFilter || f.username?.toLowerCase().includes(friendListFilter.toLowerCase())
+                  ).length === 0 ? (
+                  <p className="text-gray-400 text-center py-8 text-sm">No friends match "{friendListFilter}"</p>
+                ) : (
+                  <div className="space-y-2">
+                    {friends
+                      .filter((f) => !friendListFilter || f.username?.toLowerCase().includes(friendListFilter.toLowerCase()))
+                      .map((friend) => (
+                        <div key={friend.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
+                          <span className="font-medium truncate">{friend.username || 'Unknown'}</span>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => {
+                                setSelectedUser({ id: friend.id, username: friend.username, collection_visibility: 'friends' });
+                                loadUserCollection(friend.id);
+                              }}
+                              className="p-2 text-blue-400 active:bg-blue-400/20 rounded-lg"
+                            >
+                              <Eye size={18} />
+                            </button>
+                            <button
+                              onClick={() => handleRemoveFriend(friend.friendshipId, friend.username || 'user')}
+                              className="p-2 text-red-400 active:bg-red-400/20 rounded-lg"
+                            >
+                              <UserMinus size={18} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Requests */}
             {friendsSubTab === 'requests' && (
-              <div className="space-y-4">
-                {pendingRequests.length > 0 && (
-                  <div>
-                    <p className="text-xs text-gray-500 mb-2">Received</p>
-                    <div className="space-y-2">
-                      {pendingRequests.map((req) => (
-                        <div key={req.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
-                          <span className="font-medium truncate">{req.username || 'Unknown'}</span>
-                          <div className="flex gap-1">
-                            <button onClick={() => handleAcceptRequest(req.friendshipId)} className="p-2 text-green-400 active:bg-green-400/20 rounded-lg">
-                              <Check size={18} />
-                            </button>
-                            <button onClick={() => handleDeclineRequest(req.friendshipId)} className="p-2 text-red-400 active:bg-red-400/20 rounded-lg">
-                              <X size={18} />
-                            </button>
+              <div className="space-y-3">
+                {/* Search input */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                  <input
+                    type="text"
+                    value={requestsFilter}
+                    onChange={(e) => setRequestsFilter(e.target.value)}
+                    placeholder="Search requests..."
+                    className="w-full pl-9 pr-8 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  {requestsFilter && (
+                    <button
+                      onClick={() => setRequestsFilter('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+
+                {(() => {
+                  const filteredPending = pendingRequests.filter((r) =>
+                    !requestsFilter || r.username?.toLowerCase().includes(requestsFilter.toLowerCase())
+                  );
+                  const filteredSent = sentRequests.filter((r) =>
+                    !requestsFilter || r.username?.toLowerCase().includes(requestsFilter.toLowerCase())
+                  );
+
+                  return (
+                    <>
+                      {filteredPending.length > 0 && (
+                        <div>
+                          <p className="text-xs text-gray-500 mb-2">Received</p>
+                          <div className="space-y-2">
+                            {filteredPending.map((req) => (
+                              <div key={req.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
+                                <span className="font-medium truncate">{req.username || 'Unknown'}</span>
+                                <div className="flex gap-1">
+                                  <button onClick={() => handleAcceptRequest(req.friendshipId)} className="p-2 text-green-400 active:bg-green-400/20 rounded-lg">
+                                    <Check size={18} />
+                                  </button>
+                                  <button onClick={() => handleDeclineRequest(req.friendshipId)} className="p-2 text-red-400 active:bg-red-400/20 rounded-lg">
+                                    <X size={18} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                      )}
 
-                {sentRequests.length > 0 && (
-                  <div>
-                    <p className="text-xs text-gray-500 mb-2">Sent</p>
-                    <div className="space-y-2">
-                      {sentRequests.map((req) => (
-                        <div key={req.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
-                          <div className="flex items-center gap-2">
-                            <Send size={14} className="text-gray-500" />
-                            <span className="font-medium truncate">{req.username || 'Unknown'}</span>
+                      {filteredSent.length > 0 && (
+                        <div>
+                          <p className="text-xs text-gray-500 mb-2">Sent</p>
+                          <div className="space-y-2">
+                            {filteredSent.map((req) => (
+                              <div key={req.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
+                                <div className="flex items-center gap-2">
+                                  <Send size={14} className="text-gray-500" />
+                                  <span className="font-medium truncate">{req.username || 'Unknown'}</span>
+                                </div>
+                                <span className="text-xs text-yellow-500">Pending</span>
+                              </div>
+                            ))}
                           </div>
-                          <span className="text-xs text-yellow-500">Pending</span>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                      )}
 
-                {pendingRequests.length === 0 && sentRequests.length === 0 && (
-                  <p className="text-gray-400 text-center py-8 text-sm">No requests</p>
-                )}
+                      {pendingRequests.length === 0 && sentRequests.length === 0 && (
+                        <p className="text-gray-400 text-center py-8 text-sm">No requests</p>
+                      )}
+
+                      {(pendingRequests.length > 0 || sentRequests.length > 0) &&
+                       filteredPending.length === 0 && filteredSent.length === 0 && (
+                        <p className="text-gray-400 text-center py-8 text-sm">No requests match "{requestsFilter}"</p>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             )}
 
