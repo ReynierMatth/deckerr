@@ -95,6 +95,34 @@ export default function Collection() {
     calculateTotalValue();
   }, [user]);
 
+  // Subscribe to realtime updates for collection total value
+  useEffect(() => {
+    if (!user) return;
+
+    const profileChannel = supabase
+      .channel('profile-total-value-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${user.id}`,
+        },
+        (payload: any) => {
+          if (payload.new?.collection_total_value !== undefined) {
+            console.log('Collection total value updated:', payload.new.collection_total_value);
+            setTotalCollectionValue(payload.new.collection_total_value);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profileChannel);
+    };
+  }, [user]);
+
   // Load user's collection from Supabase on mount
   useEffect(() => {
     const loadCollection = async () => {

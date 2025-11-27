@@ -405,6 +405,34 @@ export default function Community() {
     };
   }, [selectedUser, hasMoreUserCards, isLoadingMoreUserCards, loadMoreUserCards]);
 
+  // Subscribe to realtime updates for selected user's collection total value
+  useEffect(() => {
+    if (!selectedUser) return;
+
+    const userProfileChannel = supabase
+      .channel(`user-profile-value-${selectedUser.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${selectedUser.id}`,
+        },
+        (payload: any) => {
+          if (payload.new?.collection_total_value !== undefined) {
+            console.log(`User ${selectedUser.username}'s collection total value updated:`, payload.new.collection_total_value);
+            setUserCollectionTotalValue(payload.new.collection_total_value);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(userProfileChannel);
+    };
+  }, [selectedUser]);
+
   // ============ FRIENDS FUNCTIONS ============
   const loadFriendsData = async () => {
     if (!user) return;
