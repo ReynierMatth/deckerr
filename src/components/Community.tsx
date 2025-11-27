@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, Clock, History, UserPlus, UserMinus, Check, X, Send, Settings, Save, ChevronLeft } from 'lucide-react';
+import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, Clock, History, UserPlus, UserMinus, Check, X, Send, Settings, Save, ChevronLeft, RefreshCw, Plus, Minus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
@@ -64,6 +64,9 @@ export default function Community() {
   const [loadingCollection, setLoadingCollection] = useState(false);
   const [showTradeCreator, setShowTradeCreator] = useState(false);
   const [userCollectionSearch, setUserCollectionSearch] = useState('');
+  const [hoveredUserCard, setHoveredUserCard] = useState<Card | null>(null);
+  const [selectedUserCard, setSelectedUserCard] = useState<CollectionItem | null>(null);
+  const [userCardFaceIndex, setUserCardFaceIndex] = useState<Map<string, number>>(new Map());
 
   // Friends state
   const [friendsSubTab, setFriendsSubTab] = useState<FriendsSubTab>('list');
@@ -223,6 +226,44 @@ export default function Community() {
       supabase.removeChannel(collectionsChannel);
     };
   }, [user, selectedUser]);
+
+  // Helper function to check if a card has an actual back face
+  const isDoubleFaced = (card: Card) => {
+    const backFaceLayouts = ['transform', 'modal_dfc', 'double_faced_token', 'reversible_card'];
+    return card.card_faces && card.card_faces.length > 1 && backFaceLayouts.includes(card.layout);
+  };
+
+  // Helper function to get the current face index for a card
+  const getCurrentFaceIndex = (cardId: string) => {
+    return userCardFaceIndex.get(cardId) || 0;
+  };
+
+  // Helper function to get the image URI for a card
+  const getCardImageUri = (card: Card, faceIndex: number = 0) => {
+    if (isDoubleFaced(card) && card.card_faces) {
+      return card.card_faces[faceIndex]?.image_uris?.normal || card.card_faces[faceIndex]?.image_uris?.small;
+    }
+    return card.image_uris?.normal || card.image_uris?.small;
+  };
+
+  // Helper function to get the large image URI for hover preview
+  const getCardLargeImageUri = (card: Card, faceIndex: number = 0) => {
+    if (isDoubleFaced(card) && card.card_faces) {
+      return card.card_faces[faceIndex]?.image_uris?.large || card.card_faces[faceIndex]?.image_uris?.normal;
+    }
+    return card.image_uris?.large || card.image_uris?.normal;
+  };
+
+  // Toggle card face
+  const toggleCardFace = (cardId: string, totalFaces: number) => {
+    setUserCardFaceIndex(prev => {
+      const newMap = new Map(prev);
+      const currentIndex = prev.get(cardId) || 0;
+      const nextIndex = (currentIndex + 1) % totalFaces;
+      newMap.set(cardId, nextIndex);
+      return newMap;
+    });
+  };
 
   const loadAllData = async () => {
     if (!user) return;
@@ -532,74 +573,266 @@ export default function Community() {
     );
 
     return (
-      <div className="bg-gray-900 text-white min-h-screen">
-        {/* Header */}
-        <div className="sticky top-0 bg-gray-900/95 backdrop-blur border-b border-gray-800 p-3 z-10">
-          <div className="flex items-center justify-between gap-2 mb-3">
+      <div className="relative bg-gray-900 text-white min-h-screen">
+        <div className="max-w-7xl mx-auto p-3 sm:p-6">
+          {/* Header with Back and Trade buttons */}
+          <div className="flex items-center justify-between gap-2 mb-4 md:mb-6">
             <button
-              onClick={() => { setSelectedUser(null); setSelectedUserCollection([]); setUserCollectionSearch(''); }}
-              className="flex items-center gap-1 text-blue-400 text-sm min-w-0"
+              onClick={() => {
+                setSelectedUser(null);
+                setSelectedUserCollection([]);
+                setUserCollectionSearch('');
+                setSelectedUserCard(null);
+                setHoveredUserCard(null);
+              }}
+              className="flex items-center gap-1 text-blue-400 hover:text-blue-300 text-sm"
             >
               <ChevronLeft size={20} />
-              <span className="hidden sm:inline">Back</span>
+              <span>Back</span>
             </button>
-            <h1 className="text-lg font-bold truncate flex-1 text-center">{selectedUser.username}</h1>
+            <h1 className="text-2xl md:text-3xl font-bold truncate flex-1 text-center">{selectedUser.username}'s Collection</h1>
             <button
               onClick={() => setShowTradeCreator(true)}
-              className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm whitespace-nowrap"
+              className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm whitespace-nowrap"
             >
               <ArrowLeftRight size={16} />
-              <span className="hidden sm:inline">Trade</span>
+              <span className="hidden sm:inline">Propose Trade</span>
+              <span className="sm:hidden">Trade</span>
             </button>
           </div>
+
           {/* Search input */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-            <input
-              type="text"
-              value={userCollectionSearch}
-              onChange={(e) => setUserCollectionSearch(e.target.value)}
-              placeholder="Search cards..."
-              className="w-full pl-9 pr-8 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-            {userCollectionSearch && (
-              <button
-                onClick={() => setUserCollectionSearch('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
-              >
-                <X size={16} />
-              </button>
+          <div className="mb-8">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <input
+                type="text"
+                value={userCollectionSearch}
+                onChange={(e) => setUserCollectionSearch(e.target.value)}
+                placeholder="Search cards by name, type, or text..."
+                className="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          {/* Collection */}
+          <div>
+            <h2 className="text-xl font-semibold mb-4">
+              {userCollectionSearch
+                ? `Found ${filteredUserCollection.length} card(s)`
+                : `Cards (${selectedUserCollection.length} unique, ${selectedUserCollection.reduce((acc, c) => acc + c.quantity, 0)} total)`
+              }
+            </h2>
+
+            {loadingCollection ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="animate-spin text-blue-500" size={48} />
+              </div>
+            ) : selectedUserCollection.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">
+                <p className="text-lg">Empty collection</p>
+              </div>
+            ) : filteredUserCollection.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">
+                <p className="text-lg mb-2">No cards found</p>
+                <p className="text-sm">Try a different search term</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-1.5 sm:gap-2">
+                {filteredUserCollection.map(({ card, quantity }) => {
+                  const currentFaceIndex = getCurrentFaceIndex(card.id);
+                  const isMultiFaced = isDoubleFaced(card);
+                  const displayName = isMultiFaced && card.card_faces
+                    ? card.card_faces[currentFaceIndex]?.name || card.name
+                    : card.name;
+
+                  return (
+                    <div
+                      key={card.id}
+                      className="relative group cursor-pointer"
+                      onMouseEnter={() => setHoveredUserCard(card)}
+                      onMouseLeave={() => setHoveredUserCard(null)}
+                      onClick={() => setSelectedUserCard({ card, quantity })}
+                    >
+                      {/* Card thumbnail */}
+                      <div className="relative rounded-lg overflow-hidden shadow-lg transition-all group-hover:ring-2 group-hover:ring-blue-500">
+                        <img
+                          src={getCardImageUri(card, currentFaceIndex)}
+                          alt={displayName}
+                          className="w-full h-auto"
+                        />
+                        {/* Quantity badge */}
+                        <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs sm:text-sm font-bold px-2 py-1 rounded-full shadow-lg">
+                          x{quantity}
+                        </div>
+                        {/* Flip button for double-faced cards */}
+                        {isMultiFaced && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleCardFace(card.id, card.card_faces!.length);
+                            }}
+                            className="absolute bottom-1 right-1 bg-purple-600 hover:bg-purple-700 text-white p-1 rounded-full shadow-lg transition-all"
+                            title="Flip card"
+                          >
+                            <RefreshCw size={12} />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Card name below thumbnail */}
+                      <div className="mt-1 text-xs text-center truncate px-1">
+                        {displayName}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>
 
-        {/* Collection Grid */}
-        <div className="p-3">
-          {loadingCollection ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="animate-spin text-blue-500" size={32} />
-            </div>
-          ) : selectedUserCollection.length === 0 ? (
-            <p className="text-gray-400 text-center py-12">Empty collection</p>
-          ) : filteredUserCollection.length === 0 ? (
-            <p className="text-gray-400 text-center py-12">No cards match "{userCollectionSearch}"</p>
-          ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
-              {filteredUserCollection.map(({ card, quantity }) => (
-                <div key={card.id} className="relative">
+        {/* Hover Card Preview - desktop only, only show if no card is selected */}
+        {hoveredUserCard && !selectedUserCard && (() => {
+          const currentFaceIndex = getCurrentFaceIndex(hoveredUserCard.id);
+          const isMultiFaced = isDoubleFaced(hoveredUserCard);
+          const currentFace = isMultiFaced && hoveredUserCard.card_faces
+            ? hoveredUserCard.card_faces[currentFaceIndex]
+            : null;
+
+          const displayName = currentFace?.name || hoveredUserCard.name;
+          const displayTypeLine = currentFace?.type_line || hoveredUserCard.type_line;
+          const displayOracleText = currentFace?.oracle_text || hoveredUserCard.oracle_text;
+
+          return (
+            <div className="hidden lg:block fixed top-1/2 right-8 transform -translate-y-1/2 z-30 pointer-events-none">
+              <div className="bg-gray-800 rounded-lg shadow-2xl p-4 max-w-md">
+                <div className="relative">
                   <img
-                    src={card.image_uris?.small || card.image_uris?.normal}
-                    alt={card.name}
-                    className="w-full h-auto rounded-lg"
+                    src={getCardLargeImageUri(hoveredUserCard, currentFaceIndex)}
+                    alt={displayName}
+                    className="w-full h-auto rounded-lg shadow-lg"
                   />
-                  <span className="absolute top-1 right-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                    x{quantity}
-                  </span>
+                  {isMultiFaced && (
+                    <div className="absolute top-2 right-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
+                      Face {currentFaceIndex + 1}/{hoveredUserCard.card_faces!.length}
+                    </div>
+                  )}
                 </div>
-              ))}
+                <div className="mt-3 space-y-2">
+                  <h3 className="text-xl font-bold">{displayName}</h3>
+                  <p className="text-sm text-gray-400">{displayTypeLine}</p>
+                  {displayOracleText && (
+                    <p className="text-sm text-gray-300 border-t border-gray-700 pt-2">
+                      {displayOracleText}
+                    </p>
+                  )}
+                  {hoveredUserCard.prices?.usd && (
+                    <div className="text-sm text-green-400 font-semibold border-t border-gray-700 pt-2">
+                      ${hoveredUserCard.prices.usd}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          )}
-        </div>
+          );
+        })()}
+
+        {/* Card Detail Panel - slides in from right */}
+        {selectedUserCard && (() => {
+          const currentFaceIndex = getCurrentFaceIndex(selectedUserCard.card.id);
+          const isMultiFaced = isDoubleFaced(selectedUserCard.card);
+          const currentFace = isMultiFaced && selectedUserCard.card.card_faces
+            ? selectedUserCard.card.card_faces[currentFaceIndex]
+            : null;
+
+          const displayName = currentFace?.name || selectedUserCard.card.name;
+          const displayTypeLine = currentFace?.type_line || selectedUserCard.card.type_line;
+          const displayOracleText = currentFace?.oracle_text || selectedUserCard.card.oracle_text;
+
+          return (
+            <>
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 bg-black bg-opacity-50 z-[110] transition-opacity duration-300"
+                onClick={() => setSelectedUserCard(null)}
+              />
+
+              {/* Sliding Panel */}
+              <div className="fixed top-0 right-0 h-full w-full md:w-96 bg-gray-800 shadow-2xl z-[120] overflow-y-auto animate-slide-in-right">
+                {/* Close button */}
+                <button
+                  onClick={() => setSelectedUserCard(null)}
+                  className="fixed top-4 right-4 bg-gray-700 hover:bg-gray-600 text-white p-2 md:p-1.5 rounded-full transition-colors z-[130] shadow-lg"
+                  aria-label="Close"
+                >
+                  <X size={24} className="md:w-5 md:h-5" />
+                </button>
+
+                <div className="p-4 sm:p-6">
+                  {/* Card Image */}
+                  <div className="relative mb-4 max-w-sm mx-auto">
+                    <img
+                      src={getCardLargeImageUri(selectedUserCard.card, currentFaceIndex)}
+                      alt={displayName}
+                      className="w-full h-auto rounded-lg shadow-lg"
+                    />
+                    {isMultiFaced && (
+                      <>
+                        <div className="absolute top-2 right-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
+                          Face {currentFaceIndex + 1}/{selectedUserCard.card.card_faces!.length}
+                        </div>
+                        <button
+                          onClick={() => toggleCardFace(selectedUserCard.card.id, selectedUserCard.card.card_faces!.length)}
+                          className="absolute bottom-2 right-2 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full shadow-lg transition-all"
+                          title="Flip card"
+                        >
+                          <RefreshCw size={20} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Card Info */}
+                  <div className="space-y-4">
+                    <div>
+                      <h2 className="text-xl md:text-2xl font-bold text-white mb-2">{displayName}</h2>
+                      <p className="text-xs sm:text-sm text-gray-400">{displayTypeLine}</p>
+                    </div>
+
+                    {displayOracleText && (
+                      <div className="border-t border-gray-700 pt-3">
+                        <p className="text-sm text-gray-300">{displayOracleText}</p>
+                      </div>
+                    )}
+
+                    {selectedUserCard.card.prices?.usd && (
+                      <div className="border-t border-gray-700 pt-3">
+                        <div className="text-lg text-green-400 font-semibold">
+                          ${selectedUserCard.card.prices.usd} each
+                        </div>
+                        <div className="text-sm text-gray-400">
+                          Total value: ${(parseFloat(selectedUserCard.card.prices.usd) * selectedUserCard.quantity).toFixed(2)}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Quantity Display */}
+                    <div className="border-t border-gray-700 pt-3">
+                      <h3 className="text-lg font-semibold mb-3">Quantity in Collection</h3>
+                      <div className="flex items-center justify-center bg-gray-900 rounded-lg p-4">
+                        <div className="text-center">
+                          <div className="text-3xl font-bold">{selectedUserCard.quantity}</div>
+                          <div className="text-xs text-gray-400">copies</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          );
+        })()}
 
         {showTradeCreator && (
           <TradeCreator
