@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Loader2, Trash2, CheckCircle, XCircle, RefreshCw, Plus, Minus, X } from 'lucide-react';
 import { Card } from '../types';
-import { getUserCollectionPaginated, getCardsByIds, addCardToCollection } from '../services/api';
+import { getUserCollectionPaginated, getCardsByIds, addCardToCollection, getCollectionTotalValue } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import ConfirmModal from './ConfirmModal';
@@ -18,6 +18,8 @@ export default function Collection() {
   const [hasMore, setHasMore] = useState(false);
   const [offset, setOffset] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
+  const [totalCollectionValue, setTotalCollectionValue] = useState<number>(0);
+  const [isLoadingTotalValue, setIsLoadingTotalValue] = useState(true);
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const [selectedCard, setSelectedCard] = useState<{ card: Card; quantity: number } | null>(null);
   const [cardFaceIndex, setCardFaceIndex] = useState<Map<string, number>>(new Map());
@@ -68,6 +70,30 @@ export default function Collection() {
       return newMap;
     });
   };
+
+  // Calculate total collection value (lightweight query from database)
+  useEffect(() => {
+    const calculateTotalValue = async () => {
+      if (!user) {
+        setIsLoadingTotalValue(false);
+        return;
+      }
+
+      try {
+        setIsLoadingTotalValue(true);
+        // Get total value directly from database (no need to fetch all cards!)
+        const totalValue = await getCollectionTotalValue(user.id);
+        setTotalCollectionValue(totalValue);
+      } catch (error) {
+        console.error('Error calculating total collection value:', error);
+        setTotalCollectionValue(0);
+      } finally {
+        setIsLoadingTotalValue(false);
+      }
+    };
+
+    calculateTotalValue();
+  }, [user]);
 
   // Load user's collection from Supabase on mount
   useEffect(() => {
@@ -287,12 +313,22 @@ export default function Collection() {
             </h2>
             {/* Collection Value Summary */}
             <div className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2">
-              <div className="text-xs text-gray-400 mb-0.5">Total Collection Value</div>
+              <div className="text-xs text-gray-400 mb-0.5">
+                {searchQuery ? 'Filtered Value' : 'Total Collection Value'}
+              </div>
               <div className="text-lg font-bold text-green-400">
-                ${(searchQuery ? filteredCollection : collection).reduce((total, { card, quantity }) => {
-                  const price = card.prices?.usd ? parseFloat(card.prices.usd) : 0;
-                  return total + (price * quantity);
-                }, 0).toFixed(2)}
+                {isLoadingTotalValue ? (
+                  <Loader2 className="animate-spin" size={20} />
+                ) : searchQuery ? (
+                  // For search results, calculate from filtered collection
+                  `$${filteredCollection.reduce((total, { card, quantity }) => {
+                    const price = card.prices?.usd ? parseFloat(card.prices.usd) : 0;
+                    return total + (price * quantity);
+                  }, 0).toFixed(2)}`
+                ) : (
+                  // For full collection, use pre-calculated total
+                  `$${totalCollectionValue.toFixed(2)}`
+                )}
               </div>
             </div>
           </div>

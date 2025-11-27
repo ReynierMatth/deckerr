@@ -23,7 +23,7 @@ import {
   Trade,
   TradeItem,
 } from '../services/tradesService';
-import { getUserCollection, getUserCollectionPaginated, getCardsByIds } from '../services/api';
+import { getUserCollectionPaginated, getCardsByIds, getCollectionTotalValue } from '../services/api';
 import { Card } from '../types';
 import TradeCreator from './TradeCreator';
 import TradeDetail from './TradeDetail';
@@ -68,6 +68,8 @@ export default function Community() {
   const [hasMoreUserCards, setHasMoreUserCards] = useState(false);
   const [userCollectionOffset, setUserCollectionOffset] = useState(0);
   const [userCollectionTotalCount, setUserCollectionTotalCount] = useState(0);
+  const [userCollectionTotalValue, setUserCollectionTotalValue] = useState<number>(0);
+  const [isLoadingUserTotalValue, setIsLoadingUserTotalValue] = useState(true);
   const [showTradeCreator, setShowTradeCreator] = useState(false);
   const [userCollectionSearch, setUserCollectionSearch] = useState('');
   const [hoveredUserCard, setHoveredUserCard] = useState<Card | null>(null);
@@ -305,15 +307,20 @@ export default function Community() {
 
   const loadUserCollection = async (userId: string) => {
     setLoadingCollection(true);
+    setIsLoadingUserTotalValue(true);
     setSelectedUserCollection([]);
     setUserCollectionOffset(0);
+
     try {
+      // Load paginated collection for display
       const result = await getUserCollectionPaginated(userId, PAGE_SIZE, 0);
       setUserCollectionTotalCount(result.totalCount);
       setHasMoreUserCards(result.hasMore);
 
       if (result.items.size === 0) {
         setSelectedUserCollection([]);
+        setUserCollectionTotalValue(0);
+        setIsLoadingUserTotalValue(false);
         return;
       }
 
@@ -324,11 +331,17 @@ export default function Community() {
         quantity: result.items.get(card.id) || 0,
       })));
       setUserCollectionOffset(PAGE_SIZE);
+
+      // Calculate total value (lightweight query from database)
+      const totalValue = await getCollectionTotalValue(userId);
+      setUserCollectionTotalValue(totalValue);
     } catch (error) {
       console.error('Error loading collection:', error);
       setSelectedUserCollection([]);
+      setUserCollectionTotalValue(0);
     } finally {
       setLoadingCollection(false);
+      setIsLoadingUserTotalValue(false);
     }
   };
 
@@ -700,12 +713,22 @@ export default function Community() {
               </h2>
               {/* Collection Value Summary */}
               <div className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2">
-                <div className="text-xs text-gray-400 mb-0.5">Total Collection Value</div>
+                <div className="text-xs text-gray-400 mb-0.5">
+                  {userCollectionSearch ? 'Filtered Value' : 'Total Collection Value'}
+                </div>
                 <div className="text-lg font-bold text-green-400">
-                  ${(userCollectionSearch ? filteredUserCollection : selectedUserCollection).reduce((total, { card, quantity }) => {
-                    const price = card.prices?.usd ? parseFloat(card.prices.usd) : 0;
-                    return total + (price * quantity);
-                  }, 0).toFixed(2)}
+                  {isLoadingUserTotalValue ? (
+                    <Loader2 className="animate-spin" size={20} />
+                  ) : userCollectionSearch ? (
+                    // For search results, calculate from filtered collection
+                    `$${filteredUserCollection.reduce((total, { card, quantity }) => {
+                      const price = card.prices?.usd ? parseFloat(card.prices.usd) : 0;
+                      return total + (price * quantity);
+                    }, 0).toFixed(2)}`
+                  ) : (
+                    // For full collection, use pre-calculated total
+                    `$${userCollectionTotalValue.toFixed(2)}`
+                  )}
                 </div>
               </div>
             </div>
