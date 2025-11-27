@@ -82,26 +82,20 @@ export interface PaginatedCollectionResult {
   hasMore: boolean;
 }
 
-// Get total collection value from database (lightweight query)
+// Get total collection value from user profile (pre-calculated by triggers)
 export const getCollectionTotalValue = async (userId: string): Promise<number> => {
   const { data, error } = await supabase
-    .from('collections')
-    .select('price_usd, quantity')
-    .eq('user_id', userId);
+    .from('profiles')
+    .select('collection_total_value')
+    .eq('id', userId)
+    .single();
 
   if (error) {
     console.error('Error fetching collection total value:', error);
     return 0;
   }
 
-  // Calculate total: sum of (price * quantity) for each card
-  const totalValue = data?.reduce((total, item) => {
-    const price = item.price_usd || 0;
-    const quantity = item.quantity || 0;
-    return total + (price * quantity);
-  }, 0) || 0;
-
-  return totalValue;
+  return data?.collection_total_value || 0;
 };
 
 export const getUserCollectionPaginated = async (
