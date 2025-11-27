@@ -82,6 +82,28 @@ export interface PaginatedCollectionResult {
   hasMore: boolean;
 }
 
+// Get total collection value from database (lightweight query)
+export const getCollectionTotalValue = async (userId: string): Promise<number> => {
+  const { data, error } = await supabase
+    .from('collections')
+    .select('price_usd, quantity')
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('Error fetching collection total value:', error);
+    return 0;
+  }
+
+  // Calculate total: sum of (price * quantity) for each card
+  const totalValue = data?.reduce((total, item) => {
+    const price = item.price_usd || 0;
+    const quantity = item.quantity || 0;
+    return total + (price * quantity);
+  }, 0) || 0;
+
+  return totalValue;
+};
+
 export const getUserCollectionPaginated = async (
   userId: string,
   pageSize: number = 50,
@@ -127,7 +149,8 @@ export const getUserCollectionPaginated = async (
 export const addCardToCollection = async (
   userId: string,
   cardId: string,
-  quantity: number = 1
+  quantity: number = 1,
+  priceUsd: number = 0
 ): Promise<void> => {
   // Check if card already exists in collection
   const { data: existing, error: fetchError } = await supabase
@@ -143,11 +166,12 @@ export const addCardToCollection = async (
   }
 
   if (existing) {
-    // Update existing card quantity
+    // Update existing card quantity and price
     const { error: updateError } = await supabase
       .from('collections')
       .update({
         quantity: existing.quantity + quantity,
+        price_usd: priceUsd,
         updated_at: new Date().toISOString()
       })
       .eq('id', existing.id);
@@ -161,6 +185,7 @@ export const addCardToCollection = async (
         user_id: userId,
         card_id: cardId,
         quantity: quantity,
+        price_usd: priceUsd,
       });
 
     if (insertError) throw insertError;
@@ -169,7 +194,7 @@ export const addCardToCollection = async (
 
 export const addMultipleCardsToCollection = async (
   userId: string,
-  cards: { cardId: string; quantity: number }[]
+  cards: { cardId: string; quantity: number; priceUsd?: number }[]
 ): Promise<void> => {
   // Fetch existing cards in collection
   const cardIds = cards.map(c => c.cardId);
@@ -195,6 +220,7 @@ export const addMultipleCardsToCollection = async (
       toUpdate.push({
         id: existing.id,
         quantity: existing.quantity + card.quantity,
+        price_usd: card.priceUsd || 0,
         updated_at: new Date().toISOString(),
       });
     } else {
@@ -202,6 +228,7 @@ export const addMultipleCardsToCollection = async (
         user_id: userId,
         card_id: card.cardId,
         quantity: card.quantity,
+        price_usd: card.priceUsd || 0,
       });
     }
   }
@@ -219,7 +246,11 @@ export const addMultipleCardsToCollection = async (
     for (const update of toUpdate) {
       const { error: updateError } = await supabase
         .from('collections')
-        .update({ quantity: update.quantity, updated_at: update.updated_at })
+        .update({
+          quantity: update.quantity,
+          price_usd: update.price_usd,
+          updated_at: update.updated_at
+        })
         .eq('id', update.id);
 
       if (updateError) throw updateError;
