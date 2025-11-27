@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, Clock, History, UserPlus, UserMinus, Check, X, Send, Settings, Save, ChevronLeft, RefreshCw, Plus, Minus } from 'lucide-react';
+import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, Clock, History, UserPlus, UserMinus, Check, X, Send, Settings, Save, ChevronLeft, RefreshCw, Plus, Minus, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
@@ -1412,9 +1412,14 @@ export default function Community() {
                             With: <strong>{otherUser?.username}</strong>
                           </span>
                         </div>
-                        <span className={`text-xs capitalize ${statusColors[trade.status]}`}>
-                          {trade.status}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {trade.status === 'pending' && !trade.is_valid && (
+                            <AlertTriangle size={14} className="text-red-400" title="Trade no longer valid" />
+                          )}
+                          <span className={`text-xs capitalize ${statusColors[trade.status]}`}>
+                            {trade.status}
+                          </span>
+                        </div>
                       </div>
 
                       {/* Items */}

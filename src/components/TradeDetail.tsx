@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Check, ArrowLeftRight, DollarSign, Loader2, Edit, RefreshCcw, History } from 'lucide-react';
+import { X, Check, ArrowLeftRight, DollarSign, Loader2, Edit, RefreshCcw, History, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Trade, TradeHistoryEntry, getTradeVersionHistory } from '../services/tradesService';
@@ -222,6 +222,18 @@ export default function TradeDetail({
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Invalid Trade Warning */}
+              {trade.status === 'pending' && !trade.is_valid && (
+                <div className="bg-red-900/30 border border-red-600 rounded-lg p-3 flex items-start gap-2">
+                  <AlertTriangle size={20} className="text-red-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="font-semibold text-red-400 text-sm">Trade No Longer Valid</h4>
+                    <p className="text-red-200 text-xs mt-1">
+                      One or more cards in this trade are no longer available in the required quantities. This trade cannot be accepted until it is updated.
+                    </p>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Your Side */}
                 <div className="space-y-3">
@@ -367,8 +379,9 @@ export default function TradeDetail({
                 <div className="flex gap-2">
                   <button
                     onClick={handleAccept}
-                    disabled={processing}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 rounded-lg font-medium transition"
+                    disabled={processing || !trade.is_valid}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition"
+                    title={!trade.is_valid ? 'This trade is no longer valid' : ''}
                   >
                     {processing ? (
                       <Loader2 className="animate-spin" size={18} />
@@ -431,8 +444,9 @@ export default function TradeDetail({
                     <div className="flex gap-2">
                       <button
                         onClick={handleAccept}
-                        disabled={processing}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 rounded-lg font-medium transition"
+                        disabled={processing || !trade.is_valid}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition"
+                        title={!trade.is_valid ? 'This trade is no longer valid' : ''}
                       >
                         {processing ? (
                           <Loader2 className="animate-spin" size={18} />

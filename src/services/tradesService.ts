@@ -18,6 +18,7 @@ export interface Trade {
   updated_at: string | null;
   version: number;
   editor_id: string | null;
+  is_valid: boolean;
   user1?: { username: string | null };
   user2?: { username: string | null };
   items?: TradeItem[];
@@ -160,6 +161,25 @@ export async function createTrade(params: CreateTradeParams): Promise<Trade> {
 
 // Accept a trade (executes the card transfer)
 export async function acceptTrade(tradeId: string): Promise<boolean> {
+  // First check if the trade is valid
+  const { data: trade, error: tradeError } = await supabase
+    .from('trades')
+    .select('is_valid, status')
+    .eq('id', tradeId)
+    .single();
+
+  if (tradeError) throw tradeError;
+
+  // Prevent accepting invalid trades
+  if (!trade.is_valid) {
+    throw new Error('This trade is no longer valid. One or more cards are no longer available in the required quantities.');
+  }
+
+  // Prevent accepting non-pending trades
+  if (trade.status !== 'pending') {
+    throw new Error('This trade has already been processed.');
+  }
+
   const { data, error } = await supabase.rpc('execute_trade', {
     trade_id: tradeId,
   });
