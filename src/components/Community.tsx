@@ -73,6 +73,8 @@ export default function Community() {
   const [friendSearch, setFriendSearch] = useState('');
   const [friendSearchResults, setFriendSearchResults] = useState<{ id: string; username: string | null }[]>([]);
   const [searchingFriends, setSearchingFriends] = useState(false);
+  const [friendListFilter, setFriendListFilter] = useState('');
+  const [requestsFilter, setRequestsFilter] = useState('');
 
   // Trades state
   const [tradesSubTab, setTradesSubTab] = useState<TradesSubTab>('pending');
@@ -81,12 +83,6 @@ export default function Community() {
   const [tradeCardDetails, setTradeCardDetails] = useState<Map<string, Card>>(new Map());
   const [processingTradeId, setProcessingTradeId] = useState<string | null>(null);
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
-  const [counterOfferData, setCounterOfferData] = useState<{
-    receiverId: string;
-    receiverUsername: string;
-    receiverCollection: CollectionItem[];
-    initialOffer?: { senderCards: Card[]; receiverCards: Card[] };
-  } | null>(null);
 
   // Profile state
   const [username, setUsername] = useState('');
@@ -107,6 +103,126 @@ export default function Community() {
       loadAllData();
     }
   }, [user]);
+
+  // ============ REALTIME SUBSCRIPTIONS ============
+  // Subscribe to trade changes
+  useEffect(() => {
+    if (!user) return;
+
+    const tradesChannel = supabase
+      .channel('trades-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'trades',
+        },
+        (payload: any) => {
+          // Filter for trades involving this user
+          const newData = payload.new || payload.old;
+          if (newData && (newData.user1_id === user.id || newData.user2_id === user.id)) {
+            console.log('Trade change:', payload);
+            loadTradesData();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(tradesChannel);
+    };
+  }, [user]);
+
+  // Subscribe to friendship changes
+  useEffect(() => {
+    if (!user) return;
+
+    const friendshipsChannel = supabase
+      .channel('friendships-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'friendships',
+        },
+        (payload: any) => {
+          // Filter for friendships involving this user
+          const newData = payload.new || payload.old;
+          if (newData && (newData.requester_id === user.id || newData.addressee_id === user.id)) {
+            console.log('Friendship change:', payload);
+            loadFriendsData();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(friendshipsChannel);
+    };
+  }, [user]);
+
+  // Subscribe to profile changes (for visibility updates)
+  useEffect(() => {
+    if (!user) return;
+
+    const profilesChannel = supabase
+      .channel('profiles-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+        },
+        (payload: any) => {
+          console.log('Profile change:', payload);
+          // Reload public users if a profile's visibility changed
+          if (payload.new && payload.old && payload.new.collection_visibility !== payload.old.collection_visibility) {
+            loadPublicUsers();
+          }
+          // Reload own profile if it's the current user
+          if (payload.new && payload.new.id === user.id) {
+            loadProfile();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profilesChannel);
+    };
+  }, [user]);
+
+  // Subscribe to collection changes when viewing someone's collection
+  useEffect(() => {
+    if (!user || !selectedUser) return;
+
+    const collectionsChannel = supabase
+      .channel(`collections-${selectedUser.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'collections',
+        },
+        (payload: any) => {
+          // Filter for the selected user's collections
+          const data = payload.new || payload.old;
+          if (data && data.user_id === selectedUser.id) {
+            console.log('Collection change for viewed user:', payload);
+            loadUserCollection(selectedUser.id);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(collectionsChannel);
+    };
+  }, [user, selectedUser]);
 
   const loadAllData = async () => {
     if (!user) return;
@@ -318,37 +434,6 @@ export default function Community() {
     });
   };
 
-  const handleCounterOffer = async (trade: Trade, senderCards: Card[], receiverCards: Card[]) => {
-    try {
-      // Decline the original trade
-      await declineTrade(trade.id);
-
-      // Load the sender's collection for the counter-offer
-      const collectionMap = await getUserCollection(trade.sender_id);
-      const cardIds = Array.from(collectionMap.keys());
-      const cards = await getCardsByIds(cardIds);
-      const senderCollection = cards.map((card) => ({
-        card,
-        quantity: collectionMap.get(card.id) || 0,
-      }));
-
-      // Set up counter-offer data (swap sender and receiver)
-      setCounterOfferData({
-        receiverId: trade.sender_id,
-        receiverUsername: trade.sender?.username || 'User',
-        receiverCollection: senderCollection,
-        initialOffer: {
-          senderCards: receiverCards, // What you want to give back
-          receiverCards: senderCards, // What you want to receive
-        },
-      });
-
-      await loadTradesData();
-    } catch (error) {
-      console.error('Error setting up counter-offer:', error);
-      toast.error('Failed to set up counter-offer');
-    }
-  };
 
   // ============ PROFILE FUNCTIONS ============
   const loadProfile = async () => {
@@ -539,13 +624,13 @@ export default function Community() {
 
   // ============ MAIN VIEW ============
   return (
-    <div className="relative bg-gray-900 text-white md:min-h-screen">
-      {/* Header */}
-      <div className="sticky top-0 bg-gray-900/95 backdrop-blur border-b border-gray-800 p-3 z-10">
-        <h1 className="text-xl font-bold mb-3">Community</h1>
+    <div className="relative bg-gray-900 text-white p-3 sm:p-6 md:min-h-screen">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <h1 className="text-2xl md:text-3xl font-bold mb-4 md:mb-6">Community</h1>
 
-        {/* Tabs - Scrollable on mobile */}
-        <div className="flex gap-1 overflow-x-auto pb-1 -mx-3 px-3 scrollbar-hide">
+        {/* Tabs */}
+        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide mb-4 md:mb-6">
           {[
             { id: 'browse' as Tab, label: 'Browse', icon: Globe },
             { id: 'friends' as Tab, label: `Friends`, count: friends.length, icon: Users },
@@ -573,10 +658,7 @@ export default function Community() {
             </button>
           ))}
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="p-3">
         {/* ============ BROWSE TAB ============ */}
         {activeTab === 'browse' && (
           <div className="space-y-3">
@@ -675,80 +757,146 @@ export default function Community() {
 
             {/* Friends List */}
             {friendsSubTab === 'list' && (
-              friends.length === 0 ? (
-                <p className="text-gray-400 text-center py-8 text-sm">No friends yet</p>
-              ) : (
-                <div className="space-y-2">
-                  {friends.map((friend) => (
-                    <div key={friend.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
-                      <span className="font-medium truncate">{friend.username || 'Unknown'}</span>
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => {
-                            setSelectedUser({ id: friend.id, username: friend.username, collection_visibility: 'friends' });
-                            loadUserCollection(friend.id);
-                          }}
-                          className="p-2 text-blue-400 active:bg-blue-400/20 rounded-lg"
-                        >
-                          <Eye size={18} />
-                        </button>
-                        <button
-                          onClick={() => handleRemoveFriend(friend.friendshipId, friend.username || 'user')}
-                          className="p-2 text-red-400 active:bg-red-400/20 rounded-lg"
-                        >
-                          <UserMinus size={18} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+              <div className="space-y-3">
+                {/* Search input */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                  <input
+                    type="text"
+                    value={friendListFilter}
+                    onChange={(e) => setFriendListFilter(e.target.value)}
+                    placeholder="Search friends..."
+                    className="w-full pl-9 pr-8 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  {friendListFilter && (
+                    <button
+                      onClick={() => setFriendListFilter('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
                 </div>
-              )
+
+                {friends.length === 0 ? (
+                  <p className="text-gray-400 text-center py-8 text-sm">No friends yet</p>
+                ) : friends.filter((f) =>
+                    !friendListFilter || f.username?.toLowerCase().includes(friendListFilter.toLowerCase())
+                  ).length === 0 ? (
+                  <p className="text-gray-400 text-center py-8 text-sm">No friends match "{friendListFilter}"</p>
+                ) : (
+                  <div className="space-y-2">
+                    {friends
+                      .filter((f) => !friendListFilter || f.username?.toLowerCase().includes(friendListFilter.toLowerCase()))
+                      .map((friend) => (
+                        <div key={friend.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
+                          <span className="font-medium truncate">{friend.username || 'Unknown'}</span>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => {
+                                setSelectedUser({ id: friend.id, username: friend.username, collection_visibility: 'friends' });
+                                loadUserCollection(friend.id);
+                              }}
+                              className="p-2 text-blue-400 active:bg-blue-400/20 rounded-lg"
+                            >
+                              <Eye size={18} />
+                            </button>
+                            <button
+                              onClick={() => handleRemoveFriend(friend.friendshipId, friend.username || 'user')}
+                              className="p-2 text-red-400 active:bg-red-400/20 rounded-lg"
+                            >
+                              <UserMinus size={18} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Requests */}
             {friendsSubTab === 'requests' && (
-              <div className="space-y-4">
-                {pendingRequests.length > 0 && (
-                  <div>
-                    <p className="text-xs text-gray-500 mb-2">Received</p>
-                    <div className="space-y-2">
-                      {pendingRequests.map((req) => (
-                        <div key={req.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
-                          <span className="font-medium truncate">{req.username || 'Unknown'}</span>
-                          <div className="flex gap-1">
-                            <button onClick={() => handleAcceptRequest(req.friendshipId)} className="p-2 text-green-400 active:bg-green-400/20 rounded-lg">
-                              <Check size={18} />
-                            </button>
-                            <button onClick={() => handleDeclineRequest(req.friendshipId)} className="p-2 text-red-400 active:bg-red-400/20 rounded-lg">
-                              <X size={18} />
-                            </button>
+              <div className="space-y-3">
+                {/* Search input */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                  <input
+                    type="text"
+                    value={requestsFilter}
+                    onChange={(e) => setRequestsFilter(e.target.value)}
+                    placeholder="Search requests..."
+                    className="w-full pl-9 pr-8 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  {requestsFilter && (
+                    <button
+                      onClick={() => setRequestsFilter('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+
+                {(() => {
+                  const filteredPending = pendingRequests.filter((r) =>
+                    !requestsFilter || r.username?.toLowerCase().includes(requestsFilter.toLowerCase())
+                  );
+                  const filteredSent = sentRequests.filter((r) =>
+                    !requestsFilter || r.username?.toLowerCase().includes(requestsFilter.toLowerCase())
+                  );
+
+                  return (
+                    <>
+                      {filteredPending.length > 0 && (
+                        <div>
+                          <p className="text-xs text-gray-500 mb-2">Received</p>
+                          <div className="space-y-2">
+                            {filteredPending.map((req) => (
+                              <div key={req.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
+                                <span className="font-medium truncate">{req.username || 'Unknown'}</span>
+                                <div className="flex gap-1">
+                                  <button onClick={() => handleAcceptRequest(req.friendshipId)} className="p-2 text-green-400 active:bg-green-400/20 rounded-lg">
+                                    <Check size={18} />
+                                  </button>
+                                  <button onClick={() => handleDeclineRequest(req.friendshipId)} className="p-2 text-red-400 active:bg-red-400/20 rounded-lg">
+                                    <X size={18} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                      )}
 
-                {sentRequests.length > 0 && (
-                  <div>
-                    <p className="text-xs text-gray-500 mb-2">Sent</p>
-                    <div className="space-y-2">
-                      {sentRequests.map((req) => (
-                        <div key={req.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
-                          <div className="flex items-center gap-2">
-                            <Send size={14} className="text-gray-500" />
-                            <span className="font-medium truncate">{req.username || 'Unknown'}</span>
+                      {filteredSent.length > 0 && (
+                        <div>
+                          <p className="text-xs text-gray-500 mb-2">Sent</p>
+                          <div className="space-y-2">
+                            {filteredSent.map((req) => (
+                              <div key={req.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
+                                <div className="flex items-center gap-2">
+                                  <Send size={14} className="text-gray-500" />
+                                  <span className="font-medium truncate">{req.username || 'Unknown'}</span>
+                                </div>
+                                <span className="text-xs text-yellow-500">Pending</span>
+                              </div>
+                            ))}
                           </div>
-                          <span className="text-xs text-yellow-500">Pending</span>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                      )}
 
-                {pendingRequests.length === 0 && sentRequests.length === 0 && (
-                  <p className="text-gray-400 text-center py-8 text-sm">No requests</p>
-                )}
+                      {pendingRequests.length === 0 && sentRequests.length === 0 && (
+                        <p className="text-gray-400 text-center py-8 text-sm">No requests</p>
+                      )}
+
+                      {(pendingRequests.length > 0 || sentRequests.length > 0) &&
+                       filteredPending.length === 0 && filteredSent.length === 0 && (
+                        <p className="text-gray-400 text-center py-8 text-sm">No requests match "{requestsFilter}"</p>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             )}
 
@@ -831,8 +979,10 @@ export default function Community() {
             ) : (
               <div className="space-y-3">
                 {(tradesSubTab === 'pending' ? pendingTrades : tradeHistory).map((trade) => {
-                  const isSender = trade.sender_id === user?.id;
-                  const otherUser = isSender ? trade.receiver : trade.sender;
+                  const isUser1 = trade.user1_id === user?.id;
+                  const myUserId = user?.id || '';
+                  const otherUserId = isUser1 ? trade.user2_id : trade.user1_id;
+                  const otherUser = isUser1 ? trade.user2 : trade.user1;
                   const statusColors: Record<string, string> = {
                     accepted: 'text-green-400',
                     declined: 'text-red-400',
@@ -840,7 +990,8 @@ export default function Community() {
                     pending: 'text-yellow-400',
                   };
 
-                  const canViewDetails = !isSender && trade.status === 'pending';
+                  // Both users can view details for pending trades
+                  const canViewDetails = trade.status === 'pending';
 
                   return (
                     <div
@@ -855,7 +1006,7 @@ export default function Community() {
                         <div className="flex items-center gap-2 min-w-0">
                           <ArrowLeftRight size={16} className="text-blue-400 flex-shrink-0" />
                           <span className="text-sm truncate">
-                            {isSender ? 'To' : 'From'}: <strong>{otherUser?.username}</strong>
+                            With: <strong>{otherUser?.username}</strong>
                           </span>
                         </div>
                         <span className={`text-xs capitalize ${statusColors[trade.status]}`}>
@@ -865,8 +1016,8 @@ export default function Community() {
 
                       {/* Items */}
                       <div className="grid grid-cols-2 gap-2 text-sm">
-                        {renderTradeItems(trade.items, trade.sender_id, isSender ? 'Give' : 'Receive')}
-                        {renderTradeItems(trade.items, trade.receiver_id, isSender ? 'Get' : 'Send')}
+                        {renderTradeItems(trade.items, myUserId, 'You Give')}
+                        {renderTradeItems(trade.items, otherUserId, 'You Get')}
                       </div>
 
                       {canViewDetails && (
@@ -875,8 +1026,8 @@ export default function Community() {
                         </p>
                       )}
 
-                      {/* Actions - Only show quick actions for sender (cancel) */}
-                      {tradesSubTab === 'pending' && isSender && (
+                      {/* Actions - Allow any user to cancel pending trade */}
+                      {tradesSubTab === 'pending' && (
                         <div className="flex gap-2 pt-2 border-t border-gray-700" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => handleCancelTrade(trade.id)}
@@ -941,43 +1092,31 @@ export default function Community() {
             </button>
           </div>
         )}
+
+        {/* Trade Detail Modal */}
+        {selectedTrade && (
+          <TradeDetail
+            trade={selectedTrade}
+            onClose={() => setSelectedTrade(null)}
+            onAccept={handleAcceptTrade}
+            onDecline={handleDeclineTrade}
+            onTradeUpdated={() => {
+              setSelectedTrade(null);
+              loadTradesData();
+            }}
+          />
+        )}
+
+        {/* Confirm Modal */}
+        <ConfirmModal
+          isOpen={confirmModal.isOpen}
+          onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+          onConfirm={confirmModal.onConfirm}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          variant={confirmModal.variant}
+        />
       </div>
-
-      {/* Trade Detail Modal */}
-      {selectedTrade && (
-        <TradeDetail
-          trade={selectedTrade}
-          onClose={() => setSelectedTrade(null)}
-          onAccept={handleAcceptTrade}
-          onDecline={handleDeclineTrade}
-          onCounterOffer={handleCounterOffer}
-        />
-      )}
-
-      {/* Counter Offer Creator */}
-      {counterOfferData && (
-        <TradeCreator
-          receiverId={counterOfferData.receiverId}
-          receiverUsername={counterOfferData.receiverUsername}
-          receiverCollection={counterOfferData.receiverCollection}
-          onClose={() => setCounterOfferData(null)}
-          onTradeCreated={() => {
-            setCounterOfferData(null);
-            loadTradesData();
-            toast.success('Counter offer sent!');
-          }}
-        />
-      )}
-
-      {/* Confirm Modal */}
-      <ConfirmModal
-        isOpen={confirmModal.isOpen}
-        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
-        onConfirm={confirmModal.onConfirm}
-        title={confirmModal.title}
-        message={confirmModal.message}
-        variant={confirmModal.variant}
-      />
     </div>
   );
 }
