@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Loader2, Trash2, CheckCircle, XCircle, RefreshCw, Plus, Minus, X } from 'lucide-react';
+import { Search, Loader2, Trash2, RefreshCw, Plus, Minus, X } from 'lucide-react';
 import { Card } from '../types';
 import { getUserCollectionPaginated, getCardsByIds, addCardToCollection, getCollectionTotalValue } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
+import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
+import { useCardFaces } from '../hooks/useCardFaces';
 import { supabase } from '../lib/supabase';
 import ConfirmModal from './ConfirmModal';
 
@@ -10,6 +13,8 @@ const PAGE_SIZE = 50;
 
 export default function Collection() {
   const { user } = useAuth();
+  const toast = useToast();
+  const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
   const [searchQuery, setSearchQuery] = useState('');
   const [collection, setCollection] = useState<{ card: Card; quantity: number }[]>([]);
   const [filteredCollection, setFilteredCollection] = useState<{ card: Card; quantity: number }[]>([]);
@@ -22,8 +27,6 @@ export default function Collection() {
   const [isLoadingTotalValue, setIsLoadingTotalValue] = useState(true);
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const [selectedCard, setSelectedCard] = useState<{ card: Card; quantity: number } | null>(null);
-  const [cardFaceIndex, setCardFaceIndex] = useState<Map<string, number>>(new Map());
-  const [snackbar, setSnackbar] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -32,43 +35,12 @@ export default function Collection() {
   }>({ isOpen: false, cardId: '', cardName: '' });
   const observerTarget = useRef<HTMLDivElement>(null);
 
-  // Helper function to check if a card has an actual back face (not adventure/split/etc)
-  const isDoubleFaced = (card: Card) => {
-    // Only show flip for cards with physical back sides
-    const backFaceLayouts = ['transform', 'modal_dfc', 'double_faced_token', 'reversible_card'];
-    return card.card_faces && card.card_faces.length > 1 && backFaceLayouts.includes(card.layout);
-  };
-
-  // Helper function to get the current face index for a card
-  const getCurrentFaceIndex = (cardId: string) => {
-    return cardFaceIndex.get(cardId) || 0;
-  };
-
-  // Helper function to get the image URI for a card (handling both single and double-faced)
-  const getCardImageUri = (card: Card, faceIndex: number = 0) => {
-    if (isDoubleFaced(card) && card.card_faces) {
-      return card.card_faces[faceIndex]?.image_uris?.normal || card.card_faces[faceIndex]?.image_uris?.small;
-    }
-    return card.image_uris?.normal || card.image_uris?.small;
-  };
-
   // Helper function to get the large image URI for hover preview
   const getCardLargeImageUri = (card: Card, faceIndex: number = 0) => {
     if (isDoubleFaced(card) && card.card_faces) {
       return card.card_faces[faceIndex]?.image_uris?.large || card.card_faces[faceIndex]?.image_uris?.normal;
     }
     return card.image_uris?.large || card.image_uris?.normal;
-  };
-
-  // Toggle card face
-  const toggleCardFace = (cardId: string, totalFaces: number) => {
-    setCardFaceIndex(prev => {
-      const newMap = new Map(prev);
-      const currentIndex = prev.get(cardId) || 0;
-      const nextIndex = (currentIndex + 1) % totalFaces;
-      newMap.set(cardId, nextIndex);
-      return newMap;
-    });
   };
 
   // Calculate total collection value (lightweight query from database)
@@ -162,7 +134,7 @@ export default function Collection() {
         setOffset(PAGE_SIZE);
       } catch (error) {
         console.error('Error loading collection:', error);
-        setSnackbar({ message: 'Failed to load collection', type: 'error' });
+        toast.error('Failed to load collection');
       } finally {
         setIsLoadingCollection(false);
       }
@@ -206,7 +178,7 @@ export default function Collection() {
       setOffset(prev => prev + PAGE_SIZE);
     } catch (error) {
       console.error('Error loading more cards:', error);
-      setSnackbar({ message: 'Failed to load more cards', type: 'error' });
+      toast.error('Failed to load more cards');
     } finally {
       setIsLoadingMore(false);
     }
@@ -275,7 +247,7 @@ export default function Collection() {
         // Update local state
         setCollection(prev => prev.filter(item => item.card.id !== cardId));
         setSelectedCard(null);
-        setSnackbar({ message: 'Card removed from collection', type: 'success' });
+        toast.success('Card removed from collection');
       } else {
         // Update quantity
         const { error } = await supabase
@@ -297,14 +269,13 @@ export default function Collection() {
           setSelectedCard({ ...selectedCard, quantity: newQuantity });
         }
 
-        setSnackbar({ message: 'Quantity updated', type: 'success' });
+        toast.success('Quantity updated');
       }
     } catch (error) {
       console.error('Error updating card quantity:', error);
-      setSnackbar({ message: 'Failed to update quantity', type: 'error' });
+      toast.error('Failed to update quantity');
     } finally {
       setIsUpdating(false);
-      setTimeout(() => setSnackbar(null), 3000);
     }
   };
 
@@ -651,29 +622,6 @@ export default function Collection() {
         variant="danger"
         isLoading={isUpdating}
       />
-
-      {/* Snackbar */}
-      {snackbar && (
-        <div
-          className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg transition-all duration-300 ${
-            snackbar.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-          } text-white z-[140]`}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              {snackbar.type === 'success' ? (
-                <CheckCircle className="mr-2" size={20} />
-              ) : (
-                <XCircle className="mr-2" size={20} />
-              )}
-              <span>{snackbar.message}</span>
-            </div>
-            <button onClick={() => setSnackbar(null)} className="ml-4 text-gray-200 hover:text-white focus:outline-none">
-              <Trash2 size={16} />
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

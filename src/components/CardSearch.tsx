@@ -1,13 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { RefreshCw, PackagePlus, Loader2, CheckCircle, XCircle, Trash2 } from 'lucide-react';
+import { RefreshCw, PackagePlus, Loader2, CheckCircle } from 'lucide-react';
 import { searchCards, getUserCollection, addCardToCollection } from '../services/api';
 import { Card } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
+import { isDoubleFaced, getCardImageUri, getCardArtCrop } from '../utils/cardFaces';
+import { useCardFaces } from '../hooks/useCardFaces';
 import MagicCard from './MagicCard';
 import { getManaIconPath } from './ManaCost';
 
 const CardSearch = () => {
   const { user } = useAuth();
+  const toast = useToast();
+  const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
   const [cardName, setCardName] = useState('');
   const [text, setText] = useState('');
   const [rulesText, setRulesText] = useState('');
@@ -47,8 +52,6 @@ const CardSearch = () => {
   // Collection state
   const [userCollection, setUserCollection] = useState<Map<string, number>>(new Map());
   const [addingCardId, setAddingCardId] = useState<string | null>(null);
-  const [cardFaceIndex, setCardFaceIndex] = useState<Map<string, number>>(new Map());
-  const [snackbar, setSnackbar] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Load user collection
   useEffect(() => {
@@ -64,49 +67,10 @@ const CardSearch = () => {
     loadUserCollection();
   }, [user]);
 
-  // Helper function to check if a card has an actual back face
-  const isDoubleFaced = (card: Card) => {
-    const backFaceLayouts = ['transform', 'modal_dfc', 'double_faced_token', 'reversible_card'];
-    return card.card_faces && card.card_faces.length > 1 && backFaceLayouts.includes(card.layout);
-  };
-
-  // Get current face index for a card
-  const getCurrentFaceIndex = (cardId: string) => {
-    return cardFaceIndex.get(cardId) || 0;
-  };
-
-  // Toggle card face
-  const toggleCardFace = (cardId: string, totalFaces: number) => {
-    setCardFaceIndex(prev => {
-      const newMap = new Map(prev);
-      const currentIndex = prev.get(cardId) || 0;
-      const nextIndex = (currentIndex + 1) % totalFaces;
-      newMap.set(cardId, nextIndex);
-      return newMap;
-    });
-  };
-
-  // Get card image for current face
-  const getCardImageUri = (card: Card, faceIndex: number = 0) => {
-    if (isDoubleFaced(card) && card.card_faces) {
-      return card.card_faces[faceIndex]?.image_uris?.normal || card.card_faces[faceIndex]?.image_uris?.small;
-    }
-    return card.image_uris?.normal || card.image_uris?.small || card.card_faces?.[0]?.image_uris?.normal;
-  };
-
-  // Get card art crop for current face
-  const getCardArtCrop = (card: Card, faceIndex: number = 0) => {
-    if (isDoubleFaced(card) && card.card_faces) {
-      return card.card_faces[faceIndex]?.image_uris?.art_crop || card.card_faces[faceIndex]?.image_uris?.normal;
-    }
-    return card.image_uris?.art_crop || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.art_crop;
-  };
-
   // Add card to collection
   const handleAddCardToCollection = async (cardId: string) => {
     if (!user) {
-      setSnackbar({ message: 'Please log in to add cards to your collection', type: 'error' });
-      setTimeout(() => setSnackbar(null), 3000);
+      toast.error('Please log in to add cards to your collection');
       return;
     }
 
@@ -121,13 +85,12 @@ const CardSearch = () => {
         return newMap;
       });
 
-      setSnackbar({ message: 'Card added to collection!', type: 'success' });
+      toast.success('Card added to collection!');
     } catch (error) {
       console.error('Error adding card to collection:', error);
-      setSnackbar({ message: 'Failed to add card to collection', type: 'error' });
+      toast.error('Failed to add card to collection');
     } finally {
       setAddingCardId(null);
-      setTimeout(() => setSnackbar(null), 3000);
     }
   };
 
@@ -778,29 +741,6 @@ const CardSearch = () => {
           </>
         )}
       </div>
-
-      {/* Snackbar */}
-      {snackbar && (
-        <div
-          className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg transition-all duration-300 ${
-            snackbar.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-          } text-white z-[140]`}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              {snackbar.type === 'success' ? (
-                <CheckCircle className="mr-2" size={20} />
-              ) : (
-                <XCircle className="mr-2" size={20} />
-              )}
-              <span>{snackbar.message}</span>
-            </div>
-            <button onClick={() => setSnackbar(null)} className="ml-4 text-gray-200 hover:text-white focus:outline-none">
-              <Trash2 size={16} />
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

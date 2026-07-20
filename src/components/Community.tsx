@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, Clock, History, UserPlus, UserMinus, Check, X, Send, Settings, Save, ChevronLeft, RefreshCw, Plus, Minus, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
+import { useCardFaces } from '../hooks/useCardFaces';
 import { supabase } from '../lib/supabase';
 import {
   getFriends,
@@ -55,6 +57,7 @@ const PAGE_SIZE = 50;
 export default function Community() {
   const { user } = useAuth();
   const toast = useToast();
+  const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
   const [activeTab, setActiveTab] = useState<Tab>('browse');
   const [loading, setLoading] = useState(true);
 
@@ -74,7 +77,6 @@ export default function Community() {
   const [userCollectionSearch, setUserCollectionSearch] = useState('');
   const [hoveredUserCard, setHoveredUserCard] = useState<Card | null>(null);
   const [selectedUserCard, setSelectedUserCard] = useState<CollectionItem | null>(null);
-  const [userCardFaceIndex, setUserCardFaceIndex] = useState<Map<string, number>>(new Map());
   const userCollectionObserverTarget = useRef<HTMLDivElement>(null);
 
   // Friends state
@@ -238,42 +240,12 @@ export default function Community() {
     };
   }, [user, selectedUser]);
 
-  // Helper function to check if a card has an actual back face
-  const isDoubleFaced = (card: Card) => {
-    const backFaceLayouts = ['transform', 'modal_dfc', 'double_faced_token', 'reversible_card'];
-    return card.card_faces && card.card_faces.length > 1 && backFaceLayouts.includes(card.layout);
-  };
-
-  // Helper function to get the current face index for a card
-  const getCurrentFaceIndex = (cardId: string) => {
-    return userCardFaceIndex.get(cardId) || 0;
-  };
-
-  // Helper function to get the image URI for a card
-  const getCardImageUri = (card: Card, faceIndex: number = 0) => {
-    if (isDoubleFaced(card) && card.card_faces) {
-      return card.card_faces[faceIndex]?.image_uris?.normal || card.card_faces[faceIndex]?.image_uris?.small;
-    }
-    return card.image_uris?.normal || card.image_uris?.small;
-  };
-
   // Helper function to get the large image URI for hover preview
   const getCardLargeImageUri = (card: Card, faceIndex: number = 0) => {
     if (isDoubleFaced(card) && card.card_faces) {
       return card.card_faces[faceIndex]?.image_uris?.large || card.card_faces[faceIndex]?.image_uris?.normal;
     }
     return card.image_uris?.large || card.image_uris?.normal;
-  };
-
-  // Toggle card face
-  const toggleCardFace = (cardId: string, totalFaces: number) => {
-    setUserCardFaceIndex(prev => {
-      const newMap = new Map(prev);
-      const currentIndex = prev.get(cardId) || 0;
-      const nextIndex = (currentIndex + 1) % totalFaces;
-      newMap.set(cardId, nextIndex);
-      return newMap;
-    });
   };
 
   const loadAllData = async () => {

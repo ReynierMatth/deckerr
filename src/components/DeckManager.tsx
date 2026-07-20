@@ -3,6 +3,9 @@ import { Plus, Minus, Search, Save, Trash2, Loader2, CheckCircle, XCircle, Alert
 import { Card, Deck } from '../types';
 import { searchCards, getUserCollection, addCardToCollection, addMultipleCardsToCollection } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
+import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
+import { useCardFaces } from '../hooks/useCardFaces';
 import { supabase } from '../lib/supabase';
 import { validateDeck } from '../utils/deckValidation';
 import MagicCard from './MagicCard';
@@ -122,6 +125,8 @@ const isCardValidForCommander = (card: Card, commanderColors: string[]): boolean
 };
 
 export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
+  const toast = useToast();
+  const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
   const [currentDeckId, setCurrentDeckId] = useState<string | null>(initialDeck?.id || null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Card[]>([]);
@@ -141,14 +146,12 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const { user } = useAuth();
   const [isImporting, setIsImporting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [snackbar, setSnackbar] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Collection management state
   const [userCollection, setUserCollection] = useState<Map<string, number>>(new Map());
   const [isLoadingCollection, setIsLoadingCollection] = useState(true);
   const [addingCardId, setAddingCardId] = useState<string | null>(null);
   const [isAddingAll, setIsAddingAll] = useState(false);
-  const [cardFaceIndex, setCardFaceIndex] = useState<Map<string, number>>(new Map());
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const [hoverSource, setHoverSource] = useState<'search' | 'deck' | null>(null);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
@@ -164,7 +167,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         setUserCollection(collection);
       } catch (error) {
         console.error('Error loading user collection:', error);
-        setSnackbar({ message: 'Failed to load collection', type: 'error' });
+        toast.error('Failed to load collection');
       } finally {
         setIsLoadingCollection(false);
       }
@@ -174,32 +177,6 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   }, [user]);
 
   // Helper functions for double-faced cards
-  const isDoubleFaced = (card: Card) => {
-    const backFaceLayouts = ['transform', 'modal_dfc', 'double_faced_token', 'reversible_card'];
-    return card.card_faces && card.card_faces.length > 1 && backFaceLayouts.includes(card.layout);
-  };
-
-  const getCurrentFaceIndex = (cardId: string) => {
-    return cardFaceIndex.get(cardId) || 0;
-  };
-
-  const toggleCardFace = (cardId: string, totalFaces: number) => {
-    setCardFaceIndex(prev => {
-      const newMap = new Map(prev);
-      const currentIndex = prev.get(cardId) || 0;
-      const nextIndex = (currentIndex + 1) % totalFaces;
-      newMap.set(cardId, nextIndex);
-      return newMap;
-    });
-  };
-
-  const getCardImageUri = (card: Card, faceIndex: number = 0) => {
-    if (isDoubleFaced(card) && card.card_faces) {
-      return card.card_faces[faceIndex]?.image_uris?.normal || card.card_faces[faceIndex]?.image_uris?.small;
-    }
-    return card.image_uris?.normal || card.image_uris?.small || card.card_faces?.[0]?.image_uris?.normal;
-  };
-
   const getCardLargeImageUri = (card: Card, faceIndex: number = 0) => {
     if (isDoubleFaced(card) && card.card_faces) {
       return card.card_faces[faceIndex]?.image_uris?.large || card.card_faces[faceIndex]?.image_uris?.normal;
@@ -236,13 +213,12 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         return newMap;
       });
 
-      setSnackbar({ message: 'Card added to collection!', type: 'success' });
+      toast.success('Card added to collection!');
     } catch (error) {
       console.error('Error adding card to collection:', error);
-      setSnackbar({ message: 'Failed to add card to collection', type: 'error' });
+      toast.error('Failed to add card to collection');
     } finally {
       setAddingCardId(null);
-      setTimeout(() => setSnackbar(null), 3000);
     }
   };
 
@@ -252,8 +228,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
     const missingCards = getMissingCards();
     if (missingCards.length === 0) {
-      setSnackbar({ message: 'All cards are already in your collection!', type: 'success' });
-      setTimeout(() => setSnackbar(null), 3000);
+      toast.success('All cards are already in your collection!');
       return;
     }
 
@@ -281,16 +256,12 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         return newMap;
       });
 
-      setSnackbar({
-        message: `Successfully added ${cardsToAdd.length} card(s) to collection!`,
-        type: 'success'
-      });
+      toast.success(`Successfully added ${cardsToAdd.length} card(s) to collection!`);
     } catch (error) {
       console.error('Error adding cards to collection:', error);
-      setSnackbar({ message: 'Failed to add cards to collection', type: 'error' });
+      toast.error('Failed to add cards to collection');
     } finally {
       setIsAddingAll(false);
-      setTimeout(() => setSnackbar(null), 3000);
     }
   };
 
@@ -305,7 +276,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     } catch (error) {
       console.error('Failed to search cards:', error);
       setSearchResults([]);
-      setSnackbar({ message: 'Failed to search cards', type: 'error' });
+      toast.error('Failed to search cards');
     } finally {
       setIsSearching(false);
     }
@@ -420,14 +391,13 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
       if (cardsError) throw cardsError;
 
-      setSnackbar({ message: 'Deck saved successfully!', type: 'success' });
+      toast.success('Deck saved successfully!');
       if (onSave) onSave();
     } catch (error) {
       console.error('Error saving deck:', error);
-      setSnackbar({ message: 'Failed to save deck.', type: 'error' });
+      toast.error('Failed to save deck.');
     } finally {
       setIsSaving(false);
-      setTimeout(() => setSnackbar(null), 3000); // Clear snackbar after 3 seconds
     }
   };
 
@@ -523,11 +493,11 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
               cardsToAdd.push({ card, quantity });
             } else {
               console.warn(`Card not found: ${cardName}`);
-              setSnackbar({ message: `Card not found: ${cardName}`, type: 'error' });
+              toast.error(`Card not found: ${cardName}`);
             }
           } catch (error) {
             console.error(`Failed to search card ${cardName}:`, error);
-            setSnackbar({ message: `Failed to import card: ${cardName}`, type: 'error' });
+            toast.error(`Failed to import card: ${cardName}`);
           }
         }
 
@@ -1156,28 +1126,6 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
           </>
         );
       })()}
-
-      {snackbar && (
-        <div
-          className={`fixed bottom-4 right-4 text-white p-4 rounded-lg shadow-lg transition-all duration-300 z-[140] ${
-            snackbar.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              {snackbar.type === 'success' ? (
-                <CheckCircle className="mr-2" size={20} />
-              ) : (
-                <XCircle className="mr-2" size={20} />
-              )}
-              <span>{snackbar.message}</span>
-            </div>
-            <button onClick={() => setSnackbar(null)} className="ml-4 text-gray-200 hover:text-white focus:outline-none">
-              <Trash2 size={16} />
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
