@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { RefreshCw, PackagePlus, Loader2, CheckCircle, XCircle, Trash2 } from 'lucide-react';
 import { searchCards, getUserCollection, addCardToCollection } from '../services/api';
 import { Card } from '../types';
@@ -131,8 +131,16 @@ const CardSearch = () => {
     }
   };
 
+  const searchAbortRef = useRef<AbortController | null>(null);
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Cancel any in-flight search so the latest submit always wins.
+    searchAbortRef.current?.abort();
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
+
     setLoading(true);
     setError(null);
 
@@ -190,13 +198,15 @@ const CardSearch = () => {
     if (includeExtras) query += `include:extras `;
 
     try {
-      const cards = await searchCards(query.trim());
+      const cards = await searchCards(query.trim(), controller.signal);
       setSearchResults(cards || []);
     } catch (err) {
-      setError('Failed to fetch cards.');
+      // A newer search aborted this one — ignore, the newer one owns the UI.
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      setError(err instanceof Error ? err.message : 'Failed to fetch cards.');
       console.error('Error fetching cards:', err);
     } finally {
-      setLoading(false);
+      if (searchAbortRef.current === controller) setLoading(false);
     }
   };
 

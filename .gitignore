@@ -10,7 +10,19 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dev-dist
 *.local
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Local npm registry override
+.npmrc
+
+# Vite transient config-load artifacts
+vite.config.*.timestamp-*.mjs
 
 # Editor directories and files
 .vscode/*
