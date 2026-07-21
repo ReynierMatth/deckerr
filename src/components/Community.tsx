@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, Clock, History, UserPlus, UserMinus, Check, X, Send, Settings, Save, ChevronLeft, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, Clock, History, UserPlus, UserMinus, Check, X, Send, Settings, ChevronLeft, RefreshCw, AlertTriangle } from 'lucide-react';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
 import { useCardFaces } from '../hooks/useCardFaces';
 import { supabase } from '../lib/supabase';
+import ProfileSettings from './community/ProfileSettings';
 import {
   getFriends,
   getPendingRequests,
@@ -67,12 +68,6 @@ type Tab = 'browse' | 'friends' | 'trades' | 'profile';
 type FriendsSubTab = 'list' | 'requests' | 'search';
 type TradesSubTab = 'pending' | 'history';
 
-const VISIBILITY_OPTIONS = [
-  { value: 'public', label: 'Public', description: 'Anyone can view' },
-  { value: 'friends', label: 'Friends', description: 'Friends only' },
-  { value: 'private', label: 'Private', description: 'Only you' },
-] as const;
-
 const PAGE_SIZE = 50;
 
 export default function Community() {
@@ -120,9 +115,6 @@ export default function Community() {
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
 
   // Profile state
-  const [username, setUsername] = useState('');
-  const [collectionVisibility, setCollectionVisibility] = useState<'public' | 'friends' | 'private'>('private');
-  const [savingProfile, setSavingProfile] = useState(false);
 
   // Confirm modal state
   const [confirmModal, setConfirmModal] = useState<{
@@ -219,10 +211,6 @@ export default function Community() {
           if (newProfile && oldProfile && newProfile.collection_visibility !== oldProfile.collection_visibility) {
             loadPublicUsers();
           }
-          // Reload own profile if it's the current user
-          if (newProfile && newProfile.id === user.id) {
-            loadProfile();
-          }
         }
       )
       .subscribe();
@@ -279,7 +267,6 @@ export default function Community() {
         loadPublicUsers(),
         loadFriendsData(),
         loadTradesData(),
-        loadProfile(),
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -594,43 +581,6 @@ export default function Community() {
     });
   };
 
-
-  // ============ PROFILE FUNCTIONS ============
-  const loadProfile = async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from('profiles')
-      .select('username, collection_visibility')
-      .eq('id', user.id)
-      .single();
-
-    if (data) {
-      setUsername(data.username || '');
-      setCollectionVisibility(data.collection_visibility || 'private');
-    }
-  };
-
-  const handleSaveProfile = async () => {
-    if (!user) return;
-    setSavingProfile(true);
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id,
-          username,
-          collection_visibility: collectionVisibility,
-          updated_at: new Date(),
-        });
-
-      if (error) throw error;
-      toast.success('Profile updated!');
-    } catch {
-      toast.error('Failed to update profile');
-    } finally {
-      setSavingProfile(false);
-    }
-  };
 
   // ============ RENDER HELPERS ============
   const calculateTradeItemsPrice = (items: TradeItem[] | undefined, ownerId: string): number => {
@@ -1453,51 +1403,7 @@ export default function Community() {
         )}
 
         {/* ============ PROFILE TAB ============ */}
-        {activeTab === 'profile' && (
-          <div className="space-y-4 max-w-md">
-            {/* Username */}
-            <div>
-              <label className="block text-sm text-gray-400 mb-1.5">Username</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm"
-                placeholder="Your username"
-              />
-            </div>
-
-            {/* Visibility */}
-            <div>
-              <label className="block text-sm text-gray-400 mb-1.5">Collection Visibility</label>
-              <div className="grid grid-cols-3 gap-2">
-                {VISIBILITY_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => setCollectionVisibility(option.value)}
-                    className={`p-3 rounded-lg border-2 transition text-center ${
-                      collectionVisibility === option.value
-                        ? 'border-blue-500 bg-blue-500/10'
-                        : 'border-gray-700 bg-gray-800 active:border-gray-600'
-                    }`}
-                  >
-                    <div className="font-medium text-sm">{option.label}</div>
-                    <div className="text-xs text-gray-400 mt-0.5">{option.description}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Save */}
-            <button
-              onClick={handleSaveProfile}
-              disabled={savingProfile}
-              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 py-3 rounded-lg font-medium"
-            >
-              {savingProfile ? <Loader2 className="animate-spin" size={18} /> : <><Save size={18} /> Save</>}
-            </button>
-          </div>
-        )}
+        {activeTab === 'profile' && <ProfileSettings />}
 
         {/* Trade Detail Modal */}
         {selectedTrade && (
