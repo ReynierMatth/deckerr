@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, Deck } from '../types';
 import DeckManager from './DeckManager';
 import { supabase } from '../lib/supabase';
@@ -9,57 +9,43 @@ interface DeckEditorProps {
   onClose?: () => void;
 }
 
+const fetchDeck = async (deckId: string): Promise<Deck> => {
+  const { data: deckData, error: deckError } = await supabase
+    .from('decks')
+    .select('*')
+    .eq('id', deckId)
+    .single();
+  if (deckError) throw deckError;
+
+  const { data: cardEntities, error: cardsError } = await supabase
+    .from('deck_cards')
+    .select('*')
+    .eq('deck_id', deckId);
+  if (cardsError) throw cardsError;
+
+  const uniqueCardIds = [...new Set(cardEntities.map((entity) => entity.card_id))];
+  const scryfallCards = await getCardsByIds(uniqueCardIds);
+
+  const cards = cardEntities.map((entity) => ({
+    card: scryfallCards.find((c) => c.id === entity.card_id) as Card,
+    quantity: entity.quantity,
+    is_commander: entity.is_commander,
+  }));
+
+  return {
+    ...deckData,
+    cards,
+    createdAt: new Date(deckData.created_at),
+    updatedAt: new Date(deckData.updated_at),
+  };
+};
+
 export default function DeckEditor({ deckId, onClose }: DeckEditorProps) {
-  const [deck, setDeck] = useState<Deck | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchDeck = async () => {
-      try {
-        // Fetch deck data
-        const { data: deckData, error: deckError } = await supabase
-          .from('decks')
-          .select('*')
-          .eq('id', deckId)
-          .single();
-
-        if (deckError) throw deckError;
-
-        // Fetch deck cards
-        const { data: cardEntities, error: cardsError } = await supabase
-          .from('deck_cards')
-          .select('*')
-          .eq('deck_id', deckId);
-
-        if (cardsError) throw cardsError;
-
-        // Fetch card details from Scryfall
-        const cardIds = cardEntities.map(entity => entity.card_id);
-        const uniqueCardIds = [...new Set(cardIds)];
-        const scryfallCards = await getCardsByIds(uniqueCardIds);
-
-        // Combine deck data with card details
-        const cards = cardEntities.map(entity => ({
-          card: scryfallCards.find(c => c.id === entity.card_id) as Card,
-          quantity: entity.quantity,
-          is_commander: entity.is_commander,
-        }));
-
-        setDeck({
-          ...deckData,
-          cards,
-          createdAt: new Date(deckData.created_at),
-          updatedAt: new Date(deckData.updated_at),
-        });
-      } catch (error) {
-        console.error('Error fetching deck:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDeck();
-  }, [deckId]);
+  const { data: deck, isLoading: loading } = useQuery({
+    queryKey: ['deck', deckId],
+    queryFn: () => fetchDeck(deckId),
+    staleTime: 0, // refetch on mount so edits made elsewhere are reflected
+  });
 
   if (loading) {
     return (

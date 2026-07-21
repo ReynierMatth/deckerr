@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Library, LogOut, ChevronDown, Search, Heart, Users } from 'lucide-react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -10,25 +11,19 @@ export default function Navigation() {
   const currentPath = useRouterState({ select: (s) => s.location.pathname });
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [username, setUsername] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchProfile = async () => {
-      if (user) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('username')
-          .eq('id', user.id)
-          .single();
-
-        if (data) {
-          setUsername(data.username);
-        }
-      }
-    };
-
-    fetchProfile();
-  }, [user]);
+  const { data: username } = useQuery({
+    queryKey: ['profile', 'username', user?.id],
+    enabled: Boolean(user),
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', user!.id)
+        .single();
+      return data?.username ?? null;
+    },
+  });
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
