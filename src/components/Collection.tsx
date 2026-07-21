@@ -1,15 +1,20 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Loader2, Trash2, RefreshCw, Plus, Minus, X } from 'lucide-react';
 import { Card } from '../types';
-import { getUserCollectionPaginated, getCardsByIds, addCardToCollection, getCollectionTotalValue } from '../services/api';
+import { getUserCollectionPaginated, getCardsByIds, getCollectionTotalValue } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
 import { useCardFaces } from '../hooks/useCardFaces';
 import { supabase } from '../lib/supabase';
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import ConfirmModal from './ConfirmModal';
 
 const PAGE_SIZE = 50;
+
+interface ProfileTotalValueRow {
+  collection_total_value: number;
+}
 
 export default function Collection() {
   const { user } = useAuth();
@@ -81,10 +86,11 @@ export default function Collection() {
           table: 'profiles',
           filter: `id=eq.${user.id}`,
         },
-        (payload: any) => {
-          if (payload.new?.collection_total_value !== undefined) {
-            console.log('Collection total value updated:', payload.new.collection_total_value);
-            setTotalCollectionValue(payload.new.collection_total_value);
+        (payload: RealtimePostgresChangesPayload<ProfileTotalValueRow>) => {
+          const newProfile = payload.new as Partial<ProfileTotalValueRow>;
+          if (newProfile?.collection_total_value !== undefined) {
+            console.log('Collection total value updated:', newProfile.collection_total_value);
+            setTotalCollectionValue(newProfile.collection_total_value);
           }
         }
       )

@@ -28,7 +28,7 @@ export default function CardCarousel() {
   return (
     <div className="relative h-screen overflow-hidden">
       <div className="absolute inset-0 flex">
-        {cards.map((card, index) => (
+        {cards.map((card) => (
           <div
             key={card.id}
             className="min-w-full h-full transform transition-transform duration-1000"

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Download, X } from 'lucide-react';
 
 interface BeforeInstallPromptEvent extends Event {
@@ -14,7 +14,7 @@ export default function PWAInstallPrompt() {
   useEffect(() => {
     // Check if already installed
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-    if (isStandalone || (window.navigator as any).standalone) {
+    if (isStandalone || (window.navigator as Navigator & { standalone?: boolean }).standalone) {
       setIsInstalled(true);
       return;
     }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, Deck } from '../types';
 import DeckManager from './DeckManager';
 import { supabase } from '../lib/supabase';

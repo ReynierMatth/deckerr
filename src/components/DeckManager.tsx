@@ -8,7 +8,6 @@ import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
 import { useCardFaces } from '../hooks/useCardFaces';
 import { supabase } from '../lib/supabase';
 import { validateDeck } from '../utils/deckValidation';
-import MagicCard from './MagicCard';
 import { ManaCost, ManaSymbol } from './ManaCost';
 
 interface DeckManagerProps {
@@ -28,7 +27,7 @@ interface DeckManagerProps {
 // };
 
 const suggestLandCountAndDistribution = (
-  cards: { card; quantity: number }[],
+  cards: { card: Card; quantity: number }[],
   format: string,
   commanderColors: string[] = []
 ) => {
@@ -134,6 +133,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const [selectedCards, setSelectedCards] = useState<{
     card: Card;
     quantity: number;
+    is_commander: boolean;
   }[]>(initialDeck?.cards || []);
   const [deckName, setDeckName] = useState(initialDeck?.name || '');
   const [deckFormat, setDeckFormat] = useState(initialDeck?.format || 'standard');
@@ -301,7 +301,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
             : c
         );
       }
-      return [...prev, { card, quantity: 1 }];
+      return [...prev, { card, quantity: 1, is_commander: false }];
     });
   };
 
@@ -445,8 +445,8 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     for (const color in suggestedLands) {
       const landCount = suggestedLands[color];
       if (landCount > 0) {
-        const landName = basicLandCards[color]?.name;
-        const landSet = basicLandCards[color]?.set;
+        const landName = basicLandCards[color as keyof typeof basicLandCards]?.name;
+        const landSet = basicLandCards[color as keyof typeof basicLandCards]?.set;
 
         if (landName && landSet) {
           try {
@@ -513,7 +513,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                 4
               );
             } else {
-              updatedCards.push({ card, quantity });
+              updatedCards.push({ card, quantity, is_commander: false });
             }
           }
           return updatedCards;

@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, Clock, History, UserPlus, UserMinus, Check, X, Send, Settings, Save, ChevronLeft, RefreshCw, Plus, Minus, AlertTriangle } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, Clock, History, UserPlus, UserMinus, Check, X, Send, Settings, Save, ChevronLeft, RefreshCw, AlertTriangle } from 'lucide-react';
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
@@ -40,6 +41,26 @@ interface UserProfile {
 interface CollectionItem {
   card: Card;
   quantity: number;
+}
+
+interface TradeRealtimeRow {
+  user1_id: string;
+  user2_id: string;
+}
+
+interface FriendshipRealtimeRow {
+  requester_id: string;
+  addressee_id: string;
+}
+
+interface ProfileRealtimeRow {
+  id: string;
+  collection_visibility: string | null;
+  collection_total_value: number;
+}
+
+interface CollectionRealtimeRow {
+  user_id: string;
 }
 
 type Tab = 'browse' | 'friends' | 'trades' | 'profile';
@@ -132,9 +153,9 @@ export default function Community() {
           schema: 'public',
           table: 'trades',
         },
-        (payload: any) => {
+        (payload: RealtimePostgresChangesPayload<TradeRealtimeRow>) => {
           // Filter for trades involving this user
-          const newData = payload.new || payload.old;
+          const newData = (payload.new || payload.old) as Partial<TradeRealtimeRow>;
           if (newData && (newData.user1_id === user.id || newData.user2_id === user.id)) {
             console.log('Trade change:', payload);
             loadTradesData();
@@ -161,9 +182,9 @@ export default function Community() {
           schema: 'public',
           table: 'friendships',
         },
-        (payload: any) => {
+        (payload: RealtimePostgresChangesPayload<FriendshipRealtimeRow>) => {
           // Filter for friendships involving this user
-          const newData = payload.new || payload.old;
+          const newData = (payload.new || payload.old) as Partial<FriendshipRealtimeRow>;
           if (newData && (newData.requester_id === user.id || newData.addressee_id === user.id)) {
             console.log('Friendship change:', payload);
             loadFriendsData();
@@ -190,14 +211,16 @@ export default function Community() {
           schema: 'public',
           table: 'profiles',
         },
-        (payload: any) => {
+        (payload: RealtimePostgresChangesPayload<ProfileRealtimeRow>) => {
           console.log('Profile change:', payload);
+          const newProfile = payload.new as Partial<ProfileRealtimeRow>;
+          const oldProfile = payload.old as Partial<ProfileRealtimeRow>;
           // Reload public users if a profile's visibility changed
-          if (payload.new && payload.old && payload.new.collection_visibility !== payload.old.collection_visibility) {
+          if (newProfile && oldProfile && newProfile.collection_visibility !== oldProfile.collection_visibility) {
             loadPublicUsers();
           }
           // Reload own profile if it's the current user
-          if (payload.new && payload.new.id === user.id) {
+          if (newProfile && newProfile.id === user.id) {
             loadProfile();
           }
         }
@@ -223,8 +246,8 @@ export default function Community() {
           schema: 'public',
           table: 'collections',
         },
-        (payload: any) => {
-          const data = payload.new || payload.old;
+        (payload: RealtimePostgresChangesPayload<CollectionRealtimeRow>) => {
+          const data = (payload.new || payload.old) as Partial<CollectionRealtimeRow>;
           if (data && data.user_id === selectedUser.id) {
             console.log('Collection change for viewed user:', payload.eventType);
             // Reload on any change (INSERT/UPDATE/DELETE)
@@ -399,10 +422,11 @@ export default function Community() {
           table: 'profiles',
           filter: `id=eq.${selectedUser.id}`,
         },
-        (payload: any) => {
-          if (payload.new?.collection_total_value !== undefined) {
-            console.log(`User ${selectedUser.username}'s collection total value updated:`, payload.new.collection_total_value);
-            setUserCollectionTotalValue(payload.new.collection_total_value);
+        (payload: RealtimePostgresChangesPayload<ProfileRealtimeRow>) => {
+          const newProfile = payload.new as Partial<ProfileRealtimeRow>;
+          if (newProfile?.collection_total_value !== undefined) {
+            console.log(`User ${selectedUser.username}'s collection total value updated:`, newProfile.collection_total_value);
+            setUserCollectionTotalValue(newProfile.collection_total_value);
           }
         }
       )
@@ -446,7 +470,7 @@ export default function Community() {
       setFriendSearchResults((prev) => prev.filter((u) => u.id !== addresseeId));
       await loadFriendsData();
       toast.success('Friend request sent!');
-    } catch (error) {
+    } catch {
       toast.error('Failed to send friend request');
     }
   };
@@ -456,7 +480,7 @@ export default function Community() {
       await acceptFriendRequest(friendshipId);
       await loadFriendsData();
       toast.success('Friend request accepted!');
-    } catch (error) {
+    } catch {
       toast.error('Failed to accept request');
     }
   };
@@ -466,7 +490,7 @@ export default function Community() {
       await declineFriendRequest(friendshipId);
       await loadFriendsData();
       toast.info('Friend request declined');
-    } catch (error) {
+    } catch {
       toast.error('Failed to decline request');
     }
   };
@@ -482,7 +506,7 @@ export default function Community() {
           await removeFriend(friendshipId);
           await loadFriendsData();
           toast.success('Friend removed');
-        } catch (error) {
+        } catch {
           toast.error('Failed to remove friend');
         }
       },
@@ -529,7 +553,7 @@ export default function Community() {
       } else {
         toast.error('Failed. Check your collection.');
       }
-    } catch (error) {
+    } catch {
       toast.error('Error accepting trade');
     } finally {
       setProcessingTradeId(null);
@@ -542,7 +566,7 @@ export default function Community() {
       await declineTrade(tradeId);
       await loadTradesData();
       toast.info('Trade declined');
-    } catch (error) {
+    } catch {
       toast.error('Error declining trade');
     } finally {
       setProcessingTradeId(null);
@@ -561,7 +585,7 @@ export default function Community() {
           await cancelTrade(tradeId);
           await loadTradesData();
           toast.info('Trade cancelled');
-        } catch (error) {
+        } catch {
           toast.error('Error cancelling trade');
         } finally {
           setProcessingTradeId(null);
@@ -601,7 +625,7 @@ export default function Community() {
 
       if (error) throw error;
       toast.success('Profile updated!');
-    } catch (error) {
+    } catch {
       toast.error('Failed to update profile');
     } finally {
       setSavingProfile(false);
@@ -1386,7 +1410,9 @@ export default function Community() {
                         </div>
                         <div className="flex items-center gap-1.5">
                           {trade.status === 'pending' && !trade.is_valid && (
-                            <AlertTriangle size={14} className="text-red-400" title="Trade no longer valid" />
+                            <span title="Trade no longer valid">
+                              <AlertTriangle size={14} className="text-red-400" />
+                            </span>
                           )}
                           <span className={`text-xs capitalize ${statusColors[trade.status]}`}>
                             {trade.status}

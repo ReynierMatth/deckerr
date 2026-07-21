@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import DeckManager from './components/DeckManager';
 import DeckList from './components/DeckList';
 import LoginForm from './components/LoginForm';
-import Navigation from './components/Navigation';
+import Navigation, { type Page } from './components/Navigation';
 import Collection from './components/Collection';
 import DeckEditor from './components/DeckEditor';
 import CardSearch from './components/CardSearch';
@@ -12,8 +12,6 @@ import PWAInstallPrompt from './components/PWAInstallPrompt';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
-
-type Page = 'home' | 'deck' | 'login' | 'collection' | 'edit-deck' | 'search' | 'life-counter' | 'community';
 
 function AppContent() {
   const [currentPage, setCurrentPage] = useState<Page>('home');

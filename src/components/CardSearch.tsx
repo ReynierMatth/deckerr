@@ -218,12 +218,12 @@ const CardSearch = () => {
                 <option value="exact">Exact</option>
               </select>
               <select
-                value={typeInclude}
+                value={String(typeInclude)}
                 onChange={(e) => setTypeInclude(e.target.value === 'true')}
                 className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               >
-                <option value={true}>Include</option>
-                <option value={false}>Exclude</option>
+                <option value="true">Include</option>
+                <option value="false">Exclude</option>
               </select>
             </div>
           </div>
@@ -442,12 +442,12 @@ const CardSearch = () => {
               <option value="exact">Exact</option>
             </select>
             <select
-              value={criteriaInclude}
+              value={String(criteriaInclude)}
               onChange={(e) => setCriteriaInclude(e.target.value === 'true')}
               className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
-              <option value={true}>Include</option>
-              <option value={false}>Exclude</option>
+              <option value="true">Include</option>
+              <option value="false">Exclude</option>
             </select>
           </div>
 

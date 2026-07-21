@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { getCardById, getCardsByIds } from '../services/api';
+import { useEffect, useState } from 'react';
+import { getCardsByIds } from '../services/api';
 import { Deck } from '../types';
 import { supabase } from "../lib/supabase";
 import DeckCard from "./DeckCard";
 import { PlusCircle } from 'lucide-react';
-import MigrateDeckButton from "./MigrateDeckButton.tsx";
 
 interface DeckListProps {
   onDeckEdit?: (deckId: string) => void;

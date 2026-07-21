@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Library, LogOut, ChevronDown, Search, Heart, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
-type Page = 'home' | 'deck' | 'login' | 'collection' | 'search' | 'life-counter' | 'community';
+export type Page = 'home' | 'deck' | 'login' | 'collection' | 'edit-deck' | 'search' | 'life-counter' | 'community';
 
 interface NavigationProps {
   currentPage: Page;
