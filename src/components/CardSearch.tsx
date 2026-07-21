@@ -5,6 +5,7 @@ import { Card } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { isDoubleFaced, getCardImageUri, getCardArtCrop } from '../utils/cardFaces';
+import { buildScryfallQuery } from '../utils/scryfallQuery';
 import { useCardFaces } from '../hooks/useCardFaces';
 import MagicCard from './MagicCard';
 import { getManaIconPath } from './ManaCost';
@@ -107,61 +108,16 @@ const CardSearch = () => {
     setLoading(true);
     setError(null);
 
-    let query = '';
-
-    if (cardName) query += `name:${cardName} `;
-    if (text) query += `o:${text} `;
-    if (rulesText) query += `o:"${rulesText.replace('~', cardName)}" `;
-    if (typeLine) {
-      const typeQuery = typeMatch === 'partial' ? typeLine : `"${typeLine}"`;
-      query += `${typeInclude ? '' : '-'}t:${typeQuery} `;
-    }
-    if (Object.values(colors).some(Boolean)) {
-      const activeColors = Object.keys(colors).filter((key) => colors[key as keyof typeof colors]).join('');
-      const colorQuery = colorMode === 'exactly' ? `c:${activeColors}` : `color<=${activeColors}`;
-      query += `${colorQuery} `;
-    }
-    if (Object.values(commanderColors).some(Boolean)) {
-      const activeColors = Object.keys(commanderColors).filter((key) => commanderColors[key as keyof typeof commanderColors]).join('');
-      query += `id:${activeColors} `;
-    }
-
-    const manaCostString = Object.entries(manaCost)
-      .filter(([, count]) => count > 0)
-      .map(([color, count]) => `{${color}}`.repeat(count))
-      .join('');
-
-    if (manaCostString) query += `m:${manaCostString} `;
-
-    if (manaValue) query += `mv${manaValueComparison}${manaValue} `;
-    if (Object.values(games).some(Boolean)) {
-      const activeGames = Object.keys(games).filter((key) => games[key as keyof typeof games]).join(',');
-      query += `game:${activeGames} `;
-    }
-    if (format) query += `f:${format} `;
-    if (formatStatus) query += `${formatStatus}:${format} `;
-    if (set) query += `e:${set} `;
-    if (block) query += `b:${block} `;
-    if (Object.values(rarity).some(Boolean)) {
-      const activeRarities = Object.keys(rarity).filter((key) => rarity[key as keyof typeof rarity]).join(',');
-      query += `r:${activeRarities} `;
-    }
-    if (criteria) {
-      const criteriaQuery = criteriaMatch === 'partial' ? criteria : `"${criteria}"`;
-      query += `${criteriaInclude ? '' : '-'}o:${criteriaQuery} `;
-    }
-    if (price) query += `${currency}${priceComparison}${price} `;
-    if (artist) query += `a:${artist} `;
-    if (flavorText) query += `ft:${flavorText} `;
-    if (loreFinder) query += `${loreFinder} `;
-    if (language) query += `lang:${language} `;
-    if (displayImages) query += `display:grid `;
-    if (order) query += `order:${order} `;
-    if (showAllPrints) query += `unique:prints `;
-    if (includeExtras) query += `include:extras `;
+    const query = buildScryfallQuery({
+      cardName, text, rulesText, typeLine, typeMatch, typeInclude, colors, colorMode,
+      commanderColors, manaCost, manaValue, manaValueComparison, games, format, formatStatus,
+      set, block, rarity, criteria, criteriaMatch, criteriaInclude, price, currency,
+      priceComparison, artist, flavorText, loreFinder, language, displayImages, order,
+      showAllPrints, includeExtras,
+    });
 
     try {
-      const cards = await searchCards(query.trim(), controller.signal);
+      const cards = await searchCards(query, controller.signal);
       setSearchResults(cards || []);
     } catch (err) {
       // A newer search aborted this one — ignore, the newer one owns the UI.
