@@ -146,6 +146,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const [deckName, setDeckName] = useState(initialDeck?.name || '');
   const [deckFormat, setDeckFormat] = useState(initialDeck?.format || 'standard');
   const [tags, setTags] = useState<string[]>(initialDeck?.tags ?? []);
+  const [isPublic, setIsPublic] = useState<boolean>(initialDeck?.isPublic ?? false);
   const [commander, setCommander] = useState<Card | null>(
       initialDeck?.cards.find(card =>
           card.is_commander
@@ -372,6 +373,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         is_valid: validation.isValid,
         card_count: totalCardCount,
         tags,
+        is_public: isPublic,
       };
 
       // Save or update the deck
@@ -557,6 +559,9 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
             tags={tags}
             addTag={addTag}
             removeTag={removeTag}
+            isPublic={isPublic}
+            setIsPublic={setIsPublic}
+            deckId={currentDeckId}
             commander={commander}
             setCommander={setCommander}
             selectedCards={selectedCards}
