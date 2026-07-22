@@ -4,6 +4,7 @@ import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
+import WishlistButton from './WishlistButton';
 import { useCardFaces } from '../hooks/useCardFaces';
 import { supabase } from '../lib/supabase';
 import ProfileSettings from './community/ProfileSettings';
@@ -436,6 +437,7 @@ export default function Community() {
                           alt={displayName}
                           className="w-full h-auto"
                         />
+                        <WishlistButton cardId={card.id} className="absolute top-1 left-1" size={16} />
                         {/* Quantity badge */}
                         <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs sm:text-sm font-bold px-2 py-1 rounded-full shadow-lg">
                           x{quantity}
