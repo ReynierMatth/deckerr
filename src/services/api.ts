@@ -212,3 +212,22 @@ export const refreshCollectionPrices = async (userId: string): Promise<void> => 
 
   if (error) throw error;
 };
+
+// ---- Wishlist ----
+export const getWishlist = async (userId: string): Promise<Set<string>> => {
+  const { data, error } = await supabase.from('wishlists').select('card_id').eq('user_id', userId);
+  if (error) throw error;
+  return new Set((data ?? []).map((r) => r.card_id));
+};
+
+export const addToWishlist = async (userId: string, cardId: string): Promise<void> => {
+  const { error } = await supabase
+    .from('wishlists')
+    .upsert({ user_id: userId, card_id: cardId }, { onConflict: 'user_id,card_id' });
+  if (error) throw error;
+};
+
+export const removeFromWishlist = async (userId: string, cardId: string): Promise<void> => {
+  const { error } = await supabase.from('wishlists').delete().eq('user_id', userId).eq('card_id', cardId);
+  if (error) throw error;
+};

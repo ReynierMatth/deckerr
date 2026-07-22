@@ -12,6 +12,7 @@ import LoginForm from './components/LoginForm';
 import DeckList from './components/DeckList';
 import DeckManager from './components/DeckManager';
 import Collection from './components/Collection';
+import Wishlist from './components/Wishlist';
 import Community from './components/Community';
 import CardSearch from './components/CardSearch';
 import LifeCounter from './components/LifeCounter';
@@ -76,6 +77,7 @@ function EditDeckPage() {
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: HomePage });
 const deckRoute = createRoute({ getParentRoute: () => rootRoute, path: '/deck', component: DeckManager });
 const collectionRoute = createRoute({ getParentRoute: () => rootRoute, path: '/collection', component: Collection });
+const wishlistRoute = createRoute({ getParentRoute: () => rootRoute, path: '/wishlist', component: Wishlist });
 const communityRoute = createRoute({ getParentRoute: () => rootRoute, path: '/community', component: Community });
 const searchRoute = createRoute({ getParentRoute: () => rootRoute, path: '/search', component: CardSearch });
 const lifeCounterRoute = createRoute({ getParentRoute: () => rootRoute, path: '/life-counter', component: LifeCounter });
@@ -89,6 +91,7 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   deckRoute,
   collectionRoute,
+  wishlistRoute,
   communityRoute,
   searchRoute,
   lifeCounterRoute,

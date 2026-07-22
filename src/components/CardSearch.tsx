@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useRef, useReducer } from 'react';
-import { RefreshCw, PackagePlus, Loader2, CheckCircle } from 'lucide-react';
-import { searchCards, getUserCollection, addCardToCollection } from '../services/api';
+import { RefreshCw, PackagePlus, Loader2, CheckCircle, Star } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  searchCards,
+  getUserCollection,
+  addCardToCollection,
+  getWishlist,
+  addToWishlist,
+  removeFromWishlist,
+} from '../services/api';
 import { Card } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -100,7 +108,36 @@ function searchFormReducer(state: SearchForm, action: SearchFormAction): SearchF
 const CardSearch = () => {
   const { user } = useAuth();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
+
+  // Wishlist membership (Set of card ids)
+  const { data: wishlist } = useQuery<Set<string>>({
+    queryKey: ['wishlist', user?.id],
+    enabled: !!user,
+    queryFn: () => getWishlist(user!.id),
+  });
+
+  const handleToggleWishlist = async (cardId: string) => {
+    if (!user) {
+      toast.error('Please log in to use your wishlist');
+      return;
+    }
+    const inWishlist = wishlist?.has(cardId) ?? false;
+    try {
+      if (inWishlist) {
+        await removeFromWishlist(user.id, cardId);
+        toast.success('Removed from wishlist');
+      } else {
+        await addToWishlist(user.id, cardId);
+        toast.success('Added to wishlist');
+      }
+      await queryClient.invalidateQueries({ queryKey: ['wishlist', user.id] });
+    } catch (error) {
+      console.error('Error updating wishlist:', error);
+      toast.error('Failed to update wishlist');
+    }
+  };
   const [form, dispatch] = useReducer(searchFormReducer, initialSearchForm);
   const setField = <K extends keyof SearchForm>(field: K, value: SearchForm[K]) =>
     dispatch({ type: 'set', field, value });
@@ -655,8 +692,20 @@ const CardSearch = () => {
                         )}
                       </div>
                     </div>
-                    {/* Action button */}
-                    <div className="flex items-center p-2">
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-1.5 p-2">
+                      <button
+                        onClick={() => handleToggleWishlist(card.id)}
+                        className={`p-2.5 rounded-lg ${
+                          wishlist?.has(card.id)
+                            ? 'bg-yellow-500/20 text-yellow-400'
+                            : 'bg-gray-700 text-gray-300 active:bg-gray-600'
+                        }`}
+                        title={wishlist?.has(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
+                        aria-label={wishlist?.has(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
+                      >
+                        <Star size={18} fill={wishlist?.has(card.id) ? 'currentColor' : 'none'} />
+                      </button>
                       <button
                         onClick={() => handleAddCardToCollection(card.id)}
                         disabled={isAddingThisCard}
@@ -717,6 +766,21 @@ const CardSearch = () => {
                           x{inCollection}
                         </span>
                       )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleWishlist(card.id);
+                        }}
+                        className={`absolute top-1 left-1 p-2 rounded-full shadow-lg transition-all ${
+                          wishlist?.has(card.id)
+                            ? 'bg-yellow-500/90 text-white'
+                            : 'bg-gray-900/70 text-gray-200 hover:bg-gray-900'
+                        }`}
+                        title={wishlist?.has(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
+                        aria-label={wishlist?.has(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
+                      >
+                        <Star size={16} fill={wishlist?.has(card.id) ? 'currentColor' : 'none'} />
+                      </button>
                     </div>
                     <div className="p-3">
                       <h3 className="font-bold text-sm truncate mb-1">{displayName}</h3>
