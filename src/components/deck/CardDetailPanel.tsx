@@ -1,6 +1,7 @@
 import { CheckCircle, Minus, Plus, RefreshCw, X } from 'lucide-react';
 import { Card } from '../../types';
 import { isDoubleFaced } from '../../utils/cardFaces';
+import WishlistButton from '../WishlistButton';
 
 interface CardDetailPanelProps {
   card: Card;
@@ -69,6 +70,7 @@ export default function CardDetailPanel({
               alt={displayName}
               className="w-full h-auto rounded-lg shadow-lg"
             />
+            <WishlistButton cardId={card.id} className="absolute top-2 left-2" size={22} />
             {isMultiFaced && (
               <>
                 <div className="absolute top-2 right-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">

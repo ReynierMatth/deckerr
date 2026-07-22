@@ -9,6 +9,7 @@ import { useCardFaces } from '../hooks/useCardFaces';
 import { supabase } from '../lib/supabase';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import ConfirmModal from './ConfirmModal';
+import WishlistButton from './WishlistButton';
 
 const PAGE_SIZE = 50;
 
@@ -427,6 +428,7 @@ export default function Collection() {
                         alt={displayName}
                         className="w-full h-auto"
                       />
+                      <WishlistButton cardId={card.id} className="absolute top-1 left-1" size={16} />
                       {/* Quantity badge */}
                       <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs sm:text-sm font-bold px-2 py-1 rounded-full shadow-lg">
                         x{quantity}
