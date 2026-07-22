@@ -190,21 +190,32 @@ export const addMultipleCardsToCollection = async (
  * denormalized profiles.collection_total_value.
  */
 export const refreshCollectionPrices = async (userId: string): Promise<void> => {
-  const collection = await getUserCollection(userId); // Map<card_id, quantity>
-  const cardIds = [...collection.keys()];
-  if (cardIds.length === 0) return;
+  const { data: items, error: readError } = await supabase
+    .from('collections')
+    .select('card_id, quantity, is_foil')
+    .eq('user_id', userId);
+  if (readError) throw readError;
+  if (!items || items.length === 0) return;
 
-  const cards = await fetchCardsByIds(cardIds);
-  const priceById = new Map(cards.map((c) => [c.id, priceFromCard(c.prices)]));
+  const cards = await fetchCardsByIds([...new Set(items.map((i) => i.card_id))]);
+  const byId = new Map(cards.map((c) => [c.id, c]));
 
   const now = new Date().toISOString();
-  const rows = cardIds.map((cardId) => ({
-    user_id: userId,
-    card_id: cardId,
-    quantity: collection.get(cardId) ?? 0,
-    price_usd: priceById.get(cardId) ?? 0,
-    updated_at: now,
-  }));
+  const rows = items.map((i) => {
+    const prices = byId.get(i.card_id)?.prices;
+    // foil entries are valued at the foil price (Scryfall's usd_foil)
+    const price = i.is_foil
+      ? Number(prices?.usd_foil ?? prices?.usd ?? 0)
+      : Number(prices?.usd ?? prices?.usd_foil ?? 0);
+    return {
+      user_id: userId,
+      card_id: i.card_id,
+      quantity: i.quantity,
+      is_foil: i.is_foil,
+      price_usd: price,
+      updated_at: now,
+    };
+  });
 
   const { error } = await supabase
     .from('collections')
