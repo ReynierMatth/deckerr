@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Loader2, PackagePlus } from 'lucide-react';
+import { Save, Loader2, PackagePlus, Download } from 'lucide-react';
 import { Card, Deck } from '../types';
 import { searchCards, resolveCardsByNames, getUserCollection, addCardToCollection, addMultipleCardsToCollection } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,6 +11,7 @@ import { validateDeck } from '../utils/deckValidation';
 import { parseDeckList } from '../utils/parseDeckList';
 import CardDetailPanel from './deck/CardDetailPanel';
 import HoverCardPreview from './deck/HoverCardPreview';
+import DeckExportModal from './deck/DeckExportModal';
 import DeckSearchPanel from './deck/DeckSearchPanel';
 import DeckCardList from './deck/DeckCardList';
 import DeckStats from './deck/DeckStats';
@@ -151,6 +152,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const { user } = useAuth();
   const [isImporting, setIsImporting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showExport, setShowExport] = useState(false);
 
   // Collection management state
   const [userCollection, setUserCollection] = useState<Map<string, number>>(new Map());
@@ -611,6 +613,14 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
               </button>
             )}
             <button
+              onClick={() => setShowExport(true)}
+              disabled={selectedCards.length === 0}
+              title="Export deck"
+              className="px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed rounded-lg flex items-center justify-center transition-colors"
+            >
+              <Download size={18} />
+            </button>
+            <button
               onClick={saveDeck}
               disabled={
                 !deckName.trim() || selectedCards.length === 0 || isSaving
@@ -632,6 +642,10 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
           </div>
         </div>
       </div>
+
+      {showExport && (
+        <DeckExportModal cards={selectedCards} onClose={() => setShowExport(false)} />
+      )}
 
       {/* Hover Card Preview - only show if no card is selected */}
       {hoveredCard && !selectedCard && (
