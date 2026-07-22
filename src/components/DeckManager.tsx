@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, Search, Save, Trash2, Loader2, CheckCircle, XCircle, AlertCircle, PackagePlus, RefreshCw } from 'lucide-react';
+import { Save, Loader2, PackagePlus } from 'lucide-react';
 import { Card, Deck } from '../types';
 import { searchCards, resolveCardsByNames, getUserCollection, addCardToCollection, addMultipleCardsToCollection } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
+import { isDoubleFaced } from '../utils/cardFaces';
 import { useCardFaces } from '../hooks/useCardFaces';
 import { supabase } from '../lib/supabase';
 import { validateDeck } from '../utils/deckValidation';
 import { parseDeckList } from '../utils/parseDeckList';
-import { ManaCost, ManaSymbol } from './ManaCost';
 import CardDetailPanel from './deck/CardDetailPanel';
 import HoverCardPreview from './deck/HoverCardPreview';
+import DeckSearchPanel from './deck/DeckSearchPanel';
+import DeckCardList from './deck/DeckCardList';
 
 interface DeckManagerProps {
   initialDeck?: Deck;
@@ -522,371 +523,55 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Card Search Section */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Mobile-First Search Bar */}
-            <form onSubmit={handleSearch} className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-24 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 text-white"
-                placeholder="Rechercher une carte..."
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setSearchResults([]);
-                  }}
-                  className="absolute right-14 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
-                >
-                  <XCircle size={20} />
-                </button>
-              )}
-              <button
-                type="submit"
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-blue-600 hover:bg-blue-700 rounded-md"
-              >
-                <Search size={20} />
-              </button>
-            </form>
-
-            {/* Vertical Card List for Mobile */}
-            <div className="space-y-2">
-              {isSearching ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="animate-spin text-blue-500" size={48} />
-                </div>
-              ) : searchResults.length === 0 && searchQuery ? (
-                <div className="text-center py-12 text-gray-400">
-                  <p className="text-lg mb-2">No cards found</p>
-                  <p className="text-sm">Try a different search term</p>
-                </div>
-              ) : (
-                searchResults.map(card => {
-                const currentFaceIndex = getCurrentFaceIndex(card.id);
-                const isMultiFaced = isDoubleFaced(card);
-                const inCollection = userCollection.get(card.id) || 0;
-                const isAddingThisCard = addingCardId === card.id;
-                const cardInDeck = selectedCards.find(c => c.card.id === card.id);
-                const quantityInDeck = cardInDeck?.quantity || 0;
-
-                const displayName = isMultiFaced && card.card_faces
-                  ? card.card_faces[currentFaceIndex]?.name || card.name
-                  : card.name;
-
-                const isValidForCommander = deckFormat !== 'commander' || !commander || isCardValidForCommander(card, commanderColors);
-
-                return (
-                  <div
-                    key={card.id}
-                    className={`bg-gray-800 rounded-lg p-3 flex items-center gap-3 hover:bg-gray-750 transition-colors cursor-pointer ${
-                      !isValidForCommander ? 'border border-yellow-500/50' : ''
-                    }`}
-                    onMouseEnter={() => {
-                      setHoveredCard(card);
-                      setHoverSource('search');
-                    }}
-                    onMouseLeave={() => {
-                      setHoveredCard(null);
-                      setHoverSource(null);
-                    }}
-                    onClick={() => setSelectedCard(card)}
-                  >
-                    {/* Card Thumbnail */}
-                    <div className="relative flex-shrink-0 w-16 h-22 rounded overflow-hidden"
-                         onClick={(e) => e.stopPropagation()}>
-                      {getCardImageUri(card, currentFaceIndex) ? (
-                        <img
-                          src={getCardImageUri(card, currentFaceIndex)}
-                          alt={displayName}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gray-700" />
-                      )}
-                      {isMultiFaced && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleCardFace(card.id, card.card_faces!.length);
-                          }}
-                          className="absolute bottom-0 right-0 bg-purple-600 text-white p-1 rounded-tl"
-                        >
-                          <RefreshCw size={10} />
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Card Info */}
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-sm truncate">{displayName}</h3>
-                      <div className="flex items-center gap-2 mt-1">
-                        {card.mana_cost && (
-                          <ManaCost cost={card.mana_cost} size={14} />
-                        )}
-                        {card.prices?.usd && (
-                          <div className="text-xs text-gray-400">${card.prices.usd}</div>
-                        )}
-                      </div>
-                      {inCollection > 0 && (
-                        <div className="text-xs text-green-400 mt-1">
-                          <CheckCircle size={12} className="inline mr-1" />
-                          x{inCollection} in collection
-                        </div>
-                      )}
-                      {!isValidForCommander && (
-                        <div className="text-xs text-yellow-400 mt-1 flex items-center gap-1">
-                          <AlertCircle size={12} />
-                          Not in commander colors
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Add/Quantity Controls */}
-                    {quantityInDeck > 0 ? (
-                      <div className="flex-shrink-0 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => {
-                            if (quantityInDeck === 1) {
-                              removeCardFromDeck(card.id);
-                            } else {
-                              updateCardQuantity(card.id, quantityInDeck - 1);
-                            }
-                          }}
-                          className="w-8 h-8 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center transition-colors"
-                        >
-                          <Minus size={16} />
-                        </button>
-                        <span className="w-6 text-center text-sm font-medium">{quantityInDeck}</span>
-                        <button
-                          onClick={() => addCardToDeck(card)}
-                          className="w-8 h-8 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center transition-colors"
-                        >
-                          <Plus size={16} />
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          addCardToDeck(card);
-                        }}
-                        className="flex-shrink-0 w-10 h-10 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center transition-colors"
-                      >
-                        <Plus size={20} />
-                      </button>
-                    )}
-
-                    {/* Add to Collection Button (hidden on mobile by default) */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAddCardToCollection(card.id, 1);
-                      }}
-                      disabled={isAddingThisCard}
-                      className="hidden sm:flex flex-shrink-0 w-10 h-10 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-full items-center justify-center transition-colors"
-                      title="Add to collection"
-                    >
-                      {isAddingThisCard ? (
-                        <Loader2 className="animate-spin" size={20} />
-                      ) : (
-                        <PackagePlus size={20} />
-                      )}
-                    </button>
-                  </div>
-                );
-              })
-              )}
-            </div>
-          </div>
+          <DeckSearchPanel
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            setSearchResults={setSearchResults}
+            handleSearch={handleSearch}
+            isSearching={isSearching}
+            searchResults={searchResults}
+            selectedCards={selectedCards}
+            userCollection={userCollection}
+            addingCardId={addingCardId}
+            deckFormat={deckFormat}
+            commander={commander}
+            commanderColors={commanderColors}
+            isCardValidForCommander={isCardValidForCommander}
+            getCurrentFaceIndex={getCurrentFaceIndex}
+            toggleCardFace={toggleCardFace}
+            addCardToDeck={addCardToDeck}
+            removeCardFromDeck={removeCardFromDeck}
+            updateCardQuantity={updateCardQuantity}
+            handleAddCardToCollection={handleAddCardToCollection}
+            setHoveredCard={setHoveredCard}
+            setHoverSource={setHoverSource}
+            setSelectedCard={setSelectedCard}
+          />
 
           {/* Deck Builder Section */}
-          <div className="bg-gray-800 rounded-lg p-6">
-            <div className="space-y-4">
-              <input
-                type="text"
-                value={deckName}
-                onChange={e => setDeckName(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
-                placeholder="Deck Name"
-              />
-
-              <select
-                value={deckFormat}
-                onChange={e => setDeckFormat(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
-              >
-                <option value="standard">Standard</option>
-                <option value="modern">Modern</option>
-                <option value="commander">Commander</option>
-                <option value="legacy">Legacy</option>
-                <option value="vintage">Vintage</option>
-                <option value="pauper">Pauper</option>
-              </select>
-
-              {deckFormat === 'commander' && (
-                <div className="space-y-2">
-                  <select
-                    value={commander?.id || ''}
-                    onChange={e => {
-                      const card =
-                        selectedCards.find(c => c.card.id === e.target.value)?.card ||
-                        null;
-                      setCommander(card);
-                    }}
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
-                  >
-                    <option value="">Select Commander</option>
-                    {selectedCards
-                      .filter(c =>
-                        c.card.type_line?.toLowerCase().includes('legendary')
-                      )
-                      .map(({ card }) => (
-                        <option key={card.id} value={card.id}>
-                          {card.name}
-                        </option>
-                      ))}
-                  </select>
-                  {commander && commanderColors.length > 0 && (
-                    <div className="bg-gray-700 rounded px-3 py-2 flex items-center gap-2">
-                      <span className="text-xs text-gray-400">Commander Colors:</span>
-                      <div className="flex items-center gap-1">
-                        {commanderColors.map(color => (
-                          <ManaSymbol key={color} symbol={color} size={18} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="relative">
-                <input
-                  type="file"
-                  accept=".txt"
-                  onChange={handleFileUpload}
-                  disabled={isImporting}
-                  className="w-full text-sm text-gray-500
-                file:mr-4 file:py-2 file:px-4
-                file:rounded-lg
-                file:border-0
-                file:text-sm file:font-semibold
-                file:bg-blue-500 file:text-white
-                hover:file:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                />
-                {isImporting && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-gray-800 bg-opacity-50 rounded-lg">
-                    <Loader2 className="animate-spin text-white" size={48} />
-                  </div>
-                )}
-              </div>
-
-              {!validation.isValid && (
-                <div className="bg-red-500/10 border border-red-500 rounded-lg p-3">
-                  <ul className="list-disc list-inside text-red-400 text-sm">
-                    {validation.errors.map((error, index) => (
-                      <li key={index}>{error}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-xl">
-                    Cards ({selectedCards.reduce((acc, curr) => acc + curr.quantity, 0)})
-                  </h3>
-                </div>
-
-                {selectedCards.map(({ card, quantity }) => {
-                  const isValidForCommander = deckFormat !== 'commander' || !commander || isCardValidForCommander(card, commanderColors);
-
-                  return (
-                    <div
-                      key={card.id}
-                      className={`flex items-center gap-3 p-2 rounded-lg bg-gray-700 cursor-pointer hover:bg-gray-650 transition-colors ${
-                        !isValidForCommander ? 'border border-yellow-500/50' : ''
-                      }`}
-                      onMouseEnter={() => {
-                        setHoveredCard(card);
-                        setHoverSource('deck');
-                      }}
-                      onMouseLeave={() => {
-                        setHoveredCard(null);
-                        setHoverSource(null);
-                      }}
-                      onClick={() => setSelectedCard(card)}
-                    >
-                      <img
-                        src={card.image_uris?.art_crop}
-                        alt={card.name}
-                        className="w-10 h-10 rounded"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-sm truncate">{card.name}</h4>
-                        {card.prices?.usd && (
-                          <div className="text-xs text-gray-400">${card.prices.usd}</div>
-                        )}
-                        {!isValidForCommander && (
-                          <div className="text-xs text-yellow-400 flex items-center gap-1 mt-0.5">
-                            <AlertCircle size={10} />
-                            <span>Not in commander colors</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="number"
-                          value={quantity}
-                          onChange={e =>
-                            updateCardQuantity(card.id, parseInt(e.target.value))
-                          }
-                          min="1"
-                          className="w-14 px-2 py-1 bg-gray-600 border border-gray-500 rounded text-center text-sm"
-                        />
-                        <button
-                          onClick={() => removeCardFromDeck(card.id)}
-                          className="text-red-500 hover:text-red-400"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {deckSize > 0 && suggestedLandCountValue > 0 && (
-                <div className="bg-gray-700 rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-semibold text-gray-300">Suggested Lands</span>
-                    <span className="text-xs text-gray-400">{suggestedLandCountValue} total</span>
-                  </div>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    {Object.entries(suggestedLands).map(([landType, count]) =>
-                      count > 0 ? (
-                        <div key={landType} className="flex items-center gap-1.5 bg-gray-800 px-2 py-1 rounded">
-                          <ManaSymbol symbol={landType} size={20} />
-                          <span className="text-sm font-medium text-white">{count}</span>
-                        </div>
-                      ) : null
-                    )}
-                  </div>
-                  <button
-                    onClick={addSuggestedLandsToDeck}
-                    className="w-full mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center justify-center gap-2 transition-colors"
-                  >
-                    <Plus size={20} />
-                    Add Suggested Lands
-                  </button>
-                </div>
-              )}
-
-            </div>
-          </div>
+          <DeckCardList
+            deckName={deckName}
+            setDeckName={setDeckName}
+            deckFormat={deckFormat}
+            setDeckFormat={setDeckFormat}
+            commander={commander}
+            setCommander={setCommander}
+            selectedCards={selectedCards}
+            commanderColors={commanderColors}
+            isCardValidForCommander={isCardValidForCommander}
+            handleFileUpload={handleFileUpload}
+            isImporting={isImporting}
+            validation={validation}
+            updateCardQuantity={updateCardQuantity}
+            removeCardFromDeck={removeCardFromDeck}
+            setHoveredCard={setHoveredCard}
+            setHoverSource={setHoverSource}
+            setSelectedCard={setSelectedCard}
+            deckSize={deckSize}
+            suggestedLandCountValue={suggestedLandCountValue}
+            suggestedLands={suggestedLands}
+            addSuggestedLandsToDeck={addSuggestedLandsToDeck}
+          />
         </div>
       </div>
 
