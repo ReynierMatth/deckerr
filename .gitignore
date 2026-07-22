@@ -24,6 +24,12 @@ dev-dist
 # Vite transient config-load artifacts
 vite.config.*.timestamp-*.mjs
 
+# Database backups / dumps
+*.backup
+*.backup.gz
+*.dump
+*.sql.gz
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
