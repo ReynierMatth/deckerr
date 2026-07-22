@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, X, Settings, ChevronLeft, RefreshCw } from 'lucide-react';
+import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, X, Settings, ChevronLeft, RefreshCw, Sparkles } from 'lucide-react';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 import ProfileSettings from './community/ProfileSettings';
 import FriendsTab from './community/FriendsTab';
 import TradesTab from './community/TradesTab';
+import TradeSuggestions from './community/TradeSuggestions';
 import { Friend } from '../services/friendsService';
 import { getUserCollectionPaginated, getCardsByIds, getCollectionTotalValue } from '../services/api';
 import { Card } from '../types';
@@ -35,7 +36,7 @@ interface CollectionRealtimeRow {
   user_id: string;
 }
 
-type Tab = 'browse' | 'friends' | 'trades' | 'profile';
+type Tab = 'browse' | 'friends' | 'trades' | 'suggestions' | 'profile';
 
 const PAGE_SIZE = 50;
 
@@ -666,6 +667,7 @@ export default function Community() {
             { id: 'browse' as Tab, label: 'Browse', icon: Globe },
             { id: 'friends' as Tab, label: `Friends`, count: friends.length, icon: Users },
             { id: 'trades' as Tab, label: `Trades`, count: pendingTradesCount, icon: ArrowLeftRight },
+            { id: 'suggestions' as Tab, label: 'Suggestions', icon: Sparkles },
             { id: 'profile' as Tab, label: 'Profile', icon: Settings },
           ].map((tab) => (
             <button
@@ -771,6 +773,9 @@ export default function Community() {
 
         {/* ============ TRADES TAB ============ */}
         {activeTab === 'trades' && <TradesTab onPendingCountChange={setPendingTradesCount} />}
+
+        {/* ============ SUGGESTIONS TAB ============ */}
+        {activeTab === 'suggestions' && <TradeSuggestions />}
 
         {/* ============ PROFILE TAB ============ */}
         {activeTab === 'profile' && <ProfileSettings />}
