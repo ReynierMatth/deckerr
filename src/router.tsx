@@ -16,6 +16,7 @@ import Wishlist from './components/Wishlist';
 import Community from './components/Community';
 import CardSearch from './components/CardSearch';
 import LifeCounter from './components/LifeCounter';
+import PriceAlerts from './components/PriceAlerts';
 import DeckEditor from './components/DeckEditor';
 import PublicDeck from './components/PublicDeck';
 
@@ -87,6 +88,7 @@ const wishlistRoute = createRoute({ getParentRoute: () => rootRoute, path: '/wis
 const communityRoute = createRoute({ getParentRoute: () => rootRoute, path: '/community', component: Community });
 const searchRoute = createRoute({ getParentRoute: () => rootRoute, path: '/search', component: CardSearch });
 const lifeCounterRoute = createRoute({ getParentRoute: () => rootRoute, path: '/life-counter', component: LifeCounter });
+const alertsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/alerts', component: PriceAlerts });
 const editDeckRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/decks/$deckId/edit',
@@ -106,6 +108,7 @@ const routeTree = rootRoute.addChildren([
   communityRoute,
   searchRoute,
   lifeCounterRoute,
+  alertsRoute,
   editDeckRoute,
   viewDeckRoute,
 ]);
