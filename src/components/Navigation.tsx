@@ -126,6 +126,12 @@ export default function Navigation() {
         </div>
       </nav>
 
+      {/* Mobile Navigation - Top bar (brand + notifications) */}
+      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-gray-800 border-b border-gray-700 z-50 flex items-center justify-between px-4">
+        <span className="text-xl font-bold text-orange-500">Deckerr</span>
+        {user && <NotificationBell />}
+      </div>
+
       {/* Mobile Navigation - Bottom */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 z-50 safe-area-bottom">
         <div className="flex justify-around items-center h-16 px-1">
@@ -143,12 +149,6 @@ export default function Navigation() {
               <span className="text-xs mt-1">{item.label}</span>
             </button>
           ))}
-
-          {user && (
-            <div className="flex flex-col items-center justify-center flex-1 h-full text-gray-400">
-              <NotificationBell />
-            </div>
-          )}
 
           <button
             onClick={() => setShowMore(true)}
