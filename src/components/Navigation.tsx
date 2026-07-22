@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Library, LogOut, ChevronDown, Search, Heart, Users } from 'lucide-react';
+import { Library, LogOut, ChevronDown, Search, Heart, Users, Star } from 'lucide-react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
@@ -39,6 +39,7 @@ export default function Navigation() {
   const navItems = [
     { to: '/', label: 'Decks', icon: Library },
     { to: '/collection', label: 'Collection', icon: Library },
+    { to: '/wishlist', label: 'Wishlist', icon: Star },
     { to: '/community', label: 'Community', icon: Users },
     { to: '/search', label: 'Search', icon: Search },
     { to: '/life-counter', label: 'Life', icon: Heart },
