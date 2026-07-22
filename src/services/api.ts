@@ -273,6 +273,15 @@ export const removeFromWishlist = async (userId: string, cardId: string): Promis
   if (error) throw error;
 };
 
+/** Add several cards to the wishlist at once (deduplicated). */
+export const addCardsToWishlist = async (userId: string, cardIds: string[]): Promise<void> => {
+  const unique = [...new Set(cardIds)];
+  if (unique.length === 0) return;
+  const rows = unique.map((cardId) => ({ user_id: userId, card_id: cardId }));
+  const { error } = await supabase.from('wishlists').upsert(rows, { onConflict: 'user_id,card_id' });
+  if (error) throw error;
+};
+
 // ---- Notifications ----
 export interface AppNotification {
   id: string;
