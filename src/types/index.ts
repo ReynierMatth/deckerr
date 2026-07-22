@@ -19,18 +19,30 @@ export interface CardFace {
   mana_cost?: string;
   type_line?: string;
   oracle_text?: string;
+  flavor_text?: string;
+  colors?: string[];
   image_uris?: CardImageUris;
 }
 
 export interface Card {
   id: string;
   name: string;
+  layout?: string;
   image_uris?: CardImageUris;
   card_faces?: CardFace[];
   mana_cost?: string;
+  cmc?: number;
   type_line?: string;
   oracle_text?: string;
+  flavor_text?: string;
   colors?: string[];
+  color_identity?: string[];
+  set?: string;
+  set_name?: string;
+  rarity?: string;
+  collector_number?: string;
+  lang?: string;
+  artist?: string;
   prices?: {
     usd?: string;
     usd_foil?: string;

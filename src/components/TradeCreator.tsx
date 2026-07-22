@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, ArrowLeftRight, ArrowRight, ArrowLeft, Minus, Send, Gift, Loader2, Search } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -250,7 +250,7 @@ export default function TradeCreator({
       const collectionItem = myCollection.find(c => c.card.id === card.id);
       if (collectionItem) {
         // Find the quantity from trade items if card has quantity property
-        const quantity = (card as any).quantity || 1;
+        const quantity = (card as Card & { quantity?: number }).quantity || 1;
         console.log('Adding sender card:', card.name, 'qty:', quantity);
         senderMap.set(card.id, {
           card: card,
@@ -269,7 +269,7 @@ export default function TradeCreator({
       const collectionItem = receiverCollection.find(c => c.card.id === card.id);
       if (collectionItem) {
         // Find the quantity from trade items if card has quantity property
-        const quantity = (card as any).quantity || 1;
+        const quantity = (card as Card & { quantity?: number }).quantity || 1;
         console.log('Adding receiver card:', card.name, 'qty:', quantity);
         receiverMap.set(card.id, {
           card: card,

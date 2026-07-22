@@ -1,4 +1,3 @@
-import React from 'react';
 import { AlertCircle, CheckCircle, Trash2, AlertTriangle } from 'lucide-react';
 import Modal from './Modal';
 

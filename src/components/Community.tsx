@@ -1,33 +1,18 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, Clock, History, UserPlus, UserMinus, Check, X, Send, Settings, Save, ChevronLeft, RefreshCw, Plus, Minus, AlertTriangle } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, X, Settings, ChevronLeft, RefreshCw } from 'lucide-react';
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
+import { useCardFaces } from '../hooks/useCardFaces';
 import { supabase } from '../lib/supabase';
-import {
-  getFriends,
-  getPendingRequests,
-  getSentRequests,
-  searchUsers,
-  sendFriendRequest,
-  acceptFriendRequest,
-  declineFriendRequest,
-  removeFriend,
-  Friend,
-} from '../services/friendsService';
-import {
-  getTrades,
-  getTradeHistory,
-  acceptTrade,
-  declineTrade,
-  cancelTrade,
-  Trade,
-  TradeItem,
-} from '../services/tradesService';
+import ProfileSettings from './community/ProfileSettings';
+import FriendsTab from './community/FriendsTab';
+import TradesTab from './community/TradesTab';
+import { Friend } from '../services/friendsService';
 import { getUserCollectionPaginated, getCardsByIds, getCollectionTotalValue } from '../services/api';
 import { Card } from '../types';
 import TradeCreator from './TradeCreator';
-import TradeDetail from './TradeDetail';
-import ConfirmModal from './ConfirmModal';
 
 interface UserProfile {
   id: string;
@@ -40,21 +25,24 @@ interface CollectionItem {
   quantity: number;
 }
 
-type Tab = 'browse' | 'friends' | 'trades' | 'profile';
-type FriendsSubTab = 'list' | 'requests' | 'search';
-type TradesSubTab = 'pending' | 'history';
+interface ProfileRealtimeRow {
+  id: string;
+  collection_visibility: string | null;
+  collection_total_value: number;
+}
 
-const VISIBILITY_OPTIONS = [
-  { value: 'public', label: 'Public', description: 'Anyone can view' },
-  { value: 'friends', label: 'Friends', description: 'Friends only' },
-  { value: 'private', label: 'Private', description: 'Only you' },
-] as const;
+interface CollectionRealtimeRow {
+  user_id: string;
+}
+
+type Tab = 'browse' | 'friends' | 'trades' | 'profile';
 
 const PAGE_SIZE = 50;
 
 export default function Community() {
   const { user } = useAuth();
   const toast = useToast();
+  const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
   const [activeTab, setActiveTab] = useState<Tab>('browse');
   const [loading, setLoading] = useState(true);
 
@@ -74,41 +62,13 @@ export default function Community() {
   const [userCollectionSearch, setUserCollectionSearch] = useState('');
   const [hoveredUserCard, setHoveredUserCard] = useState<Card | null>(null);
   const [selectedUserCard, setSelectedUserCard] = useState<CollectionItem | null>(null);
-  const [userCardFaceIndex, setUserCardFaceIndex] = useState<Map<string, number>>(new Map());
   const userCollectionObserverTarget = useRef<HTMLDivElement>(null);
 
-  // Friends state
-  const [friendsSubTab, setFriendsSubTab] = useState<FriendsSubTab>('list');
+  // Friends list mirror (owned by FriendsTab) for the tab badge + Browse shortcut
   const [friends, setFriends] = useState<Friend[]>([]);
-  const [pendingRequests, setPendingRequests] = useState<Friend[]>([]);
-  const [sentRequests, setSentRequests] = useState<Friend[]>([]);
-  const [friendSearch, setFriendSearch] = useState('');
-  const [friendSearchResults, setFriendSearchResults] = useState<{ id: string; username: string | null }[]>([]);
-  const [searchingFriends, setSearchingFriends] = useState(false);
-  const [friendListFilter, setFriendListFilter] = useState('');
-  const [requestsFilter, setRequestsFilter] = useState('');
 
-  // Trades state
-  const [tradesSubTab, setTradesSubTab] = useState<TradesSubTab>('pending');
-  const [pendingTrades, setPendingTrades] = useState<Trade[]>([]);
-  const [tradeHistory, setTradeHistory] = useState<Trade[]>([]);
-  const [tradeCardDetails, setTradeCardDetails] = useState<Map<string, Card>>(new Map());
-  const [processingTradeId, setProcessingTradeId] = useState<string | null>(null);
-  const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
-
-  // Profile state
-  const [username, setUsername] = useState('');
-  const [collectionVisibility, setCollectionVisibility] = useState<'public' | 'friends' | 'private'>('private');
-  const [savingProfile, setSavingProfile] = useState(false);
-
-  // Confirm modal state
-  const [confirmModal, setConfirmModal] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    onConfirm: () => void;
-    variant: 'danger' | 'warning' | 'info' | 'success';
-  }>({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'danger' });
+  // Pending trades count mirror (owned by TradesTab) for the tab badge
+  const [pendingTradesCount, setPendingTradesCount] = useState(0);
 
   useEffect(() => {
     if (user) {
@@ -117,64 +77,6 @@ export default function Community() {
   }, [user]);
 
   // ============ REALTIME SUBSCRIPTIONS ============
-  // Subscribe to trade changes
-  useEffect(() => {
-    if (!user) return;
-
-    const tradesChannel = supabase
-      .channel('trades-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'trades',
-        },
-        (payload: any) => {
-          // Filter for trades involving this user
-          const newData = payload.new || payload.old;
-          if (newData && (newData.user1_id === user.id || newData.user2_id === user.id)) {
-            console.log('Trade change:', payload);
-            loadTradesData();
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(tradesChannel);
-    };
-  }, [user]);
-
-  // Subscribe to friendship changes
-  useEffect(() => {
-    if (!user) return;
-
-    const friendshipsChannel = supabase
-      .channel('friendships-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'friendships',
-        },
-        (payload: any) => {
-          // Filter for friendships involving this user
-          const newData = payload.new || payload.old;
-          if (newData && (newData.requester_id === user.id || newData.addressee_id === user.id)) {
-            console.log('Friendship change:', payload);
-            loadFriendsData();
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(friendshipsChannel);
-    };
-  }, [user]);
-
   // Subscribe to profile changes (for visibility updates)
   useEffect(() => {
     if (!user) return;
@@ -188,15 +90,13 @@ export default function Community() {
           schema: 'public',
           table: 'profiles',
         },
-        (payload: any) => {
+        (payload: RealtimePostgresChangesPayload<ProfileRealtimeRow>) => {
           console.log('Profile change:', payload);
+          const newProfile = payload.new as Partial<ProfileRealtimeRow>;
+          const oldProfile = payload.old as Partial<ProfileRealtimeRow>;
           // Reload public users if a profile's visibility changed
-          if (payload.new && payload.old && payload.new.collection_visibility !== payload.old.collection_visibility) {
+          if (newProfile && oldProfile && newProfile.collection_visibility !== oldProfile.collection_visibility) {
             loadPublicUsers();
-          }
-          // Reload own profile if it's the current user
-          if (payload.new && payload.new.id === user.id) {
-            loadProfile();
           }
         }
       )
@@ -221,8 +121,8 @@ export default function Community() {
           schema: 'public',
           table: 'collections',
         },
-        (payload: any) => {
-          const data = payload.new || payload.old;
+        (payload: RealtimePostgresChangesPayload<CollectionRealtimeRow>) => {
+          const data = (payload.new || payload.old) as Partial<CollectionRealtimeRow>;
           if (data && data.user_id === selectedUser.id) {
             console.log('Collection change for viewed user:', payload.eventType);
             // Reload on any change (INSERT/UPDATE/DELETE)
@@ -238,25 +138,6 @@ export default function Community() {
     };
   }, [user, selectedUser]);
 
-  // Helper function to check if a card has an actual back face
-  const isDoubleFaced = (card: Card) => {
-    const backFaceLayouts = ['transform', 'modal_dfc', 'double_faced_token', 'reversible_card'];
-    return card.card_faces && card.card_faces.length > 1 && backFaceLayouts.includes(card.layout);
-  };
-
-  // Helper function to get the current face index for a card
-  const getCurrentFaceIndex = (cardId: string) => {
-    return userCardFaceIndex.get(cardId) || 0;
-  };
-
-  // Helper function to get the image URI for a card
-  const getCardImageUri = (card: Card, faceIndex: number = 0) => {
-    if (isDoubleFaced(card) && card.card_faces) {
-      return card.card_faces[faceIndex]?.image_uris?.normal || card.card_faces[faceIndex]?.image_uris?.small;
-    }
-    return card.image_uris?.normal || card.image_uris?.small;
-  };
-
   // Helper function to get the large image URI for hover preview
   const getCardLargeImageUri = (card: Card, faceIndex: number = 0) => {
     if (isDoubleFaced(card) && card.card_faces) {
@@ -265,26 +146,12 @@ export default function Community() {
     return card.image_uris?.large || card.image_uris?.normal;
   };
 
-  // Toggle card face
-  const toggleCardFace = (cardId: string, totalFaces: number) => {
-    setUserCardFaceIndex(prev => {
-      const newMap = new Map(prev);
-      const currentIndex = prev.get(cardId) || 0;
-      const nextIndex = (currentIndex + 1) % totalFaces;
-      newMap.set(cardId, nextIndex);
-      return newMap;
-    });
-  };
-
   const loadAllData = async () => {
     if (!user) return;
     setLoading(true);
     try {
       await Promise.all([
         loadPublicUsers(),
-        loadFriendsData(),
-        loadTradesData(),
-        loadProfile(),
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -427,10 +294,11 @@ export default function Community() {
           table: 'profiles',
           filter: `id=eq.${selectedUser.id}`,
         },
-        (payload: any) => {
-          if (payload.new?.collection_total_value !== undefined) {
-            console.log(`User ${selectedUser.username}'s collection total value updated:`, payload.new.collection_total_value);
-            setUserCollectionTotalValue(payload.new.collection_total_value);
+        (payload: RealtimePostgresChangesPayload<ProfileRealtimeRow>) => {
+          const newProfile = payload.new as Partial<ProfileRealtimeRow>;
+          if (newProfile?.collection_total_value !== undefined) {
+            console.log(`User ${selectedUser.username}'s collection total value updated:`, newProfile.collection_total_value);
+            setUserCollectionTotalValue(newProfile.collection_total_value);
           }
         }
       )
@@ -440,245 +308,6 @@ export default function Community() {
       supabase.removeChannel(userProfileChannel);
     };
   }, [selectedUser]);
-
-  // ============ FRIENDS FUNCTIONS ============
-  const loadFriendsData = async () => {
-    if (!user) return;
-    const [friendsData, pendingData, sentData] = await Promise.all([
-      getFriends(user.id),
-      getPendingRequests(user.id),
-      getSentRequests(user.id),
-    ]);
-    setFriends(friendsData);
-    setPendingRequests(pendingData);
-    setSentRequests(sentData);
-  };
-
-  const handleSearchFriends = async () => {
-    if (!user || friendSearch.trim().length < 2) return;
-    setSearchingFriends(true);
-    try {
-      const results = await searchUsers(friendSearch, user.id);
-      setFriendSearchResults(results || []);
-    } catch (error) {
-      console.error('Error searching users:', error);
-    } finally {
-      setSearchingFriends(false);
-    }
-  };
-
-  const handleSendRequest = async (addresseeId: string) => {
-    if (!user) return;
-    try {
-      await sendFriendRequest(user.id, addresseeId);
-      setFriendSearchResults((prev) => prev.filter((u) => u.id !== addresseeId));
-      await loadFriendsData();
-      toast.success('Friend request sent!');
-    } catch (error) {
-      toast.error('Failed to send friend request');
-    }
-  };
-
-  const handleAcceptRequest = async (friendshipId: string) => {
-    try {
-      await acceptFriendRequest(friendshipId);
-      await loadFriendsData();
-      toast.success('Friend request accepted!');
-    } catch (error) {
-      toast.error('Failed to accept request');
-    }
-  };
-
-  const handleDeclineRequest = async (friendshipId: string) => {
-    try {
-      await declineFriendRequest(friendshipId);
-      await loadFriendsData();
-      toast.info('Friend request declined');
-    } catch (error) {
-      toast.error('Failed to decline request');
-    }
-  };
-
-  const handleRemoveFriend = (friendshipId: string, friendName: string) => {
-    setConfirmModal({
-      isOpen: true,
-      title: 'Remove Friend',
-      message: `Remove ${friendName} from your friends?`,
-      variant: 'danger',
-      onConfirm: async () => {
-        try {
-          await removeFriend(friendshipId);
-          await loadFriendsData();
-          toast.success('Friend removed');
-        } catch (error) {
-          toast.error('Failed to remove friend');
-        }
-      },
-    });
-  };
-
-  const isAlreadyFriendOrPending = (userId: string) => {
-    return friends.some((f) => f.id === userId) ||
-           pendingRequests.some((f) => f.id === userId) ||
-           sentRequests.some((f) => f.id === userId);
-  };
-
-  // ============ TRADES FUNCTIONS ============
-  const loadTradesData = async () => {
-    if (!user) return;
-    const [pending, history] = await Promise.all([
-      getTrades(user.id).then((trades) => trades.filter((t) => t.status === 'pending')),
-      getTradeHistory(user.id),
-    ]);
-
-    const allCardIds = new Set<string>();
-    [...pending, ...history].forEach((trade) => {
-      trade.items?.forEach((item) => allCardIds.add(item.card_id));
-    });
-
-    if (allCardIds.size > 0) {
-      const cards = await getCardsByIds(Array.from(allCardIds));
-      const cardMap = new Map<string, Card>();
-      cards.forEach((card) => cardMap.set(card.id, card));
-      setTradeCardDetails(cardMap);
-    }
-
-    setPendingTrades(pending);
-    setTradeHistory(history);
-  };
-
-  const handleAcceptTrade = async (tradeId: string) => {
-    setProcessingTradeId(tradeId);
-    try {
-      const success = await acceptTrade(tradeId);
-      if (success) {
-        await loadTradesData();
-        toast.success('Trade accepted! Cards exchanged.');
-      } else {
-        toast.error('Failed. Check your collection.');
-      }
-    } catch (error) {
-      toast.error('Error accepting trade');
-    } finally {
-      setProcessingTradeId(null);
-    }
-  };
-
-  const handleDeclineTrade = async (tradeId: string) => {
-    setProcessingTradeId(tradeId);
-    try {
-      await declineTrade(tradeId);
-      await loadTradesData();
-      toast.info('Trade declined');
-    } catch (error) {
-      toast.error('Error declining trade');
-    } finally {
-      setProcessingTradeId(null);
-    }
-  };
-
-  const handleCancelTrade = (tradeId: string) => {
-    setConfirmModal({
-      isOpen: true,
-      title: 'Cancel Trade',
-      message: 'Cancel this trade offer?',
-      variant: 'warning',
-      onConfirm: async () => {
-        setProcessingTradeId(tradeId);
-        try {
-          await cancelTrade(tradeId);
-          await loadTradesData();
-          toast.info('Trade cancelled');
-        } catch (error) {
-          toast.error('Error cancelling trade');
-        } finally {
-          setProcessingTradeId(null);
-        }
-      },
-    });
-  };
-
-
-  // ============ PROFILE FUNCTIONS ============
-  const loadProfile = async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from('profiles')
-      .select('username, collection_visibility')
-      .eq('id', user.id)
-      .single();
-
-    if (data) {
-      setUsername(data.username || '');
-      setCollectionVisibility(data.collection_visibility || 'private');
-    }
-  };
-
-  const handleSaveProfile = async () => {
-    if (!user) return;
-    setSavingProfile(true);
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id,
-          username,
-          collection_visibility: collectionVisibility,
-          updated_at: new Date(),
-        });
-
-      if (error) throw error;
-      toast.success('Profile updated!');
-    } catch (error) {
-      toast.error('Failed to update profile');
-    } finally {
-      setSavingProfile(false);
-    }
-  };
-
-  // ============ RENDER HELPERS ============
-  const calculateTradeItemsPrice = (items: TradeItem[] | undefined, ownerId: string): number => {
-    const ownerItems = items?.filter((i) => i.owner_id === ownerId) || [];
-    return ownerItems.reduce((total, item) => {
-      const card = tradeCardDetails.get(item.card_id);
-      const price = card?.prices?.usd ? parseFloat(card.prices.usd) : 0;
-      return total + (price * item.quantity);
-    }, 0);
-  };
-
-  const renderTradeItems = (items: TradeItem[] | undefined, ownerId: string, label: string) => {
-    const ownerItems = items?.filter((i) => i.owner_id === ownerId) || [];
-    const totalPrice = calculateTradeItemsPrice(items, ownerId);
-
-    if (ownerItems.length === 0) {
-      return (
-        <div>
-          <p className="text-gray-400 text-xs mb-1">{label}:</p>
-          <p className="text-gray-500 text-xs">Gift</p>
-        </div>
-      );
-    }
-
-    return (
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <p className="text-gray-400 text-xs">{label}:</p>
-          <p className="text-green-400 text-xs font-semibold">${totalPrice.toFixed(2)}</p>
-        </div>
-        <div className="flex flex-wrap gap-1">
-          {ownerItems.map((item) => {
-            const card = tradeCardDetails.get(item.card_id);
-            return (
-              <div key={item.id} className="flex items-center gap-1 bg-gray-700 px-2 py-0.5 rounded text-xs">
-                <span className="truncate max-w-[100px]">{card?.name || 'Card'}</span>
-                {item.quantity > 1 && <span className="text-gray-400">x{item.quantity}</span>}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
 
   // Loading state
   if (loading) {
@@ -1012,7 +641,6 @@ export default function Community() {
             onClose={() => setShowTradeCreator(false)}
             onTradeCreated={() => {
               setShowTradeCreator(false);
-              loadTradesData();
               toast.success('Trade proposal sent!');
             }}
           />
@@ -1037,7 +665,7 @@ export default function Community() {
           {[
             { id: 'browse' as Tab, label: 'Browse', icon: Globe },
             { id: 'friends' as Tab, label: `Friends`, count: friends.length, icon: Users },
-            { id: 'trades' as Tab, label: `Trades`, count: pendingTrades.length, icon: ArrowLeftRight },
+            { id: 'trades' as Tab, label: `Trades`, count: pendingTradesCount, icon: ArrowLeftRight },
             { id: 'profile' as Tab, label: 'Profile', icon: Settings },
           ].map((tab) => (
             <button
@@ -1135,395 +763,17 @@ export default function Community() {
 
         {/* ============ FRIENDS TAB ============ */}
         {activeTab === 'friends' && (
-          <div className="space-y-3">
-            {/* Sub tabs */}
-            <div className="flex gap-1">
-              {[
-                { id: 'list' as FriendsSubTab, label: 'List' },
-                { id: 'requests' as FriendsSubTab, label: 'Requests', count: pendingRequests.length },
-                { id: 'search' as FriendsSubTab, label: 'Add' },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setFriendsSubTab(tab.id)}
-                  className={`px-3 py-1.5 rounded-lg text-sm flex-1 ${
-                    friendsSubTab === tab.id ? 'bg-blue-600' : 'bg-gray-800 active:bg-gray-700'
-                  }`}
-                >
-                  {tab.label}
-                  {tab.count !== undefined && tab.count > 0 && (
-                    <span className="ml-1 text-xs">({tab.count})</span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* Friends List */}
-            {friendsSubTab === 'list' && (
-              <div className="space-y-3">
-                {/* Search input */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                  <input
-                    type="text"
-                    value={friendListFilter}
-                    onChange={(e) => setFriendListFilter(e.target.value)}
-                    placeholder="Search friends..."
-                    className="w-full pl-9 pr-8 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  {friendListFilter && (
-                    <button
-                      onClick={() => setFriendListFilter('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
-                    >
-                      <X size={16} />
-                    </button>
-                  )}
-                </div>
-
-                {friends.length === 0 ? (
-                  <p className="text-gray-400 text-center py-8 text-sm">No friends yet</p>
-                ) : friends.filter((f) =>
-                    !friendListFilter || f.username?.toLowerCase().includes(friendListFilter.toLowerCase())
-                  ).length === 0 ? (
-                  <p className="text-gray-400 text-center py-8 text-sm">No friends match "{friendListFilter}"</p>
-                ) : (
-                  <div className="space-y-2">
-                    {friends
-                      .filter((f) => !friendListFilter || f.username?.toLowerCase().includes(friendListFilter.toLowerCase()))
-                      .map((friend) => (
-                        <div key={friend.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
-                          <span className="font-medium truncate">{friend.username || 'Unknown'}</span>
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => {
-                                setSelectedUser({ id: friend.id, username: friend.username, collection_visibility: 'friends' });
-                                loadUserCollection(friend.id);
-                              }}
-                              className="p-2 text-blue-400 active:bg-blue-400/20 rounded-lg"
-                            >
-                              <Eye size={18} />
-                            </button>
-                            <button
-                              onClick={() => handleRemoveFriend(friend.friendshipId, friend.username || 'user')}
-                              className="p-2 text-red-400 active:bg-red-400/20 rounded-lg"
-                            >
-                              <UserMinus size={18} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Requests */}
-            {friendsSubTab === 'requests' && (
-              <div className="space-y-3">
-                {/* Search input */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                  <input
-                    type="text"
-                    value={requestsFilter}
-                    onChange={(e) => setRequestsFilter(e.target.value)}
-                    placeholder="Search requests..."
-                    className="w-full pl-9 pr-8 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  {requestsFilter && (
-                    <button
-                      onClick={() => setRequestsFilter('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
-                    >
-                      <X size={16} />
-                    </button>
-                  )}
-                </div>
-
-                {(() => {
-                  const filteredPending = pendingRequests.filter((r) =>
-                    !requestsFilter || r.username?.toLowerCase().includes(requestsFilter.toLowerCase())
-                  );
-                  const filteredSent = sentRequests.filter((r) =>
-                    !requestsFilter || r.username?.toLowerCase().includes(requestsFilter.toLowerCase())
-                  );
-
-                  return (
-                    <>
-                      {filteredPending.length > 0 && (
-                        <div>
-                          <p className="text-xs text-gray-500 mb-2">Received</p>
-                          <div className="space-y-2">
-                            {filteredPending.map((req) => (
-                              <div key={req.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
-                                <span className="font-medium truncate">{req.username || 'Unknown'}</span>
-                                <div className="flex gap-1">
-                                  <button onClick={() => handleAcceptRequest(req.friendshipId)} className="p-2 text-green-400 active:bg-green-400/20 rounded-lg">
-                                    <Check size={18} />
-                                  </button>
-                                  <button onClick={() => handleDeclineRequest(req.friendshipId)} className="p-2 text-red-400 active:bg-red-400/20 rounded-lg">
-                                    <X size={18} />
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {filteredSent.length > 0 && (
-                        <div>
-                          <p className="text-xs text-gray-500 mb-2">Sent</p>
-                          <div className="space-y-2">
-                            {filteredSent.map((req) => (
-                              <div key={req.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
-                                <div className="flex items-center gap-2">
-                                  <Send size={14} className="text-gray-500" />
-                                  <span className="font-medium truncate">{req.username || 'Unknown'}</span>
-                                </div>
-                                <span className="text-xs text-yellow-500">Pending</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {pendingRequests.length === 0 && sentRequests.length === 0 && (
-                        <p className="text-gray-400 text-center py-8 text-sm">No requests</p>
-                      )}
-
-                      {(pendingRequests.length > 0 || sentRequests.length > 0) &&
-                       filteredPending.length === 0 && filteredSent.length === 0 && (
-                        <p className="text-gray-400 text-center py-8 text-sm">No requests match "{requestsFilter}"</p>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-            )}
-
-            {/* Search/Add */}
-            {friendsSubTab === 'search' && (
-              <div className="space-y-3">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={friendSearch}
-                    onChange={(e) => setFriendSearch(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSearchFriends()}
-                    placeholder="Username..."
-                    className="flex-1 px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm"
-                  />
-                  <button
-                    onClick={handleSearchFriends}
-                    disabled={searchingFriends || friendSearch.trim().length < 2}
-                    className="px-4 py-2.5 bg-blue-600 disabled:bg-gray-600 rounded-lg"
-                  >
-                    {searchingFriends ? <Loader2 className="animate-spin" size={18} /> : <Search size={18} />}
-                  </button>
-                </div>
-
-                {friendSearchResults.length > 0 && (
-                  <div className="space-y-2">
-                    {friendSearchResults.map((result) => (
-                      <div key={result.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
-                        <span className="font-medium truncate">{result.username || 'Unknown'}</span>
-                        {isAlreadyFriendOrPending(result.id) ? (
-                          <span className="text-xs text-gray-500">Connected</span>
-                        ) : (
-                          <button
-                            onClick={() => handleSendRequest(result.id)}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 rounded-lg text-sm"
-                          >
-                            <UserPlus size={14} />
-                            Add
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ============ TRADES TAB ============ */}
-        {activeTab === 'trades' && (
-          <div className="space-y-3">
-            {/* Sub tabs */}
-            <div className="flex gap-1">
-              <button
-                onClick={() => setTradesSubTab('pending')}
-                className={`flex-1 flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-sm ${
-                  tradesSubTab === 'pending' ? 'bg-blue-600' : 'bg-gray-800'
-                }`}
-              >
-                <Clock size={14} />
-                Pending ({pendingTrades.length})
-              </button>
-              <button
-                onClick={() => setTradesSubTab('history')}
-                className={`flex-1 flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-sm ${
-                  tradesSubTab === 'history' ? 'bg-blue-600' : 'bg-gray-800'
-                }`}
-              >
-                <History size={14} />
-                History
-              </button>
-            </div>
-
-            {/* Trades List */}
-            {(tradesSubTab === 'pending' ? pendingTrades : tradeHistory).length === 0 ? (
-              <p className="text-gray-400 text-center py-8 text-sm">
-                {tradesSubTab === 'pending' ? 'No pending trades' : 'No history'}
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {(tradesSubTab === 'pending' ? pendingTrades : tradeHistory).map((trade) => {
-                  const isUser1 = trade.user1_id === user?.id;
-                  const myUserId = user?.id || '';
-                  const otherUserId = isUser1 ? trade.user2_id : trade.user1_id;
-                  const otherUser = isUser1 ? trade.user2 : trade.user1;
-                  const statusColors: Record<string, string> = {
-                    accepted: 'text-green-400',
-                    declined: 'text-red-400',
-                    cancelled: 'text-gray-400',
-                    pending: 'text-yellow-400',
-                  };
-
-                  // Both users can view details for pending trades
-                  const canViewDetails = trade.status === 'pending';
-
-                  return (
-                    <div
-                      key={trade.id}
-                      className={`bg-gray-800 rounded-lg p-3 space-y-2 ${
-                        canViewDetails ? 'cursor-pointer hover:bg-gray-750 transition-colors' : ''
-                      }`}
-                      onClick={() => canViewDetails && setSelectedTrade(trade)}
-                    >
-                      {/* Header */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <ArrowLeftRight size={16} className="text-blue-400 flex-shrink-0" />
-                          <span className="text-sm truncate">
-                            With: <strong>{otherUser?.username}</strong>
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          {trade.status === 'pending' && !trade.is_valid && (
-                            <AlertTriangle size={14} className="text-red-400" title="Trade no longer valid" />
-                          )}
-                          <span className={`text-xs capitalize ${statusColors[trade.status]}`}>
-                            {trade.status}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Items */}
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        {renderTradeItems(trade.items, myUserId, 'You Give')}
-                        {renderTradeItems(trade.items, otherUserId, 'You Get')}
-                      </div>
-
-                      {canViewDetails && (
-                        <p className="text-xs text-blue-400 text-center pt-1">
-                          Tap to view details
-                        </p>
-                      )}
-
-                      {/* Actions - Allow any user to cancel pending trade */}
-                      {tradesSubTab === 'pending' && (
-                        <div className="flex gap-2 pt-2 border-t border-gray-700" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            onClick={() => handleCancelTrade(trade.id)}
-                            disabled={processingTradeId === trade.id}
-                            className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-gray-700 rounded-lg text-sm"
-                          >
-                            <X size={14} /> Cancel
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ============ PROFILE TAB ============ */}
-        {activeTab === 'profile' && (
-          <div className="space-y-4 max-w-md">
-            {/* Username */}
-            <div>
-              <label className="block text-sm text-gray-400 mb-1.5">Username</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm"
-                placeholder="Your username"
-              />
-            </div>
-
-            {/* Visibility */}
-            <div>
-              <label className="block text-sm text-gray-400 mb-1.5">Collection Visibility</label>
-              <div className="grid grid-cols-3 gap-2">
-                {VISIBILITY_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => setCollectionVisibility(option.value)}
-                    className={`p-3 rounded-lg border-2 transition text-center ${
-                      collectionVisibility === option.value
-                        ? 'border-blue-500 bg-blue-500/10'
-                        : 'border-gray-700 bg-gray-800 active:border-gray-600'
-                    }`}
-                  >
-                    <div className="font-medium text-sm">{option.label}</div>
-                    <div className="text-xs text-gray-400 mt-0.5">{option.description}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Save */}
-            <button
-              onClick={handleSaveProfile}
-              disabled={savingProfile}
-              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 py-3 rounded-lg font-medium"
-            >
-              {savingProfile ? <Loader2 className="animate-spin" size={18} /> : <><Save size={18} /> Save</>}
-            </button>
-          </div>
-        )}
-
-        {/* Trade Detail Modal */}
-        {selectedTrade && (
-          <TradeDetail
-            trade={selectedTrade}
-            onClose={() => setSelectedTrade(null)}
-            onAccept={handleAcceptTrade}
-            onDecline={handleDeclineTrade}
-            onTradeUpdated={() => {
-              setSelectedTrade(null);
-              loadTradesData();
-            }}
+          <FriendsTab
+            onViewCollection={(u) => { setSelectedUser(u); loadUserCollection(u.id); }}
+            onFriendsChange={setFriends}
           />
         )}
 
-        {/* Confirm Modal */}
-        <ConfirmModal
-          isOpen={confirmModal.isOpen}
-          onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
-          onConfirm={confirmModal.onConfirm}
-          title={confirmModal.title}
-          message={confirmModal.message}
-          variant={confirmModal.variant}
-        />
+        {/* ============ TRADES TAB ============ */}
+        {activeTab === 'trades' && <TradesTab onPendingCountChange={setPendingTradesCount} />}
+
+        {/* ============ PROFILE TAB ============ */}
+        {activeTab === 'profile' && <ProfileSettings />}
       </div>
     </div>
   );

@@ -1,45 +1,109 @@
-import React, { useState, useEffect } from 'react';
-import { RefreshCw, PackagePlus, Loader2, CheckCircle, XCircle, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useRef, useReducer } from 'react';
+import { RefreshCw, PackagePlus, Loader2, CheckCircle } from 'lucide-react';
 import { searchCards, getUserCollection, addCardToCollection } from '../services/api';
 import { Card } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
+import { isDoubleFaced, getCardImageUri, getCardArtCrop } from '../utils/cardFaces';
+import { buildScryfallQuery } from '../utils/scryfallQuery';
+import { useCardFaces } from '../hooks/useCardFaces';
 import MagicCard from './MagicCard';
 import { getManaIconPath } from './ManaCost';
 
+type ColorKey = 'W' | 'U' | 'B' | 'R' | 'G' | 'C';
+
+interface SearchForm {
+  cardName: string;
+  text: string;
+  rulesText: string;
+  typeLine: string;
+  typeMatch: string;
+  typeInclude: boolean;
+  colors: Record<ColorKey, boolean>;
+  colorMode: string;
+  commanderColors: Record<ColorKey, boolean>;
+  manaCost: Record<ColorKey, number>;
+  manaValue: string;
+  manaValueComparison: string;
+  games: { paper: boolean; arena: boolean; mtgo: boolean };
+  format: string;
+  formatStatus: string;
+  set: string;
+  block: string;
+  rarity: { common: boolean; uncommon: boolean; rare: boolean; mythic: boolean };
+  criteria: string;
+  criteriaMatch: string;
+  criteriaInclude: boolean;
+  price: string;
+  currency: string;
+  priceComparison: string;
+  artist: string;
+  flavorText: string;
+  loreFinder: string;
+  language: string;
+  displayImages: boolean;
+  order: string;
+  showAllPrints: boolean;
+  includeExtras: boolean;
+}
+
+const initialSearchForm: SearchForm = {
+  cardName: '',
+  text: '',
+  rulesText: '',
+  typeLine: '',
+  typeMatch: 'partial',
+  typeInclude: true,
+  colors: { W: false, U: false, B: false, R: false, G: false, C: false },
+  colorMode: 'exactly',
+  commanderColors: { W: false, U: false, B: false, R: false, G: false, C: false },
+  manaCost: { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 },
+  manaValue: '',
+  manaValueComparison: '=',
+  games: { paper: false, arena: false, mtgo: false },
+  format: '',
+  formatStatus: '',
+  set: '',
+  block: '',
+  rarity: { common: false, uncommon: false, rare: false, mythic: false },
+  criteria: '',
+  criteriaMatch: 'partial',
+  criteriaInclude: true,
+  price: '',
+  currency: 'usd',
+  priceComparison: '=',
+  artist: '',
+  flavorText: '',
+  loreFinder: '',
+  language: 'en',
+  displayImages: false,
+  order: 'name',
+  showAllPrints: false,
+  includeExtras: false,
+};
+
+type SearchFormAction =
+  | { type: 'set'; field: keyof SearchForm; value: SearchForm[keyof SearchForm] }
+  | { type: 'reset' };
+
+function searchFormReducer(state: SearchForm, action: SearchFormAction): SearchForm {
+  switch (action.type) {
+    case 'set':
+      return { ...state, [action.field]: action.value };
+    case 'reset':
+      return initialSearchForm;
+    default:
+      return state;
+  }
+}
+
 const CardSearch = () => {
   const { user } = useAuth();
-  const [cardName, setCardName] = useState('');
-  const [text, setText] = useState('');
-  const [rulesText, setRulesText] = useState('');
-  const [typeLine, setTypeLine] = useState('');
-  const [typeMatch, setTypeMatch] = useState('partial');
-  const [typeInclude, setTypeInclude] = useState(true);
-  const [colors, setColors] = useState({ W: false, U: false, B: false, R: false, G: false, C: false });
-  const [colorMode, setColorMode] = useState('exactly');
-  const [commanderColors, setCommanderColors] = useState({ W: false, U: false, B: false, R: false, G: false, C: false });
-  const [manaCost, setManaCost] = useState({ W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 });
-  const [manaValue, setManaValue] = useState('');
-  const [manaValueComparison, setManaValueComparison] = useState('=');
-  const [games, setGames] = useState({ paper: false, arena: false, mtgo: false });
-  const [format, setFormat] = useState('');
-  const [formatStatus, setFormatStatus] = useState('');
-  const [set, setSet] = useState('');
-  const [block, setBlock] = useState('');
-  const [rarity, setRarity] = useState({ common: false, uncommon: false, rare: false, mythic: false });
-  const [criteria, setCriteria] = useState('');
-  const [criteriaMatch, setCriteriaMatch] = useState('partial');
-  const [criteriaInclude, setCriteriaInclude] = useState(true);
-  const [price, setPrice] = useState('');
-  const [currency, setCurrency] = useState('usd');
-  const [priceComparison, setPriceComparison] = useState('=');
-  const [artist, setArtist] = useState('');
-  const [flavorText, setFlavorText] = useState('');
-  const [loreFinder, setLoreFinder] = useState('');
-  const [language, setLanguage] = useState('en');
-  const [displayImages, setDisplayImages] = useState(false);
-  const [order, setOrder] = useState('name');
-  const [showAllPrints, setShowAllPrints] = useState(false);
-  const [includeExtras, setIncludeExtras] = useState(false);
+  const toast = useToast();
+  const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
+  const [form, dispatch] = useReducer(searchFormReducer, initialSearchForm);
+  const setField = <K extends keyof SearchForm>(field: K, value: SearchForm[K]) =>
+    dispatch({ type: 'set', field, value });
   const [searchResults, setSearchResults] = useState<Card[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,8 +111,6 @@ const CardSearch = () => {
   // Collection state
   const [userCollection, setUserCollection] = useState<Map<string, number>>(new Map());
   const [addingCardId, setAddingCardId] = useState<string | null>(null);
-  const [cardFaceIndex, setCardFaceIndex] = useState<Map<string, number>>(new Map());
-  const [snackbar, setSnackbar] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Load user collection
   useEffect(() => {
@@ -64,55 +126,18 @@ const CardSearch = () => {
     loadUserCollection();
   }, [user]);
 
-  // Helper function to check if a card has an actual back face
-  const isDoubleFaced = (card: Card) => {
-    const backFaceLayouts = ['transform', 'modal_dfc', 'double_faced_token', 'reversible_card'];
-    return card.card_faces && card.card_faces.length > 1 && backFaceLayouts.includes(card.layout);
-  };
-
-  // Get current face index for a card
-  const getCurrentFaceIndex = (cardId: string) => {
-    return cardFaceIndex.get(cardId) || 0;
-  };
-
-  // Toggle card face
-  const toggleCardFace = (cardId: string, totalFaces: number) => {
-    setCardFaceIndex(prev => {
-      const newMap = new Map(prev);
-      const currentIndex = prev.get(cardId) || 0;
-      const nextIndex = (currentIndex + 1) % totalFaces;
-      newMap.set(cardId, nextIndex);
-      return newMap;
-    });
-  };
-
-  // Get card image for current face
-  const getCardImageUri = (card: Card, faceIndex: number = 0) => {
-    if (isDoubleFaced(card) && card.card_faces) {
-      return card.card_faces[faceIndex]?.image_uris?.normal || card.card_faces[faceIndex]?.image_uris?.small;
-    }
-    return card.image_uris?.normal || card.image_uris?.small || card.card_faces?.[0]?.image_uris?.normal;
-  };
-
-  // Get card art crop for current face
-  const getCardArtCrop = (card: Card, faceIndex: number = 0) => {
-    if (isDoubleFaced(card) && card.card_faces) {
-      return card.card_faces[faceIndex]?.image_uris?.art_crop || card.card_faces[faceIndex]?.image_uris?.normal;
-    }
-    return card.image_uris?.art_crop || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.art_crop;
-  };
-
   // Add card to collection
   const handleAddCardToCollection = async (cardId: string) => {
     if (!user) {
-      setSnackbar({ message: 'Please log in to add cards to your collection', type: 'error' });
-      setTimeout(() => setSnackbar(null), 3000);
+      toast.error('Please log in to add cards to your collection');
       return;
     }
 
     try {
       setAddingCardId(cardId);
-      await addCardToCollection(user.id, cardId, 1);
+      const card = searchResults.find(c => c.id === cardId);
+      const priceUsd = card?.prices?.usd ? Number(card.prices.usd) : 0;
+      await addCardToCollection(user.id, cardId, 1, priceUsd);
 
       setUserCollection(prev => {
         const newMap = new Map(prev);
@@ -121,82 +146,40 @@ const CardSearch = () => {
         return newMap;
       });
 
-      setSnackbar({ message: 'Card added to collection!', type: 'success' });
+      toast.success('Card added to collection!');
     } catch (error) {
       console.error('Error adding card to collection:', error);
-      setSnackbar({ message: 'Failed to add card to collection', type: 'error' });
+      toast.error('Failed to add card to collection');
     } finally {
       setAddingCardId(null);
-      setTimeout(() => setSnackbar(null), 3000);
     }
   };
 
+  const searchAbortRef = useRef<AbortController | null>(null);
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Cancel any in-flight search so the latest submit always wins.
+    searchAbortRef.current?.abort();
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
+
     setLoading(true);
     setError(null);
 
-    let query = '';
-
-    if (cardName) query += `name:${cardName} `;
-    if (text) query += `o:${text} `;
-    if (rulesText) query += `o:"${rulesText.replace('~', cardName)}" `;
-    if (typeLine) {
-      const typeQuery = typeMatch === 'partial' ? typeLine : `"${typeLine}"`;
-      query += `${typeInclude ? '' : '-'}t:${typeQuery} `;
-    }
-    if (Object.values(colors).some(Boolean)) {
-      const activeColors = Object.keys(colors).filter((key) => colors[key as keyof typeof colors]).join('');
-      const colorQuery = colorMode === 'exactly' ? `c:${activeColors}` : `color<=${activeColors}`;
-      query += `${colorQuery} `;
-    }
-    if (Object.values(commanderColors).some(Boolean)) {
-      const activeColors = Object.keys(commanderColors).filter((key) => commanderColors[key as keyof typeof commanderColors]).join('');
-      query += `id:${activeColors} `;
-    }
-
-    const manaCostString = Object.entries(manaCost)
-      .filter(([, count]) => count > 0)
-      .map(([color, count]) => `{${color}}`.repeat(count))
-      .join('');
-
-    if (manaCostString) query += `m:${manaCostString} `;
-
-    if (manaValue) query += `mv${manaValueComparison}${manaValue} `;
-    if (Object.values(games).some(Boolean)) {
-      const activeGames = Object.keys(games).filter((key) => games[key as keyof typeof games]).join(',');
-      query += `game:${activeGames} `;
-    }
-    if (format) query += `f:${format} `;
-    if (formatStatus) query += `${formatStatus}:${format} `;
-    if (set) query += `e:${set} `;
-    if (block) query += `b:${block} `;
-    if (Object.values(rarity).some(Boolean)) {
-      const activeRarities = Object.keys(rarity).filter((key) => rarity[key as keyof typeof rarity]).join(',');
-      query += `r:${activeRarities} `;
-    }
-    if (criteria) {
-      const criteriaQuery = criteriaMatch === 'partial' ? criteria : `"${criteria}"`;
-      query += `${criteriaInclude ? '' : '-'}o:${criteriaQuery} `;
-    }
-    if (price) query += `${currency}${priceComparison}${price} `;
-    if (artist) query += `a:${artist} `;
-    if (flavorText) query += `ft:${flavorText} `;
-    if (loreFinder) query += `${loreFinder} `;
-    if (language) query += `lang:${language} `;
-    if (displayImages) query += `display:grid `;
-    if (order) query += `order:${order} `;
-    if (showAllPrints) query += `unique:prints `;
-    if (includeExtras) query += `include:extras `;
+    const query = buildScryfallQuery(form);
 
     try {
-      const cards = await searchCards(query.trim());
+      const cards = await searchCards(query, controller.signal);
       setSearchResults(cards || []);
     } catch (err) {
-      setError('Failed to fetch cards.');
+      // A newer search aborted this one — ignore, the newer one owns the UI.
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      setError(err instanceof Error ? err.message : 'Failed to fetch cards.');
       console.error('Error fetching cards:', err);
     } finally {
-      setLoading(false);
+      if (searchAbortRef.current === controller) setLoading(false);
     }
   };
 
@@ -209,48 +192,48 @@ const CardSearch = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <input
               type="text"
-              value={cardName}
-              onChange={(e) => setCardName(e.target.value)}
+              value={form.cardName}
+              onChange={(e) => setField('cardName', e.target.value)}
               className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Card Name"
             />
             <input
               type="text"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
+              value={form.text}
+              onChange={(e) => setField('text', e.target.value)}
               className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Text"
             />
             <input
               type="text"
-              value={rulesText}
-              onChange={(e) => setRulesText(e.target.value)}
+              value={form.rulesText}
+              onChange={(e) => setField('rulesText', e.target.value)}
               className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Rules Text (~ for card name)"
             />
             <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
-                value={typeLine}
-                onChange={(e) => setTypeLine(e.target.value)}
+                value={form.typeLine}
+                onChange={(e) => setField('typeLine', e.target.value)}
                 className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
                 placeholder="Type Line"
               />
               <select
-                value={typeMatch}
-                onChange={(e) => setTypeMatch(e.target.value)}
+                value={form.typeMatch}
+                onChange={(e) => setField('typeMatch', e.target.value)}
                 className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               >
                 <option value="partial">Partial</option>
                 <option value="exact">Exact</option>
               </select>
               <select
-                value={typeInclude}
-                onChange={(e) => setTypeInclude(e.target.value === 'true')}
+                value={String(form.typeInclude)}
+                onChange={(e) => setField('typeInclude', e.target.value === 'true')}
                 className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               >
-                <option value={true}>Include</option>
-                <option value={false}>Exclude</option>
+                <option value="true">Include</option>
+                <option value="false">Exclude</option>
               </select>
             </div>
           </div>
@@ -260,12 +243,12 @@ const CardSearch = () => {
             <div>
               <h4 className="font-bold mb-2">Card Colors</h4>
               <div className="flex gap-2">
-                {Object.entries(colors).map(([color, active]) => (
+                {Object.entries(form.colors).map(([color, active]) => (
                   <label key={color} className="flex items-center space-x-2">
                     <input
                       type="checkbox"
                       checked={active}
-                      onChange={() => setColors({ ...colors, [color]: !active })}
+                      onChange={() => setField('colors', { ...form.colors, [color]: !active })}
                       className="rounded border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                     {getManaIconPath(color) ? (
@@ -277,8 +260,8 @@ const CardSearch = () => {
                 ))}
               </div>
               <select
-                value={colorMode}
-                onChange={(e) => setColorMode(e.target.value)}
+                value={form.colorMode}
+                onChange={(e) => setField('colorMode', e.target.value)}
                 className="mt-2 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               >
                 <option value="exactly">Exactly these colors</option>
@@ -288,12 +271,12 @@ const CardSearch = () => {
             <div>
               <h4 className="font-bold mb-2">Commander Colors</h4>
               <div className="flex gap-2">
-                {Object.entries(commanderColors).map(([color, active]) => (
+                {Object.entries(form.commanderColors).map(([color, active]) => (
                   <label key={color} className="flex items-center space-x-2">
                     <input
                       type="checkbox"
                       checked={active}
-                      onChange={() => setCommanderColors({ ...commanderColors, [color]: !active })}
+                      onChange={() => setField('commanderColors', { ...form.commanderColors, [color]: !active })}
                       className="rounded border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                     {getManaIconPath(color) ? (
@@ -309,7 +292,7 @@ const CardSearch = () => {
 
           {/* Mana Cost */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-            {Object.entries(manaCost).map(([color, count]) => {
+            {Object.entries(form.manaCost).map(([color, count]) => {
               const iconPath = getManaIconPath(color);
               return (
                 <div key={color} className="flex items-center space-x-2">
@@ -323,7 +306,7 @@ const CardSearch = () => {
                   <input
                     type="number"
                     value={count}
-                    onChange={(e) => setManaCost({ ...manaCost, [color]: parseInt(e.target.value) })}
+                    onChange={(e) => setField('manaCost', { ...form.manaCost, [color]: parseInt(e.target.value) })}
                     className="w-14 sm:w-16 px-2 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
                     min="0"
                   />
@@ -335,8 +318,8 @@ const CardSearch = () => {
           {/* Stats */}
           <div className="flex flex-col sm:flex-row gap-2">
             <select
-              value={manaValueComparison}
-              onChange={(e) => setManaValueComparison(e.target.value)}
+              value={form.manaValueComparison}
+              onChange={(e) => setField('manaValueComparison', e.target.value)}
               className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
               <option value="=">Equal to</option>
@@ -348,8 +331,8 @@ const CardSearch = () => {
             </select>
             <input
               type="number"
-              value={manaValue}
-              onChange={(e) => setManaValue(e.target.value)}
+              value={form.manaValue}
+              onChange={(e) => setField('manaValue', e.target.value)}
               className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Mana Value"
             />
@@ -363,8 +346,8 @@ const CardSearch = () => {
                 <label key={game} className="flex items-center space-x-2">
                   <input
                     type="checkbox"
-                    checked={games[game as keyof typeof games]}
-                    onChange={() => setGames({ ...games, [game]: !games[game as keyof typeof games] })}
+                    checked={form.games[game as keyof typeof form.games]}
+                    onChange={() => setField('games', { ...form.games, [game]: !form.games[game as keyof typeof form.games] })}
                     className="rounded border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   <span>{game}</span>
@@ -376,8 +359,8 @@ const CardSearch = () => {
           {/* Formats */}
           <div className="flex flex-col sm:flex-row gap-2">
             <select
-              value={format}
-              onChange={(e) => setFormat(e.target.value)}
+              value={form.format}
+              onChange={(e) => setField('format', e.target.value)}
               className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
               <option value="">Select Format</option>
@@ -405,8 +388,8 @@ const CardSearch = () => {
               <option value="predh">PreDH</option>
             </select>
             <select
-              value={formatStatus}
-              onChange={(e) => setFormatStatus(e.target.value)}
+              value={form.formatStatus}
+              onChange={(e) => setField('formatStatus', e.target.value)}
               className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
               <option value="">Select Status</option>
@@ -419,15 +402,15 @@ const CardSearch = () => {
           <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
-              value={set}
-              onChange={(e) => setSet(e.target.value)}
+              value={form.set}
+              onChange={(e) => setField('set', e.target.value)}
               className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Set Code"
             />
             <input
               type="text"
-              value={block}
-              onChange={(e) => setBlock(e.target.value)}
+              value={form.block}
+              onChange={(e) => setField('block', e.target.value)}
               className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Block Code"
             />
@@ -441,8 +424,8 @@ const CardSearch = () => {
                 <label key={r} className="flex items-center space-x-2">
                   <input
                     type="checkbox"
-                    checked={rarity[r as keyof typeof rarity]}
-                    onChange={() => setRarity({ ...rarity, [r]: !rarity[r as keyof typeof rarity] })}
+                    checked={form.rarity[r as keyof typeof form.rarity]}
+                    onChange={() => setField('rarity', { ...form.rarity, [r]: !form.rarity[r as keyof typeof form.rarity] })}
                     className="rounded border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   <span>{r}</span>
@@ -455,34 +438,34 @@ const CardSearch = () => {
           <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
-              value={criteria}
-              onChange={(e) => setCriteria(e.target.value)}
+              value={form.criteria}
+              onChange={(e) => setField('criteria', e.target.value)}
               className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Criteria"
             />
             <select
-              value={criteriaMatch}
-              onChange={(e) => setCriteriaMatch(e.target.value)}
+              value={form.criteriaMatch}
+              onChange={(e) => setField('criteriaMatch', e.target.value)}
               className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
               <option value="partial">Partial</option>
               <option value="exact">Exact</option>
             </select>
             <select
-              value={criteriaInclude}
-              onChange={(e) => setCriteriaInclude(e.target.value === 'true')}
+              value={String(form.criteriaInclude)}
+              onChange={(e) => setField('criteriaInclude', e.target.value === 'true')}
               className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
-              <option value={true}>Include</option>
-              <option value={false}>Exclude</option>
+              <option value="true">Include</option>
+              <option value="false">Exclude</option>
             </select>
           </div>
 
           {/* Prices */}
           <div className="flex flex-col sm:flex-row gap-2">
             <select
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
+              value={form.currency}
+              onChange={(e) => setField('currency', e.target.value)}
               className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
               <option value="usd">USD</option>
@@ -490,8 +473,8 @@ const CardSearch = () => {
               <option value="tix">TIX</option>
             </select>
             <select
-              value={priceComparison}
-              onChange={(e) => setPriceComparison(e.target.value)}
+              value={form.priceComparison}
+              onChange={(e) => setField('priceComparison', e.target.value)}
               className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
               <option value="=">Equal to</option>
@@ -503,8 +486,8 @@ const CardSearch = () => {
             </select>
             <input
               type="number"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
+              value={form.price}
+              onChange={(e) => setField('price', e.target.value)}
               className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Price"
             />
@@ -514,28 +497,28 @@ const CardSearch = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <input
               type="text"
-              value={artist}
-              onChange={(e) => setArtist(e.target.value)}
+              value={form.artist}
+              onChange={(e) => setField('artist', e.target.value)}
               className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Artist"
             />
             <input
               type="text"
-              value={flavorText}
-              onChange={(e) => setFlavorText(e.target.value)}
+              value={form.flavorText}
+              onChange={(e) => setField('flavorText', e.target.value)}
               className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Flavor Text"
             />
             <input
               type="text"
-              value={loreFinder}
-              onChange={(e) => setLoreFinder(e.target.value)}
+              value={form.loreFinder}
+              onChange={(e) => setField('loreFinder', e.target.value)}
               className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Lore Finder™"
             />
             <select
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
+              value={form.language}
+              onChange={(e) => setField('language', e.target.value)}
               className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
               <option value="en">English</option>
@@ -557,15 +540,15 @@ const CardSearch = () => {
             <label className="flex items-center space-x-2">
               <input
                 type="checkbox"
-                checked={displayImages}
-                onChange={() => setDisplayImages(!displayImages)}
+                checked={form.displayImages}
+                onChange={() => setField('displayImages', !form.displayImages)}
                 className="rounded border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <span>Display as Images</span>
             </label>
             <select
-              value={order}
-              onChange={(e) => setOrder(e.target.value)}
+              value={form.order}
+              onChange={(e) => setField('order', e.target.value)}
               className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
               <option value="name">Name</option>
@@ -587,8 +570,8 @@ const CardSearch = () => {
             <label className="flex items-center space-x-2">
               <input
                 type="checkbox"
-                checked={showAllPrints}
-                onChange={() => setShowAllPrints(!showAllPrints)}
+                checked={form.showAllPrints}
+                onChange={() => setField('showAllPrints', !form.showAllPrints)}
                 className="rounded border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <span>Show All Prints</span>
@@ -596,8 +579,8 @@ const CardSearch = () => {
             <label className="flex items-center space-x-2">
               <input
                 type="checkbox"
-                checked={includeExtras}
-                onChange={() => setIncludeExtras(!includeExtras)}
+                checked={form.includeExtras}
+                onChange={() => setField('includeExtras', !form.includeExtras)}
                 className="rounded border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <span>Include Extra Cards</span>
@@ -768,29 +751,6 @@ const CardSearch = () => {
           </>
         )}
       </div>
-
-      {/* Snackbar */}
-      {snackbar && (
-        <div
-          className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg transition-all duration-300 ${
-            snackbar.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-          } text-white z-[140]`}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              {snackbar.type === 'success' ? (
-                <CheckCircle className="mr-2" size={20} />
-              ) : (
-                <XCircle className="mr-2" size={20} />
-              )}
-              <span>{snackbar.message}</span>
-            </div>
-            <button onClick={() => setSnackbar(null)} className="ml-4 text-gray-200 hover:text-white focus:outline-none">
-              <Trash2 size={16} />
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

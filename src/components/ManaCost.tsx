@@ -1,4 +1,3 @@
-import React from 'react';
 
 // Map mana symbols to their icon paths
 const MANA_ICONS: Record<string, string> = {

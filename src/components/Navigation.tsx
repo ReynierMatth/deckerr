@@ -1,38 +1,29 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Library, LogOut, ChevronDown, Search, Heart, Users } from 'lucide-react';
+import { useNavigate, useRouterState } from '@tanstack/react-router';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
-type Page = 'home' | 'deck' | 'login' | 'collection' | 'search' | 'life-counter' | 'community';
-
-interface NavigationProps {
-  currentPage: Page;
-  setCurrentPage: (page: Page) => void;
-}
-
-export default function Navigation({ currentPage, setCurrentPage }: NavigationProps) {
+export default function Navigation() {
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+  const currentPath = useRouterState({ select: (s) => s.location.pathname });
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [username, setUsername] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchProfile = async () => {
-      if (user) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('username')
-          .eq('id', user.id)
-          .single();
-
-        if (data) {
-          setUsername(data.username);
-        }
-      }
-    };
-
-    fetchProfile();
-  }, [user]);
+  const { data: username } = useQuery({
+    queryKey: ['profile', 'username', user?.id],
+    enabled: Boolean(user),
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', user!.id)
+        .single();
+      return data?.username ?? null;
+    },
+  });
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -46,17 +37,19 @@ export default function Navigation({ currentPage, setCurrentPage }: NavigationPr
   }, []);
 
   const navItems = [
-    { id: 'home' as const, label: 'Decks', icon: Library },
-    { id: 'collection' as const, label: 'Collection', icon: Library },
-    { id: 'community' as const, label: 'Community', icon: Users },
-    { id: 'search' as const, label: 'Search', icon: Search },
-    { id: 'life-counter' as const, label: 'Life', icon: Heart },
-  ];
+    { to: '/', label: 'Decks', icon: Library },
+    { to: '/collection', label: 'Collection', icon: Library },
+    { to: '/community', label: 'Community', icon: Users },
+    { to: '/search', label: 'Search', icon: Search },
+    { to: '/life-counter', label: 'Life', icon: Heart },
+  ] as const;
+
+  const isActive = (to: string) => (to === '/' ? currentPath === '/' : currentPath.startsWith(to));
 
   const handleSignOut = async () => {
     try {
       await signOut();
-      setCurrentPage('login');
+      navigate({ to: '/' });
     } catch (error) {
       console.error('Error signing out:', error);
     }
@@ -76,10 +69,10 @@ export default function Navigation({ currentPage, setCurrentPage }: NavigationPr
               <span className="text-2xl font-bold text-orange-500 animate-bounce-in">Deckerr</span>
               {navItems.map((item) => (
                 <button
-                  key={item.id}
-                  onClick={() => setCurrentPage(item.id)}
+                  key={item.to}
+                  onClick={() => navigate({ to: item.to })}
                   className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-smooth
-                    ${currentPage === item.id
+                    ${isActive(item.to)
                       ? 'text-white bg-gray-900 animate-pulse-glow'
                       : 'text-gray-300 hover:text-white hover:bg-gray-700'
                     }`}
@@ -129,10 +122,10 @@ export default function Navigation({ currentPage, setCurrentPage }: NavigationPr
         <div className="flex justify-around items-center h-16 px-2">
           {navItems.map((item) => (
             <button
-              key={item.id}
-              onClick={() => setCurrentPage(item.id)}
+              key={item.to}
+              onClick={() => navigate({ to: item.to })}
               className={`flex flex-col items-center justify-center flex-1 h-full transition-colors ${
-                currentPage === item.id
+                isActive(item.to)
                   ? 'text-blue-500'
                   : 'text-gray-400 hover:text-gray-200'
               }`}
