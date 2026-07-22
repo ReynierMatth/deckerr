@@ -9,6 +9,8 @@ export {
   getCardById,
   getCardsByIds,
   getCardsByNames,
+  getCardByFuzzyName,
+  resolveCardsByNames,
   ScryfallHttpError,
 } from './scryfall';
 

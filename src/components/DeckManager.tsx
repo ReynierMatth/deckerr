@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Minus, Search, Save, Trash2, Loader2, CheckCircle, XCircle, AlertCircle, PackagePlus, RefreshCw, X } from 'lucide-react';
 import { Card, Deck } from '../types';
-import { searchCards, getCardsByNames, getUserCollection, addCardToCollection, addMultipleCardsToCollection } from '../services/api';
+import { searchCards, resolveCardsByNames, getUserCollection, addCardToCollection, addMultipleCardsToCollection } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
@@ -476,8 +476,8 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
         const cardsToAdd: { card: Card; quantity: number }[] = [];
         try {
-          // One batched lookup by name instead of one request per card.
-          const cardsByName = await getCardsByNames(requests.map(r => r.name));
+          // Batched exact lookup, with a fuzzy fallback for flavor/alternate names.
+          const cardsByName = await resolveCardsByNames(requests.map(r => r.name));
           for (const { name, quantity } of requests) {
             const card = cardsByName.get(name.toLowerCase());
             if (card) {

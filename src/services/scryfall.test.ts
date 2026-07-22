@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { searchCards, getCardById, getCardsByIds, getCardsByNames } from './scryfall';
+import { searchCards, getCardById, getCardsByIds, getCardsByNames, resolveCardsByNames } from './scryfall';
 
 const okJson = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
 const errJson = (status: number, details: string) => ({
@@ -85,5 +85,23 @@ describe('scryfall client', () => {
     expect(byName.get('lightning bolt')?.id).toBe('n1');
     // double-faced card resolvable by its front-face name
     expect(byName.get('fable of the mirror-breaker')?.id).toBe('n2');
+  });
+
+  it('resolveCardsByNames falls back to fuzzy for names the batch misses', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/cards/collection')) {
+        return Promise.resolve(okJson({ data: [{ id: 'r1', name: 'Lightning Bolt' }] }));
+      }
+      if (url.includes('/cards/named')) {
+        return Promise.resolve(okJson({ id: 'r2', name: "Minamo, School at Water's Edge", flavor_name: 'Dol Amroth' }));
+      }
+      return Promise.resolve(errJson(404, 'not found'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const byName = await resolveCardsByNames(['Lightning Bolt', 'Dol Amroth']);
+
+    expect(byName.get('lightning bolt')?.id).toBe('r1'); // exact batch hit
+    expect(byName.get('dol amroth')?.id).toBe('r2'); // fuzzy fallback for flavor name
   });
 });

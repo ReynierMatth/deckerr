@@ -161,6 +161,49 @@ export const getCardsByNames = async (
 };
 
 /**
+ * Fuzzy single-card lookup via GET /cards/named. Resolves flavor / alternate
+ * printed names (e.g. "Dol Amroth" -> "Minamo, School at Water's Edge") that
+ * the exact /cards/collection endpoint misses. Returns null when unmatched.
+ */
+export const getCardByFuzzyName = async (name: string, signal?: AbortSignal): Promise<Card | null> => {
+  try {
+    const card = await scryfallFetch<Card>(`/cards/named?fuzzy=${encodeURIComponent(name)}`, { signal });
+    cacheCard(card);
+    return card;
+  } catch (error) {
+    if (error instanceof ScryfallHttpError && error.status === 404) return null;
+    throw error;
+  }
+};
+
+/**
+ * Resolve a list of card names to cards, keyed by the requested (lower-cased)
+ * name. Uses the fast batched exact lookup first, then falls back to a fuzzy
+ * lookup for the few names it misses (flavor names, minor spelling variants).
+ */
+export const resolveCardsByNames = async (
+  names: string[],
+  signal?: AbortSignal,
+): Promise<Map<string, Card>> => {
+  const byRequested = new Map<string, Card>();
+  const batch = await getCardsByNames(names, signal);
+
+  const misses: string[] = [];
+  for (const raw of [...new Set(names.map((n) => n.trim()).filter(Boolean))]) {
+    const hit = batch.get(raw.toLowerCase());
+    if (hit) byRequested.set(raw.toLowerCase(), hit);
+    else misses.push(raw);
+  }
+
+  for (const name of misses) {
+    const card = await getCardByFuzzyName(name, signal);
+    if (card) byRequested.set(name.toLowerCase(), card);
+  }
+
+  return byRequested;
+};
+
+/**
  * Batch-fetch cards by id via POST /cards/collection, chunked at 75.
  * Ids already in the in-memory cache are served without a network call;
  * the result preserves the requested order.
