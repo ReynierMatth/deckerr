@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Loader2, Trash2, RefreshCw, Plus, Minus, X } from 'lucide-react';
 import { Card } from '../types';
-import { getUserCollectionPaginated, getCardsByIds, getCollectionTotalValue } from '../services/api';
+import { getUserCollectionPaginated, getCardsByIds, getCollectionTotalValue, refreshCollectionPrices } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
@@ -30,6 +30,7 @@ export default function Collection() {
   const [totalCount, setTotalCount] = useState(0);
   const [totalCollectionValue, setTotalCollectionValue] = useState<number>(0);
   const [isLoadingTotalValue, setIsLoadingTotalValue] = useState(true);
+  const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const [selectedCard, setSelectedCard] = useState<{ card: Card; quantity: number } | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -71,6 +72,40 @@ export default function Collection() {
 
     calculateTotalValue();
   }, [user]);
+
+  // Re-fetch Scryfall prices for the whole collection and persist them; the DB
+  // trigger recomputes the total (which also arrives via realtime below).
+  const handleRefreshPrices = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!user) return;
+      try {
+        setIsRefreshingPrices(true);
+        await refreshCollectionPrices(user.id);
+        setTotalCollectionValue(await getCollectionTotalValue(user.id));
+        try {
+          localStorage.setItem(`deckerr:pricesRefreshedAt:${user.id}`, String(Date.now()));
+        } catch { /* localStorage unavailable — ignore */ }
+        if (!opts?.silent) toast.success('Prices refreshed');
+      } catch (error) {
+        console.error('Error refreshing prices:', error);
+        if (!opts?.silent) toast.error('Failed to refresh prices');
+      } finally {
+        setIsRefreshingPrices(false);
+      }
+    },
+    [user, toast],
+  );
+
+  // Auto-refresh prices at most once per day (per device) when the page opens.
+  useEffect(() => {
+    if (!user) return;
+    let stale = true;
+    try {
+      const last = Number(localStorage.getItem(`deckerr:pricesRefreshedAt:${user.id}`) || 0);
+      stale = !last || Date.now() - last > 24 * 60 * 60 * 1000;
+    } catch { /* localStorage unavailable — treat as stale */ }
+    if (stale) handleRefreshPrices({ silent: true });
+  }, [user, handleRefreshPrices]);
 
   // Subscribe to realtime updates for collection total value
   useEffect(() => {
@@ -323,24 +358,34 @@ export default function Collection() {
               {searchQuery ? `Found ${filteredCollection.length} card(s)` : `My Cards (${collection.length} unique, ${collection.reduce((acc, c) => acc + c.quantity, 0)} total)`}
             </h2>
             {/* Collection Value Summary */}
-            <div className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2">
-              <div className="text-xs text-gray-400 mb-0.5">
-                {searchQuery ? 'Filtered Value' : 'Total Collection Value'}
+            <div className="flex items-center gap-2">
+              <div className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2">
+                <div className="text-xs text-gray-400 mb-0.5">
+                  {searchQuery ? 'Filtered Value' : 'Total Collection Value'}
+                </div>
+                <div className="text-lg font-bold text-green-400">
+                  {isLoadingTotalValue ? (
+                    <Loader2 className="animate-spin" size={20} />
+                  ) : searchQuery ? (
+                    // For search results, calculate from filtered collection
+                    `$${filteredCollection.reduce((total, { card, quantity }) => {
+                      const price = card.prices?.usd ? parseFloat(card.prices.usd) : 0;
+                      return total + (price * quantity);
+                    }, 0).toFixed(2)}`
+                  ) : (
+                    // For full collection, use pre-calculated total
+                    `$${totalCollectionValue.toFixed(2)}`
+                  )}
+                </div>
               </div>
-              <div className="text-lg font-bold text-green-400">
-                {isLoadingTotalValue ? (
-                  <Loader2 className="animate-spin" size={20} />
-                ) : searchQuery ? (
-                  // For search results, calculate from filtered collection
-                  `$${filteredCollection.reduce((total, { card, quantity }) => {
-                    const price = card.prices?.usd ? parseFloat(card.prices.usd) : 0;
-                    return total + (price * quantity);
-                  }, 0).toFixed(2)}`
-                ) : (
-                  // For full collection, use pre-calculated total
-                  `$${totalCollectionValue.toFixed(2)}`
-                )}
-              </div>
+              <button
+                onClick={() => handleRefreshPrices()}
+                disabled={isRefreshingPrices}
+                title="Refresh card prices"
+                className="p-2 bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
+              >
+                <RefreshCw size={18} className={isRefreshingPrices ? 'animate-spin' : ''} />
+              </button>
             </div>
           </div>
 

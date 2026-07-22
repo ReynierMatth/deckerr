@@ -204,7 +204,9 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
     try {
       setAddingCardId(cardId);
-      await addCardToCollection(user.id, cardId, quantity);
+      const card = selectedCards.find(c => c.card.id === cardId)?.card;
+      const priceUsd = card?.prices?.usd ? Number(card.prices.usd) : 0;
+      await addCardToCollection(user.id, cardId, quantity, priceUsd);
 
       // Update local collection state
       setUserCollection(prev => {
@@ -242,6 +244,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         return {
           cardId: card.id,
           quantity: neededQuantity,
+          priceUsd: card.prices?.usd ? Number(card.prices.usd) : 0,
         };
       }).filter(c => c.quantity > 0);
 

@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { getCardsByIds as fetchCardsByIds } from './scryfall';
 
 // Scryfall card API lives in its own module; re-exported here for backwards
 // compatibility with existing `../services/api` imports.
@@ -10,6 +11,11 @@ export {
   getCardsByNames,
   ScryfallHttpError,
 } from './scryfall';
+
+const priceFromCard = (prices?: { usd?: string; usd_foil?: string }): number => {
+  const usd = prices?.usd ?? prices?.usd_foil;
+  return usd ? Number(usd) : 0;
+};
 
 // Collection API functions
 export const getUserCollection = async (userId: string): Promise<Map<string, number>> => {
@@ -166,6 +172,35 @@ export const addMultipleCardsToCollection = async (
     card_id: cardId,
     quantity: (existingQty.get(cardId) ?? 0) + quantity,
     price_usd: priceUsd,
+    updated_at: now,
+  }));
+
+  const { error } = await supabase
+    .from('collections')
+    .upsert(rows, { onConflict: 'user_id,card_id' });
+
+  if (error) throw error;
+};
+
+/**
+ * Re-fetch current Scryfall prices for every card in the user's collection and
+ * persist them to collections.price_usd. The DB trigger then recomputes the
+ * denormalized profiles.collection_total_value.
+ */
+export const refreshCollectionPrices = async (userId: string): Promise<void> => {
+  const collection = await getUserCollection(userId); // Map<card_id, quantity>
+  const cardIds = [...collection.keys()];
+  if (cardIds.length === 0) return;
+
+  const cards = await fetchCardsByIds(cardIds);
+  const priceById = new Map(cards.map((c) => [c.id, priceFromCard(c.prices)]));
+
+  const now = new Date().toISOString();
+  const rows = cardIds.map((cardId) => ({
+    user_id: userId,
+    card_id: cardId,
+    quantity: collection.get(cardId) ?? 0,
+    price_usd: priceById.get(cardId) ?? 0,
     updated_at: now,
   }));
 
