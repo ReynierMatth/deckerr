@@ -1,5 +1,5 @@
-import React from 'react';
-import { Plus, Trash2, Loader2, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { Plus, Trash2, Loader2, AlertCircle, X } from 'lucide-react';
 import { Card } from '../../types';
 import { ManaSymbol } from '../ManaCost';
 
@@ -19,6 +19,9 @@ interface DeckCardListProps {
   setDeckName: React.Dispatch<React.SetStateAction<string>>;
   deckFormat: string;
   setDeckFormat: React.Dispatch<React.SetStateAction<string>>;
+  tags: string[];
+  addTag: (tag: string) => void;
+  removeTag: (tag: string) => void;
   commander: Card | null;
   setCommander: React.Dispatch<React.SetStateAction<Card | null>>;
   selectedCards: DeckCardEntry[];
@@ -49,6 +52,9 @@ export default function DeckCardList({
   setDeckName,
   deckFormat,
   setDeckFormat,
+  tags,
+  addTag,
+  removeTag,
   commander,
   setCommander,
   selectedCards,
@@ -67,6 +73,13 @@ export default function DeckCardList({
   suggestedLands,
   addSuggestedLandsToDeck,
 }: DeckCardListProps) {
+  const [tagInput, setTagInput] = useState('');
+
+  const commitTag = () => {
+    addTag(tagInput);
+    setTagInput('');
+  };
+
   return (
     <div className="bg-gray-800 rounded-lg p-6">
       <div className="space-y-4">
@@ -90,6 +103,44 @@ export default function DeckCardList({
           <option value="vintage">Vintage</option>
           <option value="pauper">Pauper</option>
         </select>
+
+        {/* Tags editor: add on Enter, removable chips */}
+        <div className="space-y-2">
+          <input
+            type="text"
+            value={tagInput}
+            onChange={e => setTagInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                commitTag();
+              }
+            }}
+            onBlur={commitTag}
+            className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
+            placeholder="Add tag (press Enter)"
+          />
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {tags.map(tag => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center gap-1 pl-3 pr-2 py-1 bg-blue-600/20 border border-blue-500/40 text-blue-200 rounded-full text-xs"
+                >
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => removeTag(tag)}
+                    className="text-blue-300 hover:text-white"
+                    aria-label={`Remove tag ${tag}`}
+                  >
+                    <X size={14} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
 
         {deckFormat === 'commander' && (
           <div className="space-y-2">
