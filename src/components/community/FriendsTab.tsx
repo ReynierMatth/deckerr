@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search, Loader2, UserPlus, UserMinus, Check, X, Send, Eye } from 'lucide-react';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { useAuth } from '../../contexts/AuthContext';
@@ -30,6 +31,14 @@ interface ViewableUser {
   collection_visibility: 'public' | 'friends' | 'private' | null;
 }
 
+interface FriendsData {
+  friends: Friend[];
+  pendingRequests: Friend[];
+  sentRequests: Friend[];
+}
+
+const EMPTY_FRIENDS: Friend[] = [];
+
 interface FriendsTabProps {
   /** View a friend's collection (owned by the Browse view in Community). */
   onViewCollection: (user: ViewableUser) => void;
@@ -41,11 +50,9 @@ interface FriendsTabProps {
 export default function FriendsTab({ onViewCollection, onFriendsChange }: FriendsTabProps) {
   const { user } = useAuth();
   const toast = useToast();
+  const queryClient = useQueryClient();
 
   const [friendsSubTab, setFriendsSubTab] = useState<FriendsSubTab>('list');
-  const [friends, setFriends] = useState<Friend[]>([]);
-  const [pendingRequests, setPendingRequests] = useState<Friend[]>([]);
-  const [sentRequests, setSentRequests] = useState<Friend[]>([]);
   const [friendSearch, setFriendSearch] = useState('');
   const [friendSearchResults, setFriendSearchResults] = useState<{ id: string; username: string | null }[]>([]);
   const [searchingFriends, setSearchingFriends] = useState(false);
@@ -60,24 +67,25 @@ export default function FriendsTab({ onViewCollection, onFriendsChange }: Friend
     variant: 'danger' | 'warning' | 'info' | 'success';
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'danger' });
 
-  const loadFriendsData = async () => {
-    if (!user) return;
+  const loadFriendsData = async (): Promise<FriendsData> => {
+    if (!user) return { friends: [], pendingRequests: [], sentRequests: [] };
     const [friendsData, pendingData, sentData] = await Promise.all([
       getFriends(user.id),
       getPendingRequests(user.id),
       getSentRequests(user.id),
     ]);
-    setFriends(friendsData);
-    setPendingRequests(pendingData);
-    setSentRequests(sentData);
+    return { friends: friendsData, pendingRequests: pendingData, sentRequests: sentData };
   };
 
-  // Load friends on mount (when a user is set).
-  useEffect(() => {
-    if (user) {
-      loadFriendsData();
-    }
-  }, [user]);
+  const { data: friendsData } = useQuery({
+    queryKey: ['friends', user?.id],
+    queryFn: loadFriendsData,
+    enabled: !!user,
+  });
+
+  const friends = friendsData?.friends ?? EMPTY_FRIENDS;
+  const pendingRequests = friendsData?.pendingRequests ?? EMPTY_FRIENDS;
+  const sentRequests = friendsData?.sentRequests ?? EMPTY_FRIENDS;
 
   // Report friends list up to Community for the tab badge + Browse shortcut.
   useEffect(() => {
@@ -102,7 +110,7 @@ export default function FriendsTab({ onViewCollection, onFriendsChange }: Friend
           const newData = (payload.new || payload.old) as Partial<FriendshipRealtimeRow>;
           if (newData && (newData.requester_id === user.id || newData.addressee_id === user.id)) {
             console.log('Friendship change:', payload);
-            loadFriendsData();
+            queryClient.invalidateQueries({ queryKey: ['friends', user.id] });
           }
         }
       )
@@ -111,7 +119,7 @@ export default function FriendsTab({ onViewCollection, onFriendsChange }: Friend
     return () => {
       supabase.removeChannel(friendshipsChannel);
     };
-  }, [user]);
+  }, [user, queryClient]);
 
   const handleSearchFriends = async () => {
     if (!user || friendSearch.trim().length < 2) return;
@@ -131,7 +139,7 @@ export default function FriendsTab({ onViewCollection, onFriendsChange }: Friend
     try {
       await sendFriendRequest(user.id, addresseeId);
       setFriendSearchResults((prev) => prev.filter((u) => u.id !== addresseeId));
-      await loadFriendsData();
+      queryClient.invalidateQueries({ queryKey: ['friends', user.id] });
       toast.success('Friend request sent!');
     } catch {
       toast.error('Failed to send friend request');
@@ -141,7 +149,7 @@ export default function FriendsTab({ onViewCollection, onFriendsChange }: Friend
   const handleAcceptRequest = async (friendshipId: string) => {
     try {
       await acceptFriendRequest(friendshipId);
-      await loadFriendsData();
+      queryClient.invalidateQueries({ queryKey: ['friends', user?.id] });
       toast.success('Friend request accepted!');
     } catch {
       toast.error('Failed to accept request');
@@ -151,7 +159,7 @@ export default function FriendsTab({ onViewCollection, onFriendsChange }: Friend
   const handleDeclineRequest = async (friendshipId: string) => {
     try {
       await declineFriendRequest(friendshipId);
-      await loadFriendsData();
+      queryClient.invalidateQueries({ queryKey: ['friends', user?.id] });
       toast.info('Friend request declined');
     } catch {
       toast.error('Failed to decline request');
@@ -167,7 +175,7 @@ export default function FriendsTab({ onViewCollection, onFriendsChange }: Friend
       onConfirm: async () => {
         try {
           await removeFriend(friendshipId);
-          await loadFriendsData();
+          queryClient.invalidateQueries({ queryKey: ['friends', user?.id] });
           toast.success('Friend removed');
         } catch {
           toast.error('Failed to remove friend');
