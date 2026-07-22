@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeftRight, Clock, History, X, AlertTriangle } from 'lucide-react';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { useAuth } from '../../contexts/AuthContext';
@@ -25,6 +26,15 @@ interface TradeRealtimeRow {
   user2_id: string;
 }
 
+interface TradesData {
+  pendingTrades: Trade[];
+  tradeHistory: Trade[];
+  tradeCardDetails: Map<string, Card>;
+}
+
+const EMPTY_TRADES: Trade[] = [];
+const EMPTY_CARD_DETAILS = new Map<string, Card>();
+
 interface TradesTabProps {
   /** Report the pending trades count up so Community can show the tab badge. */
   onPendingCountChange?: (count: number) => void;
@@ -34,11 +44,9 @@ interface TradesTabProps {
 export default function TradesTab({ onPendingCountChange }: TradesTabProps) {
   const { user } = useAuth();
   const toast = useToast();
+  const queryClient = useQueryClient();
 
   const [tradesSubTab, setTradesSubTab] = useState<TradesSubTab>('pending');
-  const [pendingTrades, setPendingTrades] = useState<Trade[]>([]);
-  const [tradeHistory, setTradeHistory] = useState<Trade[]>([]);
-  const [tradeCardDetails, setTradeCardDetails] = useState<Map<string, Card>>(new Map());
   const [processingTradeId, setProcessingTradeId] = useState<string | null>(null);
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
 
@@ -50,8 +58,8 @@ export default function TradesTab({ onPendingCountChange }: TradesTabProps) {
     variant: 'danger' | 'warning' | 'info' | 'success';
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'danger' });
 
-  const loadTradesData = async () => {
-    if (!user) return;
+  const loadTradesData = async (): Promise<TradesData> => {
+    if (!user) return { pendingTrades: [], tradeHistory: [], tradeCardDetails: new Map() };
     const [pending, history] = await Promise.all([
       getTrades(user.id).then((trades) => trades.filter((t) => t.status === 'pending')),
       getTradeHistory(user.id),
@@ -62,23 +70,24 @@ export default function TradesTab({ onPendingCountChange }: TradesTabProps) {
       trade.items?.forEach((item) => allCardIds.add(item.card_id));
     });
 
+    const cardMap = new Map<string, Card>();
     if (allCardIds.size > 0) {
       const cards = await getCardsByIds(Array.from(allCardIds));
-      const cardMap = new Map<string, Card>();
       cards.forEach((card) => cardMap.set(card.id, card));
-      setTradeCardDetails(cardMap);
     }
 
-    setPendingTrades(pending);
-    setTradeHistory(history);
+    return { pendingTrades: pending, tradeHistory: history, tradeCardDetails: cardMap };
   };
 
-  // Load trades on mount (when a user is set).
-  useEffect(() => {
-    if (user) {
-      loadTradesData();
-    }
-  }, [user]);
+  const { data: tradesData } = useQuery({
+    queryKey: ['trades', user?.id],
+    queryFn: loadTradesData,
+    enabled: !!user,
+  });
+
+  const pendingTrades = tradesData?.pendingTrades ?? EMPTY_TRADES;
+  const tradeHistory = tradesData?.tradeHistory ?? EMPTY_TRADES;
+  const tradeCardDetails = tradesData?.tradeCardDetails ?? EMPTY_CARD_DETAILS;
 
   // Report pending trades count up to Community for the tab badge.
   useEffect(() => {
@@ -103,7 +112,7 @@ export default function TradesTab({ onPendingCountChange }: TradesTabProps) {
           const newData = (payload.new || payload.old) as Partial<TradeRealtimeRow>;
           if (newData && (newData.user1_id === user.id || newData.user2_id === user.id)) {
             console.log('Trade change:', payload);
-            loadTradesData();
+            queryClient.invalidateQueries({ queryKey: ['trades', user.id] });
           }
         }
       )
@@ -112,14 +121,14 @@ export default function TradesTab({ onPendingCountChange }: TradesTabProps) {
     return () => {
       supabase.removeChannel(tradesChannel);
     };
-  }, [user]);
+  }, [user, queryClient]);
 
   const handleAcceptTrade = async (tradeId: string) => {
     setProcessingTradeId(tradeId);
     try {
       const success = await acceptTrade(tradeId);
       if (success) {
-        await loadTradesData();
+        queryClient.invalidateQueries({ queryKey: ['trades', user?.id] });
         toast.success('Trade accepted! Cards exchanged.');
       } else {
         toast.error('Failed. Check your collection.');
@@ -135,7 +144,7 @@ export default function TradesTab({ onPendingCountChange }: TradesTabProps) {
     setProcessingTradeId(tradeId);
     try {
       await declineTrade(tradeId);
-      await loadTradesData();
+      queryClient.invalidateQueries({ queryKey: ['trades', user?.id] });
       toast.info('Trade declined');
     } catch {
       toast.error('Error declining trade');
@@ -154,7 +163,7 @@ export default function TradesTab({ onPendingCountChange }: TradesTabProps) {
         setProcessingTradeId(tradeId);
         try {
           await cancelTrade(tradeId);
-          await loadTradesData();
+          queryClient.invalidateQueries({ queryKey: ['trades', user?.id] });
           toast.info('Trade cancelled');
         } catch {
           toast.error('Error cancelling trade');
@@ -322,7 +331,7 @@ export default function TradesTab({ onPendingCountChange }: TradesTabProps) {
           onDecline={handleDeclineTrade}
           onTradeUpdated={() => {
             setSelectedTrade(null);
-            loadTradesData();
+            queryClient.invalidateQueries({ queryKey: ['trades', user?.id] });
           }}
         />
       )}
