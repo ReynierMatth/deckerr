@@ -41,6 +41,21 @@ describe('validateDeck — standard', () => {
     expect(result.errors.some((e) => e.includes('too many copies'))).toBe(true);
   });
 
+  it('allows any number of "any number of cards named" exception cards', () => {
+    const rats = card('rats', { name: 'Relentless Rats', oracle_text: 'A deck can have any number of cards named Relentless Rats.' });
+    const cards = [entry(rats, 30), ...Array.from({ length: 8 }, (_, i) => entry(card(`c${i}`), 4))];
+    const result = validateDeck(deck({ format: 'standard', cards }));
+    expect(result.errors.some((e) => e.includes('too many copies'))).toBe(false);
+  });
+
+  it('honors an "up to nine" per-card limit (Nazgûl)', () => {
+    const nazgul = card('naz', { name: 'Nazgûl', oracle_text: 'A deck can have up to nine cards named Nazgûl.' });
+    const nine = validateDeck(deck({ format: 'standard', cards: [entry(nazgul, 9), ...Array.from({ length: 13 }, (_, i) => entry(card(`c${i}`), 4))] }));
+    expect(nine.errors.some((e) => e.includes('too many copies'))).toBe(false);
+    const ten = validateDeck(deck({ format: 'standard', cards: [entry(nazgul, 10), ...Array.from({ length: 13 }, (_, i) => entry(card(`c${i}`), 4))] }));
+    expect(ten.errors).toContain('Nazgûl has too many copies (max 9)');
+  });
+
   it('exempts basic lands from the max-copies rule', () => {
     // 40 Plains (basic, exempt) + 5 distinct non-basics at the 4-copy limit = 60.
     const cards = [

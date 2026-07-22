@@ -8,6 +8,7 @@ import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
 import { useCardFaces } from '../hooks/useCardFaces';
 import { supabase } from '../lib/supabase';
 import { validateDeck } from '../utils/deckValidation';
+import { parseDeckList } from '../utils/parseDeckList';
 import { ManaCost, ManaSymbol } from './ManaCost';
 
 interface DeckManagerProps {
@@ -284,21 +285,11 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
   const addCardToDeck = (card: Card) => {
     setSelectedCards(prev => {
-      const isBasicLand =
-        card.name === 'Plains' ||
-        card.name === 'Island' ||
-        card.name === 'Swamp' ||
-        card.name === 'Mountain' ||
-        card.name === 'Forest';
       const existing = prev.find(c => c.card.id === card.id);
       if (existing) {
+        // No hard cap: format copy limits are surfaced as warnings, not blockers.
         return prev.map(c =>
-          c.card.id === card.id
-            ? {
-                ...c,
-                quantity: isBasicLand ? c.quantity + 1 : Math.min(c.quantity + 1, 4),
-              }
-            : c
+          c.card.id === card.id ? { ...c, quantity: c.quantity + 1 } : c
         );
       }
       return [...prev, { card, quantity: 1, is_commander: false }];
@@ -476,17 +467,9 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       const reader = new FileReader();
       reader.onload = async e => {
         const text = e.target?.result as string;
-        const lines = text.split('\n');
 
-        // Parse every "<qty> <card name>" line first.
-        const requests: { name: string; quantity: number }[] = [];
-        for (const line of lines) {
-          const parts = line.trim().split(' ');
-          const quantity = parseInt(parts[0]);
-          const cardName = parts.slice(1).join(' ');
-          if (isNaN(quantity) || quantity <= 0 || !cardName) continue;
-          requests.push({ name: cardName, quantity });
-        }
+        // Parse the decklist (handles "4"/"4x", set codes, foil markers, headers).
+        const requests = parseDeckList(text);
 
         const cardsToAdd: { card: Card; quantity: number }[] = [];
         try {
@@ -514,10 +497,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
               c => c.card.id === card.id
             );
             if (existingCardIndex !== -1) {
-              updatedCards[existingCardIndex].quantity = Math.min(
-                updatedCards[existingCardIndex].quantity + quantity,
-                4
-              );
+              updatedCards[existingCardIndex].quantity += quantity;
             } else {
               updatedCards.push({ card, quantity, is_commander: false });
             }
