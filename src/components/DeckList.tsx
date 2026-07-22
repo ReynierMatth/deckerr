@@ -1,66 +1,44 @@
-import React, { useEffect, useState } from 'react';
-import { getCardById, getCardsByIds } from '../services/api';
+import { useQuery } from '@tanstack/react-query';
+import { getCardsByIds } from '../services/api';
 import { Deck } from '../types';
 import { supabase } from "../lib/supabase";
 import DeckCard from "./DeckCard";
 import { PlusCircle } from 'lucide-react';
-import MigrateDeckButton from "./MigrateDeckButton.tsx";
 
 interface DeckListProps {
   onDeckEdit?: (deckId: string) => void;
   onCreateDeck?: () => void;
 }
 
+const fetchDecks = async (): Promise<Deck[]> => {
+  const { data: decksData, error: decksError } = await supabase.from('decks').select('*');
+  if (decksError) throw decksError;
+
+  // Fetch only cover cards (much lighter than loading every card in every deck).
+  const coverCardIds = decksData.map((deck) => deck.cover_card_id).filter(Boolean);
+  const coverCards = coverCardIds.length > 0 ? await getCardsByIds(coverCardIds) : [];
+
+  return decksData.map((deck) => ({
+    ...deck,
+    cards: [],
+    coverCard: deck.cover_card_id ? coverCards.find((c) => c.id === deck.cover_card_id) ?? null : null,
+    createdAt: new Date(deck.created_at),
+    updatedAt: new Date(deck.updated_at),
+    validationErrors: deck.validation_errors || [],
+    isValid: deck.is_valid ?? true,
+    cardCount: deck.card_count || 0,
+    coverCardId: deck.cover_card_id,
+  }));
+};
+
 const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
-  const [decks, setDecks] = useState<Deck[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: decks = [], isLoading } = useQuery({
+    queryKey: ['decks'],
+    queryFn: fetchDecks,
+    staleTime: 0, // always refetch on mount so newly created/edited decks appear
+  });
 
-  useEffect(() => {
-    const fetchDecks = async () => {
-      const { data: decksData, error: decksError } = await supabase.from('decks').select('*');
-      if (decksError) {
-        console.error('Error fetching decks:', decksError);
-        setLoading(false);
-        return;
-      }
-
-      // Get all unique cover card IDs
-      const coverCardIds = decksData
-        .map(deck => deck.cover_card_id)
-        .filter(Boolean);
-
-      // Fetch only cover cards (much lighter!)
-      const coverCards = coverCardIds.length > 0
-        ? await getCardsByIds(coverCardIds)
-        : [];
-
-      // Map decks with their cover cards
-      const decksWithCoverCards = decksData.map(deck => {
-        const coverCard = deck.cover_card_id
-          ? coverCards.find(c => c.id === deck.cover_card_id)
-          : null;
-
-        return {
-          ...deck,
-          cards: [], // Empty array, we don't load all cards here
-          coverCard: coverCard || null,
-          createdAt: new Date(deck.created_at),
-          updatedAt: new Date(deck.updated_at),
-          validationErrors: deck.validation_errors || [],
-          isValid: deck.is_valid ?? true,
-          cardCount: deck.card_count || 0,
-          coverCardId: deck.cover_card_id,
-        };
-      });
-
-      setDecks(decksWithCoverCards);
-      setLoading(false);
-    };
-
-    fetchDecks();
-  }, []);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="loading-spinner h-32 w-32"></div>

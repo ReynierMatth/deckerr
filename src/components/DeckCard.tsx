@@ -1,4 +1,3 @@
-import React from 'react';
 import { AlertTriangle, Check, Edit } from 'lucide-react';
 import { Deck } from '../types';
 
@@ -43,7 +42,9 @@ export default function DeckCard({ deck, onEdit }: DeckCardProps) {
             {isValid ? (
               <Check size={16} className="text-green-400 ml-2 flex-shrink-0" />
             ) : (
-              <AlertTriangle size={16} className="text-yellow-400 ml-2 flex-shrink-0" title={validationErrors.join(', ')} />
+              <span title={validationErrors.join(', ')} className="ml-2 flex-shrink-0">
+                <AlertTriangle size={16} className="text-yellow-400" />
+              </span>
             )}
           </div>
 

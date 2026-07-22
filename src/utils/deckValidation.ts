@@ -18,6 +18,31 @@ function isCardValidForCommander(card: Card, commanderColors: string[]): boolean
   return cardColors.every(color => commanderColors.includes(color));
 }
 
+const BASIC_LAND_NAMES = new Set(['plains', 'island', 'swamp', 'mountain', 'forest', 'wastes']);
+
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+  seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+};
+
+const oracleTextOf = (card: Card): string =>
+  (card.oracle_text || card.card_faces?.[0]?.oracle_text || '').toLowerCase();
+
+/**
+ * How many copies of a card a deck may hold before it's worth warning about.
+ * Basic lands and the "A deck can have any number of cards named ..." cards are
+ * unlimited; cards like Seven Dwarves / Nazgûl carry their own "up to N" limit
+ * in their rules text. Everything else falls back to the format's max.
+ */
+function copyLimitFor(card: Card, formatMax: number): number {
+  if (BASIC_LAND_NAMES.has((card.name || '').toLowerCase())) return Infinity;
+  const text = oracleTextOf(card);
+  if (/a deck can have any number of cards named/.test(text)) return Infinity;
+  const upTo = text.match(/a deck can have up to (\w+) cards named/);
+  if (upTo && NUMBER_WORDS[upTo[1]] != null) return NUMBER_WORDS[upTo[1]];
+  return formatMax;
+}
+
 const FORMAT_RULES = {
   standard: {
     minCards: 60,
@@ -56,6 +81,11 @@ export function validateDeck(deck: Deck): DeckValidation {
   const rules = FORMAT_RULES[deck.format as keyof typeof FORMAT_RULES];
   const errors: string[] = [];
 
+  // Unknown/freeform format: nothing to warn about.
+  if (!rules) {
+    return { isValid: true, errors };
+  }
+
   // Count total cards
   const totalCards = deck.cards.reduce((acc, curr) => acc + curr.quantity, 0);
 
@@ -78,12 +108,13 @@ export function validateDeck(deck: Deck): DeckValidation {
     cardCounts.set(card.id, currentCount + quantity);
   }
 
-  cardCounts.forEach((count, cardName) => {
-    const card = deck.cards.find(c => c.card.id === cardName)?.card;
-    const isBasicLand = card?.name === 'Plains' || card?.name === 'Island' || card?.name === 'Swamp' || card?.name === 'Mountain' || card?.name === 'Forest';
+  cardCounts.forEach((count, cardId) => {
+    const card = deck.cards.find(c => c.card.id === cardId)?.card;
+    if (!card) return;
 
-    if (!isBasicLand && count > rules.maxCopies) {
-      errors.push(`${cardName} has too many copies (max ${rules.maxCopies})`);
+    const limit = copyLimitFor(card, rules.maxCopies);
+    if (count > limit) {
+      errors.push(`${card.name} has too many copies (max ${limit})`);
     }
   });
 

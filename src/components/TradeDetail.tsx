@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Check, ArrowLeftRight, DollarSign, Loader2, Edit, RefreshCcw, History, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -51,7 +51,6 @@ export default function TradeDetail({
   const [editReceiverCollection, setEditReceiverCollection] = useState<CollectionItem[]>([]);
 
   const isUser1 = trade.user1_id === user?.id;
-  const isUser2 = trade.user2_id === user?.id;
   const otherUser = isUser1 ? trade.user2 : trade.user1;
   const myUserId = user?.id || '';
   const otherUserId = isUser1 ? trade.user2_id : trade.user1_id;

@@ -10,7 +10,25 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dev-dist
 *.local
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Local npm registry override
+.npmrc
+
+# Vite transient config-load artifacts
+vite.config.*.timestamp-*.mjs
+
+# Database backups / dumps
+*.backup
+*.backup.gz
+*.dump
+*.sql.gz
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +40,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code local (per-user) settings
+.claude/settings.local.json

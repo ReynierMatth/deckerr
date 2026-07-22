@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { getCardsByIds } from '../services/api';
 import { validateDeck } from './deckValidation';
-import { Deck } from '../types';
+import { Deck, Card } from '../types';
 
 /**
  * Migrate existing decks to include optimization fields
@@ -54,14 +54,17 @@ export async function migrateExistingDecks() {
         continue;
       }
 
-      const cards = cardEntities.map(entity => {
-        const card = scryfallCards.find(c => c.id === entity.card_id);
-        return {
-          card,
-          quantity: entity.quantity,
-          is_commander: entity.is_commander,
-        };
-      });
+      const cards = cardEntities
+        .map(entity => {
+          const card = scryfallCards.find(c => c.id === entity.card_id);
+          if (!card) return null;
+          return {
+            card,
+            quantity: Number(entity.quantity),
+            is_commander: Boolean(entity.is_commander),
+          };
+        })
+        .filter((c): c is { card: Card; quantity: number; is_commander: boolean } => c !== null);
 
       // Create deck object for validation
       const deckToValidate: Deck = {

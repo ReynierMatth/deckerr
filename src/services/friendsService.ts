@@ -2,11 +2,21 @@ import { supabase } from '../lib/supabase';
 
 export interface Friend {
   id: string;
-  odship_id: string;
+  friendshipId: string;
   username: string | null;
   status: 'pending' | 'accepted' | 'declined';
   isRequester: boolean;
   created_at: string | null;
+}
+
+interface FriendshipRequestRow {
+  id: string;
+  requester_id: string;
+  addressee_id: string;
+  status: 'pending' | 'accepted' | 'declined';
+  created_at: string | null;
+  requester?: { username: string | null } | null;
+  addressee?: { username: string | null } | null;
 }
 
 export interface FriendshipWithProfile {
@@ -63,14 +73,15 @@ export async function getPendingRequests(userId: string): Promise<Friend[]> {
       requester:profiles!friendships_requester_id_fkey(username)
     `)
     .eq('status', 'pending')
-    .eq('addressee_id', userId);
+    .eq('addressee_id', userId)
+    .returns<FriendshipRequestRow[]>();
 
   if (error) throw error;
 
-  return (data as any[]).map((f) => ({
+  return data.map((f) => ({
     id: f.requester_id,
     friendshipId: f.id,
-    username: f.requester?.username,
+    username: f.requester?.username ?? null,
     status: f.status,
     isRequester: false,
     created_at: f.created_at,
@@ -90,14 +101,15 @@ export async function getSentRequests(userId: string): Promise<Friend[]> {
       addressee:profiles!friendships_addressee_id_fkey(username)
     `)
     .eq('status', 'pending')
-    .eq('requester_id', userId);
+    .eq('requester_id', userId)
+    .returns<FriendshipRequestRow[]>();
 
   if (error) throw error;
 
-  return (data as any[]).map((f) => ({
+  return data.map((f) => ({
     id: f.addressee_id,
     friendshipId: f.id,
-    username: f.addressee?.username,
+    username: f.addressee?.username ?? null,
     status: f.status,
     isRequester: true,
     created_at: f.created_at,

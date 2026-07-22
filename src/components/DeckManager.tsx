@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, Search, Save, Trash2, Loader2, CheckCircle, XCircle, AlertCircle, PackagePlus, RefreshCw, X } from 'lucide-react';
+import { Plus, Minus, Search, Save, Trash2, Loader2, CheckCircle, XCircle, AlertCircle, PackagePlus, RefreshCw } from 'lucide-react';
 import { Card, Deck } from '../types';
-import { searchCards, getUserCollection, addCardToCollection, addMultipleCardsToCollection } from '../services/api';
+import { searchCards, resolveCardsByNames, getUserCollection, addCardToCollection, addMultipleCardsToCollection } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
+import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
+import { useCardFaces } from '../hooks/useCardFaces';
 import { supabase } from '../lib/supabase';
 import { validateDeck } from '../utils/deckValidation';
-import MagicCard from './MagicCard';
+import { parseDeckList } from '../utils/parseDeckList';
 import { ManaCost, ManaSymbol } from './ManaCost';
+import CardDetailPanel from './deck/CardDetailPanel';
+import HoverCardPreview from './deck/HoverCardPreview';
 
 interface DeckManagerProps {
   initialDeck?: Deck;
@@ -25,7 +30,7 @@ interface DeckManagerProps {
 // };
 
 const suggestLandCountAndDistribution = (
-  cards: { card; quantity: number }[],
+  cards: { card: Card; quantity: number }[],
   format: string,
   commanderColors: string[] = []
 ) => {
@@ -122,6 +127,8 @@ const isCardValidForCommander = (card: Card, commanderColors: string[]): boolean
 };
 
 export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
+  const toast = useToast();
+  const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
   const [currentDeckId, setCurrentDeckId] = useState<string | null>(initialDeck?.id || null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Card[]>([]);
@@ -129,6 +136,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const [selectedCards, setSelectedCards] = useState<{
     card: Card;
     quantity: number;
+    is_commander: boolean;
   }[]>(initialDeck?.cards || []);
   const [deckName, setDeckName] = useState(initialDeck?.name || '');
   const [deckFormat, setDeckFormat] = useState(initialDeck?.format || 'standard');
@@ -141,14 +149,12 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const { user } = useAuth();
   const [isImporting, setIsImporting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [snackbar, setSnackbar] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Collection management state
   const [userCollection, setUserCollection] = useState<Map<string, number>>(new Map());
   const [isLoadingCollection, setIsLoadingCollection] = useState(true);
   const [addingCardId, setAddingCardId] = useState<string | null>(null);
   const [isAddingAll, setIsAddingAll] = useState(false);
-  const [cardFaceIndex, setCardFaceIndex] = useState<Map<string, number>>(new Map());
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const [hoverSource, setHoverSource] = useState<'search' | 'deck' | null>(null);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
@@ -164,7 +170,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         setUserCollection(collection);
       } catch (error) {
         console.error('Error loading user collection:', error);
-        setSnackbar({ message: 'Failed to load collection', type: 'error' });
+        toast.error('Failed to load collection');
       } finally {
         setIsLoadingCollection(false);
       }
@@ -174,32 +180,6 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   }, [user]);
 
   // Helper functions for double-faced cards
-  const isDoubleFaced = (card: Card) => {
-    const backFaceLayouts = ['transform', 'modal_dfc', 'double_faced_token', 'reversible_card'];
-    return card.card_faces && card.card_faces.length > 1 && backFaceLayouts.includes(card.layout);
-  };
-
-  const getCurrentFaceIndex = (cardId: string) => {
-    return cardFaceIndex.get(cardId) || 0;
-  };
-
-  const toggleCardFace = (cardId: string, totalFaces: number) => {
-    setCardFaceIndex(prev => {
-      const newMap = new Map(prev);
-      const currentIndex = prev.get(cardId) || 0;
-      const nextIndex = (currentIndex + 1) % totalFaces;
-      newMap.set(cardId, nextIndex);
-      return newMap;
-    });
-  };
-
-  const getCardImageUri = (card: Card, faceIndex: number = 0) => {
-    if (isDoubleFaced(card) && card.card_faces) {
-      return card.card_faces[faceIndex]?.image_uris?.normal || card.card_faces[faceIndex]?.image_uris?.small;
-    }
-    return card.image_uris?.normal || card.image_uris?.small || card.card_faces?.[0]?.image_uris?.normal;
-  };
-
   const getCardLargeImageUri = (card: Card, faceIndex: number = 0) => {
     if (isDoubleFaced(card) && card.card_faces) {
       return card.card_faces[faceIndex]?.image_uris?.large || card.card_faces[faceIndex]?.image_uris?.normal;
@@ -226,7 +206,9 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
     try {
       setAddingCardId(cardId);
-      await addCardToCollection(user.id, cardId, quantity);
+      const card = selectedCards.find(c => c.card.id === cardId)?.card;
+      const priceUsd = card?.prices?.usd ? Number(card.prices.usd) : 0;
+      await addCardToCollection(user.id, cardId, quantity, priceUsd);
 
       // Update local collection state
       setUserCollection(prev => {
@@ -236,13 +218,12 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         return newMap;
       });
 
-      setSnackbar({ message: 'Card added to collection!', type: 'success' });
+      toast.success('Card added to collection!');
     } catch (error) {
       console.error('Error adding card to collection:', error);
-      setSnackbar({ message: 'Failed to add card to collection', type: 'error' });
+      toast.error('Failed to add card to collection');
     } finally {
       setAddingCardId(null);
-      setTimeout(() => setSnackbar(null), 3000);
     }
   };
 
@@ -252,8 +233,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
     const missingCards = getMissingCards();
     if (missingCards.length === 0) {
-      setSnackbar({ message: 'All cards are already in your collection!', type: 'success' });
-      setTimeout(() => setSnackbar(null), 3000);
+      toast.success('All cards are already in your collection!');
       return;
     }
 
@@ -266,6 +246,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         return {
           cardId: card.id,
           quantity: neededQuantity,
+          priceUsd: card.prices?.usd ? Number(card.prices.usd) : 0,
         };
       }).filter(c => c.quantity > 0);
 
@@ -281,16 +262,12 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         return newMap;
       });
 
-      setSnackbar({
-        message: `Successfully added ${cardsToAdd.length} card(s) to collection!`,
-        type: 'success'
-      });
+      toast.success(`Successfully added ${cardsToAdd.length} card(s) to collection!`);
     } catch (error) {
       console.error('Error adding cards to collection:', error);
-      setSnackbar({ message: 'Failed to add cards to collection', type: 'error' });
+      toast.error('Failed to add cards to collection');
     } finally {
       setIsAddingAll(false);
-      setTimeout(() => setSnackbar(null), 3000);
     }
   };
 
@@ -305,7 +282,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     } catch (error) {
       console.error('Failed to search cards:', error);
       setSearchResults([]);
-      setSnackbar({ message: 'Failed to search cards', type: 'error' });
+      toast.error('Failed to search cards');
     } finally {
       setIsSearching(false);
     }
@@ -313,24 +290,14 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
   const addCardToDeck = (card: Card) => {
     setSelectedCards(prev => {
-      const isBasicLand =
-        card.name === 'Plains' ||
-        card.name === 'Island' ||
-        card.name === 'Swamp' ||
-        card.name === 'Mountain' ||
-        card.name === 'Forest';
       const existing = prev.find(c => c.card.id === card.id);
       if (existing) {
+        // No hard cap: format copy limits are surfaced as warnings, not blockers.
         return prev.map(c =>
-          c.card.id === card.id
-            ? {
-                ...c,
-                quantity: isBasicLand ? c.quantity + 1 : Math.min(c.quantity + 1, 4),
-              }
-            : c
+          c.card.id === card.id ? { ...c, quantity: c.quantity + 1 } : c
         );
       }
-      return [...prev, { card, quantity: 1 }];
+      return [...prev, { card, quantity: 1, is_commander: false }];
     });
   };
 
@@ -420,14 +387,13 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
       if (cardsError) throw cardsError;
 
-      setSnackbar({ message: 'Deck saved successfully!', type: 'success' });
+      toast.success('Deck saved successfully!');
       if (onSave) onSave();
     } catch (error) {
       console.error('Error saving deck:', error);
-      setSnackbar({ message: 'Failed to save deck.', type: 'error' });
+      toast.error('Failed to save deck.');
     } finally {
       setIsSaving(false);
-      setTimeout(() => setSnackbar(null), 3000); // Clear snackbar after 3 seconds
     }
   };
 
@@ -475,8 +441,8 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     for (const color in suggestedLands) {
       const landCount = suggestedLands[color];
       if (landCount > 0) {
-        const landName = basicLandCards[color]?.name;
-        const landSet = basicLandCards[color]?.set;
+        const landName = basicLandCards[color as keyof typeof basicLandCards]?.name;
+        const landSet = basicLandCards[color as keyof typeof basicLandCards]?.set;
 
         if (landName && landSet) {
           try {
@@ -506,29 +472,27 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       const reader = new FileReader();
       reader.onload = async e => {
         const text = e.target?.result as string;
-        const lines = text.split('\n');
+
+        // Parse the decklist (handles "4"/"4x", set codes, foil markers, headers).
+        const requests = parseDeckList(text);
+
         const cardsToAdd: { card: Card; quantity: number }[] = [];
-
-        for (const line of lines) {
-          const parts = line.trim().split(' ');
-          const quantity = parseInt(parts[0]);
-          const cardName = parts.slice(1).join(' ');
-
-          if (isNaN(quantity) || quantity <= 0 || !cardName) continue;
-
-          try {
-            const searchResults = await searchCards(cardName);
-            if (searchResults && searchResults.length > 0) {
-              const card = searchResults[0];
+        try {
+          // Batched exact lookup, with a fuzzy fallback for flavor/alternate names.
+          const cardsByName = await resolveCardsByNames(requests.map(r => r.name));
+          for (const { name, quantity } of requests) {
+            const card = cardsByName.get(name.toLowerCase());
+            if (card) {
               cardsToAdd.push({ card, quantity });
             } else {
-              console.warn(`Card not found: ${cardName}`);
-              setSnackbar({ message: `Card not found: ${cardName}`, type: 'error' });
+              console.warn(`Card not found: ${name}`);
+              toast.error(`Card not found: ${name}`);
             }
-          } catch (error) {
-            console.error(`Failed to search card ${cardName}:`, error);
-            setSnackbar({ message: `Failed to import card: ${cardName}`, type: 'error' });
           }
+        } catch (error) {
+          console.error('Failed to import deck:', error);
+          toast.error('Failed to import deck');
+          return;
         }
 
         setSelectedCards(prev => {
@@ -538,12 +502,9 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
               c => c.card.id === card.id
             );
             if (existingCardIndex !== -1) {
-              updatedCards[existingCardIndex].quantity = Math.min(
-                updatedCards[existingCardIndex].quantity + quantity,
-                4
-              );
+              updatedCards[existingCardIndex].quantity += quantity;
             } else {
-              updatedCards.push({ card, quantity });
+              updatedCards.push({ card, quantity, is_commander: false });
             }
           }
           return updatedCards;
@@ -981,202 +942,37 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       </div>
 
       {/* Hover Card Preview - only show if no card is selected */}
-      {hoveredCard && !selectedCard && (() => {
-        const currentFaceIndex = getCurrentFaceIndex(hoveredCard.id);
-        const isMultiFaced = isDoubleFaced(hoveredCard);
-        const currentFace = isMultiFaced && hoveredCard.card_faces
-          ? hoveredCard.card_faces[currentFaceIndex]
-          : null;
-
-        const displayName = currentFace?.name || hoveredCard.name;
-        const displayTypeLine = currentFace?.type_line || hoveredCard.type_line;
-        const displayOracleText = currentFace?.oracle_text || hoveredCard.oracle_text;
-
-        // Position preview based on hover source
-        const positionClass = hoverSource === 'deck' ? 'left-8' : 'right-8';
-
-        return (
-          <div className={`hidden lg:block fixed top-1/2 ${positionClass} transform -translate-y-1/2 z-30 pointer-events-none`}>
-            <div className="bg-gray-800 rounded-lg shadow-2xl p-4 max-w-md">
-              <div className="relative">
-                <img
-                  src={getCardLargeImageUri(hoveredCard, currentFaceIndex)}
-                  alt={displayName}
-                  className="w-full h-auto rounded-lg shadow-lg"
-                />
-                {isMultiFaced && (
-                  <div className="absolute top-2 right-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
-                    Face {currentFaceIndex + 1}/{hoveredCard.card_faces!.length}
-                  </div>
-                )}
-              </div>
-              <div className="mt-3 space-y-2">
-                <h3 className="text-xl font-bold">{displayName}</h3>
-                <p className="text-sm text-gray-400">{displayTypeLine}</p>
-                {displayOracleText && (
-                  <p className="text-sm text-gray-300 border-t border-gray-700 pt-2">
-                    {displayOracleText}
-                  </p>
-                )}
-                {hoveredCard.prices?.usd && (
-                  <div className="text-sm text-green-400 font-semibold border-t border-gray-700 pt-2">
-                    ${hoveredCard.prices.usd}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {hoveredCard && !selectedCard && (
+        <HoverCardPreview
+          card={hoveredCard}
+          hoverSource={hoverSource}
+          getCurrentFaceIndex={getCurrentFaceIndex}
+          getLargeImageUri={getCardLargeImageUri}
+        />
+      )}
 
       {/* Card Detail Panel - slides in from right */}
-      {selectedCard && (() => {
-        const currentFaceIndex = getCurrentFaceIndex(selectedCard.id);
-        const isMultiFaced = isDoubleFaced(selectedCard);
-        const currentFace = isMultiFaced && selectedCard.card_faces
-          ? selectedCard.card_faces[currentFaceIndex]
-          : null;
-
-        const displayName = currentFace?.name || selectedCard.name;
-        const displayTypeLine = currentFace?.type_line || selectedCard.type_line;
-        const displayOracleText = currentFace?.oracle_text || selectedCard.oracle_text;
-
-        return (
-          <>
-            {/* Backdrop */}
-            <div
-              className="fixed inset-0 bg-black bg-opacity-50 z-[110] transition-opacity duration-300"
-              onClick={() => setSelectedCard(null)}
-            />
-
-            {/* Sliding Panel */}
-            <div className="fixed top-0 right-0 h-full w-full md:w-96 bg-gray-800 shadow-2xl z-[120] overflow-y-auto animate-slide-in-right">
-              {/* Close button */}
-              <button
-                onClick={() => setSelectedCard(null)}
-                className="fixed top-4 right-4 bg-gray-700 hover:bg-gray-600 text-white p-2 md:p-1.5 rounded-full transition-colors z-[130] shadow-lg"
-                aria-label="Close"
-              >
-                <X size={24} className="md:w-5 md:h-5" />
-              </button>
-
-              <div className="p-4 sm:p-6">
-                {/* Card Image */}
-                <div className="relative mb-4 max-w-sm mx-auto">
-                  <img
-                    src={getCardLargeImageUri(selectedCard, currentFaceIndex)}
-                    alt={displayName}
-                    className="w-full h-auto rounded-lg shadow-lg"
-                  />
-                  {isMultiFaced && (
-                    <>
-                      <div className="absolute top-2 right-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
-                        Face {currentFaceIndex + 1}/{selectedCard.card_faces!.length}
-                      </div>
-                      <button
-                        onClick={() => toggleCardFace(selectedCard.id, selectedCard.card_faces!.length)}
-                        className="absolute bottom-2 right-2 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full shadow-lg transition-all"
-                        title="Flip card"
-                      >
-                        <RefreshCw size={20} />
-                      </button>
-                    </>
-                  )}
-                </div>
-
-                {/* Card Info */}
-                <div className="space-y-4">
-                  <div>
-                    <h2 className="text-xl md:text-2xl font-bold text-white mb-2">{displayName}</h2>
-                    <p className="text-xs sm:text-sm text-gray-400">{displayTypeLine}</p>
-                  </div>
-
-                  {displayOracleText && (
-                    <div className="border-t border-gray-700 pt-3">
-                      <p className="text-sm text-gray-300">{displayOracleText}</p>
-                    </div>
-                  )}
-
-                  {selectedCard.prices?.usd && (
-                    <div className="border-t border-gray-700 pt-3">
-                      <div className="text-lg text-green-400 font-semibold">
-                        ${selectedCard.prices.usd} each
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Collection Status */}
-                  {userCollection.has(selectedCard.id) && (
-                    <div className="border-t border-gray-700 pt-3">
-                      <div className="text-sm text-green-400">
-                        <CheckCircle size={16} className="inline mr-1" />
-                        x{userCollection.get(selectedCard.id)} in your collection
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Deck Quantity Management */}
-                  <div className="border-t border-gray-700 pt-3">
-                    <h3 className="text-lg font-semibold mb-3">Quantity in Deck</h3>
-                    <div className="flex items-center justify-between bg-gray-900 rounded-lg p-4">
-                      <button
-                        onClick={() => {
-                          const cardInDeck = selectedCards.find(c => c.card.id === selectedCard.id);
-                          const currentQuantity = cardInDeck?.quantity || 0;
-                          if (currentQuantity === 1) {
-                            removeCardFromDeck(selectedCard.id);
-                          } else if (currentQuantity > 1) {
-                            updateCardQuantity(selectedCard.id, currentQuantity - 1);
-                          }
-                        }}
-                        disabled={!selectedCards.find(c => c.card.id === selectedCard.id)}
-                        className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-colors"
-                      >
-                        <Minus size={20} />
-                      </button>
-
-                      <div className="text-center">
-                        <div className="text-3xl font-bold">
-                          {selectedCards.find(c => c.card.id === selectedCard.id)?.quantity || 0}
-                        </div>
-                        <div className="text-xs text-gray-400">copies</div>
-                      </div>
-
-                      <button
-                        onClick={() => addCardToDeck(selectedCard)}
-                        className="bg-green-600 hover:bg-green-700 text-white p-2 rounded-lg transition-colors"
-                      >
-                        <Plus size={20} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
-        );
-      })()}
-
-      {snackbar && (
-        <div
-          className={`fixed bottom-4 right-4 text-white p-4 rounded-lg shadow-lg transition-all duration-300 z-[140] ${
-            snackbar.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              {snackbar.type === 'success' ? (
-                <CheckCircle className="mr-2" size={20} />
-              ) : (
-                <XCircle className="mr-2" size={20} />
-              )}
-              <span>{snackbar.message}</span>
-            </div>
-            <button onClick={() => setSnackbar(null)} className="ml-4 text-gray-200 hover:text-white focus:outline-none">
-              <Trash2 size={16} />
-            </button>
-          </div>
-        </div>
+      {selectedCard && (
+        <CardDetailPanel
+          card={selectedCard}
+          quantityInDeck={selectedCards.find(c => c.card.id === selectedCard.id)?.quantity || 0}
+          inDeck={Boolean(selectedCards.find(c => c.card.id === selectedCard.id))}
+          collectionQuantity={userCollection.has(selectedCard.id) ? userCollection.get(selectedCard.id) : undefined}
+          getCurrentFaceIndex={getCurrentFaceIndex}
+          toggleCardFace={toggleCardFace}
+          getLargeImageUri={getCardLargeImageUri}
+          onClose={() => setSelectedCard(null)}
+          onIncrement={() => addCardToDeck(selectedCard)}
+          onDecrement={() => {
+            const cardInDeck = selectedCards.find(c => c.card.id === selectedCard.id);
+            const currentQuantity = cardInDeck?.quantity || 0;
+            if (currentQuantity === 1) {
+              removeCardFromDeck(selectedCard.id);
+            } else if (currentQuantity > 1) {
+              updateCardQuantity(selectedCard.id, currentQuantity - 1);
+            }
+          }}
+        />
       )}
     </div>
   );
