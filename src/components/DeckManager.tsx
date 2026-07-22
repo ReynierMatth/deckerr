@@ -13,6 +13,7 @@ import CardDetailPanel from './deck/CardDetailPanel';
 import HoverCardPreview from './deck/HoverCardPreview';
 import DeckSearchPanel from './deck/DeckSearchPanel';
 import DeckCardList from './deck/DeckCardList';
+import DeckStats from './deck/DeckStats';
 
 interface DeckManagerProps {
   initialDeck?: Deck;
@@ -572,6 +573,12 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
             suggestedLands={suggestedLands}
             addSuggestedLandsToDeck={addSuggestedLandsToDeck}
           />
+
+          {/* Deck Stats */}
+          <div className="mt-6 bg-gray-800 border border-gray-700 rounded-lg p-4">
+            <h2 className="text-lg font-semibold text-white mb-3">Deck Stats</h2>
+            <DeckStats cards={selectedCards} />
+          </div>
         </div>
       </div>
 
