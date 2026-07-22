@@ -35,13 +35,8 @@ interface TradesData {
 const EMPTY_TRADES: Trade[] = [];
 const EMPTY_CARD_DETAILS = new Map<string, Card>();
 
-interface TradesTabProps {
-  /** Report the pending trades count up so Community can show the tab badge. */
-  onPendingCountChange?: (count: number) => void;
-}
-
 /** Trades tab: pending trades + history. Self-contained. */
-export default function TradesTab({ onPendingCountChange }: TradesTabProps) {
+export default function TradesTab() {
   const { user } = useAuth();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -88,11 +83,6 @@ export default function TradesTab({ onPendingCountChange }: TradesTabProps) {
   const pendingTrades = tradesData?.pendingTrades ?? EMPTY_TRADES;
   const tradeHistory = tradesData?.tradeHistory ?? EMPTY_TRADES;
   const tradeCardDetails = tradesData?.tradeCardDetails ?? EMPTY_CARD_DETAILS;
-
-  // Report pending trades count up to Community for the tab badge.
-  useEffect(() => {
-    onPendingCountChange?.(pendingTrades.length);
-  }, [pendingTrades, onPendingCountChange]);
 
   // Subscribe to trade changes.
   useEffect(() => {
