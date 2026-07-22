@@ -211,6 +211,34 @@ export const refreshCollectionPrices = async (userId: string): Promise<void> => 
     .upsert(rows, { onConflict: 'user_id,card_id' });
 
   if (error) throw error;
+
+  await snapshotCollectionValue(userId);
+};
+
+// ---- Collection value history ----
+export interface ValueHistoryPoint {
+  date: string;
+  value: number;
+}
+
+/** Record today's total collection value (one point per day) for the chart. */
+export const snapshotCollectionValue = async (userId: string): Promise<void> => {
+  const value = await getCollectionTotalValue(userId);
+  const snapshot_date = new Date().toISOString().slice(0, 10);
+  const { error } = await supabase
+    .from('collection_value_history')
+    .upsert({ user_id: userId, snapshot_date, value }, { onConflict: 'user_id,snapshot_date' });
+  if (error) throw error;
+};
+
+export const getCollectionValueHistory = async (userId: string): Promise<ValueHistoryPoint[]> => {
+  const { data, error } = await supabase
+    .from('collection_value_history')
+    .select('snapshot_date, value')
+    .eq('user_id', userId)
+    .order('snapshot_date', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({ date: r.snapshot_date as string, value: Number(r.value) }));
 };
 
 // ---- Wishlist ----
