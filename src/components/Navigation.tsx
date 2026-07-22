@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Library, LogOut, ChevronDown, Search, Heart, Users, Star } from 'lucide-react';
+import { Library, LogOut, ChevronDown, Search, Heart, Users, Star, MoreHorizontal, X } from 'lucide-react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,6 +11,7 @@ export default function Navigation() {
   const navigate = useNavigate();
   const currentPath = useRouterState({ select: (s) => s.location.pathname });
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const { data: username } = useQuery({
@@ -47,6 +48,11 @@ export default function Navigation() {
   ] as const;
 
   const isActive = (to: string) => (to === '/' ? currentPath === '/' : currentPath.startsWith(to));
+
+  // Mobile bottom bar shows only the primary tabs; the rest live in "More".
+  const MOBILE_PRIMARY: string[] = ['/', '/collection', '/community', '/search'];
+  const mobilePrimary = navItems.filter((i) => MOBILE_PRIMARY.includes(i.to));
+  const mobileMore = navItems.filter((i) => !MOBILE_PRIMARY.includes(i.to));
 
   const handleSignOut = async () => {
     try {
@@ -122,8 +128,8 @@ export default function Navigation() {
 
       {/* Mobile Navigation - Bottom */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 z-50 safe-area-bottom">
-        <div className="flex justify-around items-center h-16 px-2">
-          {navItems.map((item) => (
+        <div className="flex justify-around items-center h-16 px-1">
+          {mobilePrimary.map((item) => (
             <button
               key={item.to}
               onClick={() => navigate({ to: item.to })}
@@ -138,23 +144,65 @@ export default function Navigation() {
             </button>
           ))}
 
-          {/* Notifications for mobile */}
           {user && (
             <div className="flex flex-col items-center justify-center flex-1 h-full text-gray-400">
               <NotificationBell />
             </div>
           )}
 
-          {/* Sign Out button for mobile */}
           <button
-            onClick={handleSignOut}
-            className="flex flex-col items-center justify-center flex-1 h-full text-gray-400 hover:text-gray-200 transition-colors"
+            onClick={() => setShowMore(true)}
+            className={`flex flex-col items-center justify-center flex-1 h-full transition-colors ${
+              mobileMore.some((i) => isActive(i.to)) ? 'text-blue-500' : 'text-gray-400 hover:text-gray-200'
+            }`}
           >
-            <LogOut size={20} />
-            <span className="text-xs mt-1">Logout</span>
+            <MoreHorizontal size={20} />
+            <span className="text-xs mt-1">More</span>
           </button>
         </div>
       </nav>
+
+      {/* Mobile "More" sheet */}
+      {showMore && (
+        <div className="md:hidden fixed inset-0 z-[60]">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowMore(false)} />
+          <div className="absolute bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 rounded-t-2xl p-4 pb-8 safe-area-bottom animate-slide-in-up">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-semibold text-gray-300">More</span>
+              <button onClick={() => setShowMore(false)} className="p-1 text-gray-400 hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="space-y-1">
+              {mobileMore.map((item) => (
+                <button
+                  key={item.to}
+                  onClick={() => {
+                    navigate({ to: item.to });
+                    setShowMore(false);
+                  }}
+                  className={`flex items-center gap-3 w-full px-3 py-3 rounded-lg transition-colors ${
+                    isActive(item.to) ? 'bg-gray-900 text-white' : 'text-gray-200 hover:bg-gray-700'
+                  }`}
+                >
+                  <item.icon size={20} />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+              <button
+                onClick={() => {
+                  setShowMore(false);
+                  handleSignOut();
+                }}
+                className="flex items-center gap-3 w-full px-3 py-3 rounded-lg text-gray-200 hover:bg-gray-700 transition-colors"
+              >
+                <LogOut size={20} />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
