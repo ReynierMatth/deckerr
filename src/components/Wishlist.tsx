@@ -12,10 +12,11 @@ export default function Wishlist() {
   const queryClient = useQueryClient();
 
   const { data: cards = [], isLoading } = useQuery<Card[]>({
-    queryKey: ['wishlist', user?.id],
+    // distinct from the ['wishlist', id] membership query (different shape)
+    queryKey: ['wishlist', 'cards', user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const ids = [...(await getWishlist(user!.id))];
+      const ids = await getWishlist(user!.id);
       return ids.length ? await getCardsByIds(ids) : [];
     },
   });
@@ -24,7 +25,7 @@ export default function Wishlist() {
     if (!user) return;
     try {
       await removeFromWishlist(user.id, cardId);
-      await queryClient.invalidateQueries({ queryKey: ['wishlist', user.id] });
+      await queryClient.invalidateQueries({ queryKey: ['wishlist'] });
       toast.success('Removed from wishlist');
     } catch (error) {
       console.error('Error removing from wishlist:', error);

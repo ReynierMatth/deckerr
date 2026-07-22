@@ -214,10 +214,12 @@ export const refreshCollectionPrices = async (userId: string): Promise<void> => 
 };
 
 // ---- Wishlist ----
-export const getWishlist = async (userId: string): Promise<Set<string>> => {
+// Returns a plain array (not a Set) because TanStack Query's structural
+// sharing does not preserve Set/Map instances.
+export const getWishlist = async (userId: string): Promise<string[]> => {
   const { data, error } = await supabase.from('wishlists').select('card_id').eq('user_id', userId);
   if (error) throw error;
-  return new Set((data ?? []).map((r) => r.card_id));
+  return (data ?? []).map((r) => r.card_id);
 };
 
 export const addToWishlist = async (userId: string, cardId: string): Promise<void> => {

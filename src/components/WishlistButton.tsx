@@ -25,7 +25,7 @@ export default function WishlistButton({ cardId, size = 18, className = '' }: Wi
 
   if (!user) return null;
 
-  const inWishlist = wishlist?.has(cardId) ?? false;
+  const inWishlist = wishlist?.includes(cardId) ?? false;
 
   const toggle = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -33,7 +33,7 @@ export default function WishlistButton({ cardId, size = 18, className = '' }: Wi
     try {
       if (inWishlist) await removeFromWishlist(user.id, cardId);
       else await addToWishlist(user.id, cardId);
-      queryClient.invalidateQueries({ queryKey: ['wishlist', user.id] });
+      queryClient.invalidateQueries({ queryKey: ['wishlist'] });
     } catch {
       /* transient failure — the star simply won't toggle */
     }
