@@ -261,3 +261,47 @@ export const removeFromWishlist = async (userId: string, cardId: string): Promis
   const { error } = await supabase.from('wishlists').delete().eq('user_id', userId).eq('card_id', cardId);
   if (error) throw error;
 };
+
+// ---- Notifications ----
+export interface AppNotification {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  related_id: string | null;
+  read: boolean;
+  created_at: string;
+}
+
+export const getNotifications = async (userId: string): Promise<AppNotification[]> => {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('id, type, title, body, related_id, read, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return (data ?? []).map((n) => ({
+    id: n.id,
+    type: n.type,
+    title: n.title,
+    body: n.body ?? null,
+    related_id: n.related_id ?? null,
+    read: Boolean(n.read),
+    created_at: n.created_at,
+  }));
+};
+
+export const markNotificationRead = async (id: string): Promise<void> => {
+  const { error } = await supabase.from('notifications').update({ read: true }).eq('id', id);
+  if (error) throw error;
+};
+
+export const markAllNotificationsRead = async (userId: string): Promise<void> => {
+  const { error } = await supabase
+    .from('notifications')
+    .update({ read: true })
+    .eq('user_id', userId)
+    .eq('read', false);
+  if (error) throw error;
+};

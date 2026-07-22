@@ -4,6 +4,7 @@ import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import NotificationBell from './NotificationBell';
 
 export default function Navigation() {
   const { user, signOut } = useAuth();
@@ -86,6 +87,7 @@ export default function Navigation() {
 
             {user && (
               <div className="flex items-center space-x-4">
+                <NotificationBell />
                 <div className="relative" ref={dropdownRef}>
                   <button
                     onClick={() => setShowDropdown(!showDropdown)}
@@ -135,6 +137,13 @@ export default function Navigation() {
               <span className="text-xs mt-1">{item.label}</span>
             </button>
           ))}
+
+          {/* Notifications for mobile */}
+          {user && (
+            <div className="flex flex-col items-center justify-center flex-1 h-full text-gray-400">
+              <NotificationBell />
+            </div>
+          )}
 
           {/* Sign Out button for mobile */}
           <button
