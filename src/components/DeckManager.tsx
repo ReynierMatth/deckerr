@@ -145,6 +145,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   }[]>(initialDeck?.cards || []);
   const [deckName, setDeckName] = useState(initialDeck?.name || '');
   const [deckFormat, setDeckFormat] = useState(initialDeck?.format || 'standard');
+  const [tags, setTags] = useState<string[]>(initialDeck?.tags ?? []);
   const [commander, setCommander] = useState<Card | null>(
       initialDeck?.cards.find(card =>
           card.is_commander
@@ -311,6 +312,15 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const removeCardFromDeck = (cardId: string) =>
     setSelectedCards(prev => prev.filter(c => c.card.id !== cardId));
 
+  const addTag = (tag: string) => {
+    const trimmed = tag.trim();
+    if (!trimmed) return;
+    setTags(prev => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
+  };
+
+  const removeTag = (tag: string) =>
+    setTags(prev => prev.filter(t => t !== tag));
+
   const updateCardQuantity = (cardId: string, quantity: number) => {
     setSelectedCards(prev => {
       return prev.map(c => {
@@ -336,6 +346,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         userId: user.id,
         createdAt: initialDeck?.createdAt || new Date(),
         updatedAt: new Date(),
+        tags,
       };
 
       // Calculate validation for storage
@@ -360,6 +371,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         validation_errors: validation.errors,
         is_valid: validation.isValid,
         card_count: totalCardCount,
+        tags,
       };
 
       // Save or update the deck
@@ -542,6 +554,9 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
             setDeckName={setDeckName}
             deckFormat={deckFormat}
             setDeckFormat={setDeckFormat}
+            tags={tags}
+            addTag={addTag}
+            removeTag={removeTag}
             commander={commander}
             setCommander={setCommander}
             selectedCards={selectedCards}

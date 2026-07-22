@@ -72,6 +72,7 @@ export interface Deck {
   validationErrors?: string[];
   isValid?: boolean;
   cardCount?: number;
+  tags?: string[];
 }
 
 export interface CardEntity {
