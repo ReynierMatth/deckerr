@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Loader2, PackagePlus, Download } from 'lucide-react';
+import { Save, Loader2, PackagePlus, Download, Search, X } from 'lucide-react';
 import { Card, Deck } from '../types';
 import { searchCards, resolveCardsByNames, getUserCollection, addCardToCollection, addMultipleCardsToCollection } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -155,6 +155,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const [isImporting, setIsImporting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
 
   // Collection management state
   const [userCollection, setUserCollection] = useState<Map<string, number>>(new Map());
@@ -526,32 +527,14 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   return (
     <div className="relative bg-gray-900 text-white p-3 sm:p-6 pt-6 pb-44 md:pt-20 md:pb-6 md:min-h-screen">
       <div className="max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-          {/* Card Search Section */}
-          <DeckSearchPanel
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            setSearchResults={setSearchResults}
-            handleSearch={handleSearch}
-            isSearching={isSearching}
-            searchResults={searchResults}
-            selectedCards={selectedCards}
-            userCollection={userCollection}
-            addingCardId={addingCardId}
-            deckFormat={deckFormat}
-            commander={commander}
-            commanderColors={commanderColors}
-            isCardValidForCommander={isCardValidForCommander}
-            getCurrentFaceIndex={getCurrentFaceIndex}
-            toggleCardFace={toggleCardFace}
-            addCardToDeck={addCardToDeck}
-            removeCardFromDeck={removeCardFromDeck}
-            updateCardQuantity={updateCardQuantity}
-            handleAddCardToCollection={handleAddCardToCollection}
-            setHoveredCard={setHoveredCard}
-            setHoverSource={setHoverSource}
-            setSelectedCard={setSelectedCard}
-          />
+        <div className="max-w-3xl mx-auto">
+          {/* Open the card-search drawer/modal */}
+          <button
+            onClick={() => setShowSearch(true)}
+            className="w-full mb-4 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium text-white transition-colors"
+          >
+            <Search size={18} /> Add cards
+          </button>
 
           {/* Deck Builder Section */}
           <DeckCardList
@@ -656,6 +639,47 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
           </div>
         </div>
       </div>
+
+      {/* Card search — bottom drawer on mobile, centered modal on desktop */}
+      {showSearch && (
+        <div className="fixed inset-0 z-40 flex items-end md:items-center md:justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowSearch(false)} />
+          <div className="relative w-full md:max-w-3xl bg-gray-900 border border-gray-700 rounded-t-2xl md:rounded-xl max-h-[90vh] md:max-h-[85vh] flex flex-col shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between p-3 border-b border-gray-700 bg-gray-900 rounded-t-2xl md:rounded-t-xl">
+              <h2 className="text-lg font-semibold text-white">Add cards</h2>
+              <button onClick={() => setShowSearch(false)} className="p-1 text-gray-400 hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-3">
+              <DeckSearchPanel
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                setSearchResults={setSearchResults}
+                handleSearch={handleSearch}
+                isSearching={isSearching}
+                searchResults={searchResults}
+                selectedCards={selectedCards}
+                userCollection={userCollection}
+                addingCardId={addingCardId}
+                deckFormat={deckFormat}
+                commander={commander}
+                commanderColors={commanderColors}
+                isCardValidForCommander={isCardValidForCommander}
+                getCurrentFaceIndex={getCurrentFaceIndex}
+                toggleCardFace={toggleCardFace}
+                addCardToDeck={addCardToDeck}
+                removeCardFromDeck={removeCardFromDeck}
+                updateCardQuantity={updateCardQuantity}
+                handleAddCardToCollection={handleAddCardToCollection}
+                setHoveredCard={setHoveredCard}
+                setHoverSource={setHoverSource}
+                setSelectedCard={setSelectedCard}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {showExport && (
         <DeckExportModal cards={selectedCards} onClose={() => setShowExport(false)} />
