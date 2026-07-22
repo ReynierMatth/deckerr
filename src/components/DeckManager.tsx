@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Minus, Search, Save, Trash2, Loader2, CheckCircle, XCircle, AlertCircle, PackagePlus, RefreshCw, X } from 'lucide-react';
 import { Card, Deck } from '../types';
-import { searchCards, getUserCollection, addCardToCollection, addMultipleCardsToCollection } from '../services/api';
+import { searchCards, getCardsByNames, getUserCollection, addCardToCollection, addMultipleCardsToCollection } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
@@ -477,28 +477,34 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       reader.onload = async e => {
         const text = e.target?.result as string;
         const lines = text.split('\n');
-        const cardsToAdd: { card: Card; quantity: number }[] = [];
 
+        // Parse every "<qty> <card name>" line first.
+        const requests: { name: string; quantity: number }[] = [];
         for (const line of lines) {
           const parts = line.trim().split(' ');
           const quantity = parseInt(parts[0]);
           const cardName = parts.slice(1).join(' ');
-
           if (isNaN(quantity) || quantity <= 0 || !cardName) continue;
+          requests.push({ name: cardName, quantity });
+        }
 
-          try {
-            const searchResults = await searchCards(cardName);
-            if (searchResults && searchResults.length > 0) {
-              const card = searchResults[0];
+        const cardsToAdd: { card: Card; quantity: number }[] = [];
+        try {
+          // One batched lookup by name instead of one request per card.
+          const cardsByName = await getCardsByNames(requests.map(r => r.name));
+          for (const { name, quantity } of requests) {
+            const card = cardsByName.get(name.toLowerCase());
+            if (card) {
               cardsToAdd.push({ card, quantity });
             } else {
-              console.warn(`Card not found: ${cardName}`);
-              toast.error(`Card not found: ${cardName}`);
+              console.warn(`Card not found: ${name}`);
+              toast.error(`Card not found: ${name}`);
             }
-          } catch (error) {
-            console.error(`Failed to search card ${cardName}:`, error);
-            toast.error(`Failed to import card: ${cardName}`);
           }
+        } catch (error) {
+          console.error('Failed to import deck:', error);
+          toast.error('Failed to import deck');
+          return;
         }
 
         setSelectedCards(prev => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { searchCards, getCardById, getCardsByIds } from './scryfall';
+import { searchCards, getCardById, getCardsByIds, getCardsByNames } from './scryfall';
 
 const okJson = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
 const errJson = (status: number, details: string) => ({
@@ -65,5 +65,25 @@ describe('scryfall client', () => {
     // Both ids are now cached — a second call makes no request.
     await getCardsByIds(['batch-a', 'batch-b']);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('getCardsByNames dedupes, batches, and indexes front-face names', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      okJson({
+        data: [
+          { id: 'n1', name: 'Lightning Bolt' },
+          { id: 'n2', name: 'Fable of the Mirror-Breaker // Reflection of Kiki-Jiki', card_faces: [{ name: 'Fable of the Mirror-Breaker' }, { name: 'Reflection of Kiki-Jiki' }] },
+        ],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const byName = await getCardsByNames(['Lightning Bolt', 'lightning bolt', 'Fable of the Mirror-Breaker']);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1); // one batched /cards/collection call
+    // case-insensitive lookup by full name
+    expect(byName.get('lightning bolt')?.id).toBe('n1');
+    // double-faced card resolvable by its front-face name
+    expect(byName.get('fable of the mirror-breaker')?.id).toBe('n2');
   });
 });

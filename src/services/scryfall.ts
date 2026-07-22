@@ -130,6 +130,37 @@ const chunkArray = <T>(array: T[], size: number): T[][] => {
 };
 
 /**
+ * Batch-fetch cards by exact name via POST /cards/collection, chunked at 75
+ * (instead of one /cards/search per card). Returns a lookup keyed by
+ * lower-cased name — indexed by both the full name and, for double-faced
+ * cards, the front-face name — so callers can resolve each requested name.
+ */
+export const getCardsByNames = async (
+  names: string[],
+  signal?: AbortSignal,
+): Promise<Map<string, Card>> => {
+  const unique = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
+  const byName = new Map<string, Card>();
+
+  for (const chunk of chunkArray(unique, COLLECTION_CHUNK_SIZE)) {
+    const result = await scryfallFetch<ScryfallList<Card>>('/cards/collection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifiers: chunk.map((name) => ({ name })) }),
+      signal,
+    });
+    result.data?.forEach((card) => {
+      cacheCard(card);
+      byName.set(card.name.toLowerCase(), card);
+      const frontFace = card.card_faces?.[0]?.name;
+      if (frontFace) byName.set(frontFace.toLowerCase(), card);
+    });
+  }
+
+  return byName;
+};
+
+/**
  * Batch-fetch cards by id via POST /cards/collection, chunked at 75.
  * Ids already in the in-memory cache are served without a network call;
  * the result preserves the requested order.

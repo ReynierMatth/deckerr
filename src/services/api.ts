@@ -7,6 +7,7 @@ export {
   getRandomCards,
   getCardById,
   getCardsByIds,
+  getCardsByNames,
   ScryfallHttpError,
 } from './scryfall';
 
