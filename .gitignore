@@ -40,3 +40,6 @@ vite.config.*.timestamp-*.mjs
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code local (per-user) settings
+.claude/settings.local.json
