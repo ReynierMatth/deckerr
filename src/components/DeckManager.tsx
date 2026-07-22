@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, Search, Save, Trash2, Loader2, CheckCircle, XCircle, AlertCircle, PackagePlus, RefreshCw, X } from 'lucide-react';
+import { Plus, Minus, Search, Save, Trash2, Loader2, CheckCircle, XCircle, AlertCircle, PackagePlus, RefreshCw } from 'lucide-react';
 import { Card, Deck } from '../types';
 import { searchCards, resolveCardsByNames, getUserCollection, addCardToCollection, addMultipleCardsToCollection } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,6 +10,8 @@ import { supabase } from '../lib/supabase';
 import { validateDeck } from '../utils/deckValidation';
 import { parseDeckList } from '../utils/parseDeckList';
 import { ManaCost, ManaSymbol } from './ManaCost';
+import CardDetailPanel from './deck/CardDetailPanel';
+import HoverCardPreview from './deck/HoverCardPreview';
 
 interface DeckManagerProps {
   initialDeck?: Deck;
@@ -940,181 +942,38 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       </div>
 
       {/* Hover Card Preview - only show if no card is selected */}
-      {hoveredCard && !selectedCard && (() => {
-        const currentFaceIndex = getCurrentFaceIndex(hoveredCard.id);
-        const isMultiFaced = isDoubleFaced(hoveredCard);
-        const currentFace = isMultiFaced && hoveredCard.card_faces
-          ? hoveredCard.card_faces[currentFaceIndex]
-          : null;
-
-        const displayName = currentFace?.name || hoveredCard.name;
-        const displayTypeLine = currentFace?.type_line || hoveredCard.type_line;
-        const displayOracleText = currentFace?.oracle_text || hoveredCard.oracle_text;
-
-        // Position preview based on hover source
-        const positionClass = hoverSource === 'deck' ? 'left-8' : 'right-8';
-
-        return (
-          <div className={`hidden lg:block fixed top-1/2 ${positionClass} transform -translate-y-1/2 z-30 pointer-events-none`}>
-            <div className="bg-gray-800 rounded-lg shadow-2xl p-4 max-w-md">
-              <div className="relative">
-                <img
-                  src={getCardLargeImageUri(hoveredCard, currentFaceIndex)}
-                  alt={displayName}
-                  className="w-full h-auto rounded-lg shadow-lg"
-                />
-                {isMultiFaced && (
-                  <div className="absolute top-2 right-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
-                    Face {currentFaceIndex + 1}/{hoveredCard.card_faces!.length}
-                  </div>
-                )}
-              </div>
-              <div className="mt-3 space-y-2">
-                <h3 className="text-xl font-bold">{displayName}</h3>
-                <p className="text-sm text-gray-400">{displayTypeLine}</p>
-                {displayOracleText && (
-                  <p className="text-sm text-gray-300 border-t border-gray-700 pt-2">
-                    {displayOracleText}
-                  </p>
-                )}
-                {hoveredCard.prices?.usd && (
-                  <div className="text-sm text-green-400 font-semibold border-t border-gray-700 pt-2">
-                    ${hoveredCard.prices.usd}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {hoveredCard && !selectedCard && (
+        <HoverCardPreview
+          card={hoveredCard}
+          hoverSource={hoverSource}
+          getCurrentFaceIndex={getCurrentFaceIndex}
+          getLargeImageUri={getCardLargeImageUri}
+        />
+      )}
 
       {/* Card Detail Panel - slides in from right */}
-      {selectedCard && (() => {
-        const currentFaceIndex = getCurrentFaceIndex(selectedCard.id);
-        const isMultiFaced = isDoubleFaced(selectedCard);
-        const currentFace = isMultiFaced && selectedCard.card_faces
-          ? selectedCard.card_faces[currentFaceIndex]
-          : null;
-
-        const displayName = currentFace?.name || selectedCard.name;
-        const displayTypeLine = currentFace?.type_line || selectedCard.type_line;
-        const displayOracleText = currentFace?.oracle_text || selectedCard.oracle_text;
-
-        return (
-          <>
-            {/* Backdrop */}
-            <div
-              className="fixed inset-0 bg-black bg-opacity-50 z-[110] transition-opacity duration-300"
-              onClick={() => setSelectedCard(null)}
-            />
-
-            {/* Sliding Panel */}
-            <div className="fixed top-0 right-0 h-full w-full md:w-96 bg-gray-800 shadow-2xl z-[120] overflow-y-auto animate-slide-in-right">
-              {/* Close button */}
-              <button
-                onClick={() => setSelectedCard(null)}
-                className="fixed top-4 right-4 bg-gray-700 hover:bg-gray-600 text-white p-2 md:p-1.5 rounded-full transition-colors z-[130] shadow-lg"
-                aria-label="Close"
-              >
-                <X size={24} className="md:w-5 md:h-5" />
-              </button>
-
-              <div className="p-4 sm:p-6">
-                {/* Card Image */}
-                <div className="relative mb-4 max-w-sm mx-auto">
-                  <img
-                    src={getCardLargeImageUri(selectedCard, currentFaceIndex)}
-                    alt={displayName}
-                    className="w-full h-auto rounded-lg shadow-lg"
-                  />
-                  {isMultiFaced && (
-                    <>
-                      <div className="absolute top-2 right-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
-                        Face {currentFaceIndex + 1}/{selectedCard.card_faces!.length}
-                      </div>
-                      <button
-                        onClick={() => toggleCardFace(selectedCard.id, selectedCard.card_faces!.length)}
-                        className="absolute bottom-2 right-2 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full shadow-lg transition-all"
-                        title="Flip card"
-                      >
-                        <RefreshCw size={20} />
-                      </button>
-                    </>
-                  )}
-                </div>
-
-                {/* Card Info */}
-                <div className="space-y-4">
-                  <div>
-                    <h2 className="text-xl md:text-2xl font-bold text-white mb-2">{displayName}</h2>
-                    <p className="text-xs sm:text-sm text-gray-400">{displayTypeLine}</p>
-                  </div>
-
-                  {displayOracleText && (
-                    <div className="border-t border-gray-700 pt-3">
-                      <p className="text-sm text-gray-300">{displayOracleText}</p>
-                    </div>
-                  )}
-
-                  {selectedCard.prices?.usd && (
-                    <div className="border-t border-gray-700 pt-3">
-                      <div className="text-lg text-green-400 font-semibold">
-                        ${selectedCard.prices.usd} each
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Collection Status */}
-                  {userCollection.has(selectedCard.id) && (
-                    <div className="border-t border-gray-700 pt-3">
-                      <div className="text-sm text-green-400">
-                        <CheckCircle size={16} className="inline mr-1" />
-                        x{userCollection.get(selectedCard.id)} in your collection
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Deck Quantity Management */}
-                  <div className="border-t border-gray-700 pt-3">
-                    <h3 className="text-lg font-semibold mb-3">Quantity in Deck</h3>
-                    <div className="flex items-center justify-between bg-gray-900 rounded-lg p-4">
-                      <button
-                        onClick={() => {
-                          const cardInDeck = selectedCards.find(c => c.card.id === selectedCard.id);
-                          const currentQuantity = cardInDeck?.quantity || 0;
-                          if (currentQuantity === 1) {
-                            removeCardFromDeck(selectedCard.id);
-                          } else if (currentQuantity > 1) {
-                            updateCardQuantity(selectedCard.id, currentQuantity - 1);
-                          }
-                        }}
-                        disabled={!selectedCards.find(c => c.card.id === selectedCard.id)}
-                        className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-colors"
-                      >
-                        <Minus size={20} />
-                      </button>
-
-                      <div className="text-center">
-                        <div className="text-3xl font-bold">
-                          {selectedCards.find(c => c.card.id === selectedCard.id)?.quantity || 0}
-                        </div>
-                        <div className="text-xs text-gray-400">copies</div>
-                      </div>
-
-                      <button
-                        onClick={() => addCardToDeck(selectedCard)}
-                        className="bg-green-600 hover:bg-green-700 text-white p-2 rounded-lg transition-colors"
-                      >
-                        <Plus size={20} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
-        );
-      })()}
+      {selectedCard && (
+        <CardDetailPanel
+          card={selectedCard}
+          quantityInDeck={selectedCards.find(c => c.card.id === selectedCard.id)?.quantity || 0}
+          inDeck={Boolean(selectedCards.find(c => c.card.id === selectedCard.id))}
+          collectionQuantity={userCollection.has(selectedCard.id) ? userCollection.get(selectedCard.id) : undefined}
+          getCurrentFaceIndex={getCurrentFaceIndex}
+          toggleCardFace={toggleCardFace}
+          getLargeImageUri={getCardLargeImageUri}
+          onClose={() => setSelectedCard(null)}
+          onIncrement={() => addCardToDeck(selectedCard)}
+          onDecrement={() => {
+            const cardInDeck = selectedCards.find(c => c.card.id === selectedCard.id);
+            const currentQuantity = cardInDeck?.quantity || 0;
+            if (currentQuantity === 1) {
+              removeCardFromDeck(selectedCard.id);
+            } else if (currentQuantity > 1) {
+              updateCardQuantity(selectedCard.id, currentQuantity - 1);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
