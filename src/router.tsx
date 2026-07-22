@@ -17,6 +17,7 @@ import Community from './components/Community';
 import CardSearch from './components/CardSearch';
 import LifeCounter from './components/LifeCounter';
 import DeckEditor from './components/DeckEditor';
+import PublicDeck from './components/PublicDeck';
 
 /**
  * App shell + auth gate. Mirrors the previous behaviour: a spinner while auth
@@ -74,6 +75,11 @@ function EditDeckPage() {
   return <DeckEditor deckId={deckId} onClose={() => navigate({ to: '/' })} />;
 }
 
+function ViewDeckPage() {
+  const { deckId } = viewDeckRoute.useParams();
+  return <PublicDeck deckId={deckId} />;
+}
+
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: HomePage });
 const deckRoute = createRoute({ getParentRoute: () => rootRoute, path: '/deck', component: DeckManager });
 const collectionRoute = createRoute({ getParentRoute: () => rootRoute, path: '/collection', component: Collection });
@@ -86,6 +92,11 @@ const editDeckRoute = createRoute({
   path: '/decks/$deckId/edit',
   component: EditDeckPage,
 });
+const viewDeckRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/decks/$deckId/view',
+  component: ViewDeckPage,
+});
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -96,6 +107,7 @@ const routeTree = rootRoute.addChildren([
   searchRoute,
   lifeCounterRoute,
   editDeckRoute,
+  viewDeckRoute,
 ]);
 
 export const router = createRouter({ routeTree });
