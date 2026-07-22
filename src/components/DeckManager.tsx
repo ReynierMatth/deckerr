@@ -16,6 +16,7 @@ import DeckSearchPanel from './deck/DeckSearchPanel';
 import DeckCardList from './deck/DeckCardList';
 import DeckStats from './deck/DeckStats';
 import SampleHand from './deck/SampleHand';
+import BuyList from './deck/BuyList';
 
 interface DeckManagerProps {
   initialDeck?: Deck;
@@ -587,6 +588,12 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
           <div className="mt-4 bg-gray-800 border border-gray-700 rounded-lg p-4">
             <h2 className="text-lg font-semibold text-white mb-3">Sample Hand</h2>
             <SampleHand cards={selectedCards} />
+          </div>
+
+          {/* Buylist */}
+          <div className="mt-4 bg-gray-800 border border-gray-700 rounded-lg p-4">
+            <h2 className="text-lg font-semibold text-white mb-3">Buylist — cards to complete</h2>
+            <BuyList cards={selectedCards} owned={userCollection} />
           </div>
         </div>
       </div>
