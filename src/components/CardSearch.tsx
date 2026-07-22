@@ -112,7 +112,7 @@ const CardSearch = () => {
   const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
 
   // Wishlist membership (Set of card ids)
-  const { data: wishlist } = useQuery<Set<string>>({
+  const { data: wishlist } = useQuery<string[]>({
     queryKey: ['wishlist', user?.id],
     enabled: !!user,
     queryFn: () => getWishlist(user!.id),
@@ -123,7 +123,7 @@ const CardSearch = () => {
       toast.error('Please log in to use your wishlist');
       return;
     }
-    const inWishlist = wishlist?.has(cardId) ?? false;
+    const inWishlist = wishlist?.includes(cardId) ?? false;
     try {
       if (inWishlist) {
         await removeFromWishlist(user.id, cardId);
@@ -132,7 +132,7 @@ const CardSearch = () => {
         await addToWishlist(user.id, cardId);
         toast.success('Added to wishlist');
       }
-      await queryClient.invalidateQueries({ queryKey: ['wishlist', user.id] });
+      await queryClient.invalidateQueries({ queryKey: ['wishlist'] });
     } catch (error) {
       console.error('Error updating wishlist:', error);
       toast.error('Failed to update wishlist');
@@ -697,14 +697,14 @@ const CardSearch = () => {
                       <button
                         onClick={() => handleToggleWishlist(card.id)}
                         className={`p-2.5 rounded-lg ${
-                          wishlist?.has(card.id)
+                          wishlist?.includes(card.id)
                             ? 'bg-yellow-500/20 text-yellow-400'
                             : 'bg-gray-700 text-gray-300 active:bg-gray-600'
                         }`}
-                        title={wishlist?.has(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
-                        aria-label={wishlist?.has(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
+                        title={wishlist?.includes(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
+                        aria-label={wishlist?.includes(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
                       >
-                        <Star size={18} fill={wishlist?.has(card.id) ? 'currentColor' : 'none'} />
+                        <Star size={18} fill={wishlist?.includes(card.id) ? 'currentColor' : 'none'} />
                       </button>
                       <button
                         onClick={() => handleAddCardToCollection(card.id)}
@@ -772,14 +772,14 @@ const CardSearch = () => {
                           handleToggleWishlist(card.id);
                         }}
                         className={`absolute top-1 left-1 p-2 rounded-full shadow-lg transition-all ${
-                          wishlist?.has(card.id)
+                          wishlist?.includes(card.id)
                             ? 'bg-yellow-500/90 text-white'
                             : 'bg-gray-900/70 text-gray-200 hover:bg-gray-900'
                         }`}
-                        title={wishlist?.has(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
-                        aria-label={wishlist?.has(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
+                        title={wishlist?.includes(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
+                        aria-label={wishlist?.includes(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
                       >
-                        <Star size={16} fill={wishlist?.has(card.id) ? 'currentColor' : 'none'} />
+                        <Star size={16} fill={wishlist?.includes(card.id) ? 'currentColor' : 'none'} />
                       </button>
                     </div>
                     <div className="p-3">
