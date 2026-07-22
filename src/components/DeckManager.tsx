@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Loader2, PackagePlus, Download, Search, X } from 'lucide-react';
+import { Save, Loader2, PackagePlus, Download, Search, X, Star } from 'lucide-react';
 import { Card, Deck } from '../types';
-import { searchCards, resolveCardsByNames, getUserCollection, addCardToCollection, addMultipleCardsToCollection } from '../services/api';
+import { searchCards, resolveCardsByNames, getUserCollection, addCardToCollection, addMultipleCardsToCollection, addCardsToWishlist } from '../services/api';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { isDoubleFaced } from '../utils/cardFaces';
@@ -163,6 +164,8 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const [isLoadingCollection, setIsLoadingCollection] = useState(true);
   const [addingCardId, setAddingCardId] = useState<string | null>(null);
   const [isAddingAll, setIsAddingAll] = useState(false);
+  const [isAddingToWishlist, setIsAddingToWishlist] = useState(false);
+  const queryClient = useQueryClient();
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const [hoverSource, setHoverSource] = useState<'search' | 'deck' | null>(null);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
@@ -276,6 +279,26 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       toast.error('Failed to add cards to collection');
     } finally {
       setIsAddingAll(false);
+    }
+  };
+
+  const handleAddMissingToWishlist = async () => {
+    if (!user) return;
+    const missing = getMissingCards();
+    if (missing.length === 0) {
+      toast.success('You already own every card in this deck!');
+      return;
+    }
+    try {
+      setIsAddingToWishlist(true);
+      await addCardsToWishlist(user.id, missing.map((m) => m.card.id));
+      await queryClient.invalidateQueries({ queryKey: ['wishlist'] });
+      toast.success(`Added ${missing.length} missing card(s) to your wishlist`);
+    } catch (error) {
+      console.error('Error adding to wishlist:', error);
+      toast.error('Failed to add to wishlist');
+    } finally {
+      setIsAddingToWishlist(false);
     }
   };
 
@@ -606,21 +629,38 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
           {/* Action Buttons */}
           <div className="flex gap-2">
             {!isLoadingCollection && getMissingCards().length > 0 && (
-              <button
-                onClick={handleAddAllMissingCards}
-                disabled={isAddingAll}
-                className="flex-1 px-3 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors"
-                title="Add missing cards to collection"
-              >
-                {isAddingAll ? (
-                  <Loader2 className="animate-spin" size={18} />
-                ) : (
-                  <>
-                    <PackagePlus size={18} />
-                    <span className="hidden sm:inline">Add Missing</span>
-                  </>
-                )}
-              </button>
+              <>
+                <button
+                  onClick={handleAddAllMissingCards}
+                  disabled={isAddingAll}
+                  className="flex-1 px-3 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors"
+                  title="Add missing cards to your collection"
+                >
+                  {isAddingAll ? (
+                    <Loader2 className="animate-spin" size={18} />
+                  ) : (
+                    <>
+                      <PackagePlus size={18} />
+                      <span className="hidden sm:inline">Missing to collection</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleAddMissingToWishlist}
+                  disabled={isAddingToWishlist}
+                  className="flex-1 px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors"
+                  title="Add missing cards to your wishlist"
+                >
+                  {isAddingToWishlist ? (
+                    <Loader2 className="animate-spin" size={18} />
+                  ) : (
+                    <>
+                      <Star size={18} />
+                      <span className="hidden sm:inline">Missing to wishlist</span>
+                    </>
+                  )}
+                </button>
+              </>
             )}
             <button
               onClick={() => setShowExport(true)}
