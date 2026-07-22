@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useReducer } from 'react';
 import { RefreshCw, PackagePlus, Loader2, CheckCircle } from 'lucide-react';
 import { searchCards, getUserCollection, addCardToCollection } from '../services/api';
 import { Card } from '../types';
@@ -10,42 +10,100 @@ import { useCardFaces } from '../hooks/useCardFaces';
 import MagicCard from './MagicCard';
 import { getManaIconPath } from './ManaCost';
 
+type ColorKey = 'W' | 'U' | 'B' | 'R' | 'G' | 'C';
+
+interface SearchForm {
+  cardName: string;
+  text: string;
+  rulesText: string;
+  typeLine: string;
+  typeMatch: string;
+  typeInclude: boolean;
+  colors: Record<ColorKey, boolean>;
+  colorMode: string;
+  commanderColors: Record<ColorKey, boolean>;
+  manaCost: Record<ColorKey, number>;
+  manaValue: string;
+  manaValueComparison: string;
+  games: { paper: boolean; arena: boolean; mtgo: boolean };
+  format: string;
+  formatStatus: string;
+  set: string;
+  block: string;
+  rarity: { common: boolean; uncommon: boolean; rare: boolean; mythic: boolean };
+  criteria: string;
+  criteriaMatch: string;
+  criteriaInclude: boolean;
+  price: string;
+  currency: string;
+  priceComparison: string;
+  artist: string;
+  flavorText: string;
+  loreFinder: string;
+  language: string;
+  displayImages: boolean;
+  order: string;
+  showAllPrints: boolean;
+  includeExtras: boolean;
+}
+
+const initialSearchForm: SearchForm = {
+  cardName: '',
+  text: '',
+  rulesText: '',
+  typeLine: '',
+  typeMatch: 'partial',
+  typeInclude: true,
+  colors: { W: false, U: false, B: false, R: false, G: false, C: false },
+  colorMode: 'exactly',
+  commanderColors: { W: false, U: false, B: false, R: false, G: false, C: false },
+  manaCost: { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 },
+  manaValue: '',
+  manaValueComparison: '=',
+  games: { paper: false, arena: false, mtgo: false },
+  format: '',
+  formatStatus: '',
+  set: '',
+  block: '',
+  rarity: { common: false, uncommon: false, rare: false, mythic: false },
+  criteria: '',
+  criteriaMatch: 'partial',
+  criteriaInclude: true,
+  price: '',
+  currency: 'usd',
+  priceComparison: '=',
+  artist: '',
+  flavorText: '',
+  loreFinder: '',
+  language: 'en',
+  displayImages: false,
+  order: 'name',
+  showAllPrints: false,
+  includeExtras: false,
+};
+
+type SearchFormAction =
+  | { type: 'set'; field: keyof SearchForm; value: SearchForm[keyof SearchForm] }
+  | { type: 'reset' };
+
+function searchFormReducer(state: SearchForm, action: SearchFormAction): SearchForm {
+  switch (action.type) {
+    case 'set':
+      return { ...state, [action.field]: action.value };
+    case 'reset':
+      return initialSearchForm;
+    default:
+      return state;
+  }
+}
+
 const CardSearch = () => {
   const { user } = useAuth();
   const toast = useToast();
   const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
-  const [cardName, setCardName] = useState('');
-  const [text, setText] = useState('');
-  const [rulesText, setRulesText] = useState('');
-  const [typeLine, setTypeLine] = useState('');
-  const [typeMatch, setTypeMatch] = useState('partial');
-  const [typeInclude, setTypeInclude] = useState(true);
-  const [colors, setColors] = useState({ W: false, U: false, B: false, R: false, G: false, C: false });
-  const [colorMode, setColorMode] = useState('exactly');
-  const [commanderColors, setCommanderColors] = useState({ W: false, U: false, B: false, R: false, G: false, C: false });
-  const [manaCost, setManaCost] = useState({ W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 });
-  const [manaValue, setManaValue] = useState('');
-  const [manaValueComparison, setManaValueComparison] = useState('=');
-  const [games, setGames] = useState({ paper: false, arena: false, mtgo: false });
-  const [format, setFormat] = useState('');
-  const [formatStatus, setFormatStatus] = useState('');
-  const [set, setSet] = useState('');
-  const [block, setBlock] = useState('');
-  const [rarity, setRarity] = useState({ common: false, uncommon: false, rare: false, mythic: false });
-  const [criteria, setCriteria] = useState('');
-  const [criteriaMatch, setCriteriaMatch] = useState('partial');
-  const [criteriaInclude, setCriteriaInclude] = useState(true);
-  const [price, setPrice] = useState('');
-  const [currency, setCurrency] = useState('usd');
-  const [priceComparison, setPriceComparison] = useState('=');
-  const [artist, setArtist] = useState('');
-  const [flavorText, setFlavorText] = useState('');
-  const [loreFinder, setLoreFinder] = useState('');
-  const [language, setLanguage] = useState('en');
-  const [displayImages, setDisplayImages] = useState(false);
-  const [order, setOrder] = useState('name');
-  const [showAllPrints, setShowAllPrints] = useState(false);
-  const [includeExtras, setIncludeExtras] = useState(false);
+  const [form, dispatch] = useReducer(searchFormReducer, initialSearchForm);
+  const setField = <K extends keyof SearchForm>(field: K, value: SearchForm[K]) =>
+    dispatch({ type: 'set', field, value });
   const [searchResults, setSearchResults] = useState<Card[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,13 +168,7 @@ const CardSearch = () => {
     setLoading(true);
     setError(null);
 
-    const query = buildScryfallQuery({
-      cardName, text, rulesText, typeLine, typeMatch, typeInclude, colors, colorMode,
-      commanderColors, manaCost, manaValue, manaValueComparison, games, format, formatStatus,
-      set, block, rarity, criteria, criteriaMatch, criteriaInclude, price, currency,
-      priceComparison, artist, flavorText, loreFinder, language, displayImages, order,
-      showAllPrints, includeExtras,
-    });
+    const query = buildScryfallQuery(form);
 
     try {
       const cards = await searchCards(query, controller.signal);
@@ -140,44 +192,44 @@ const CardSearch = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <input
               type="text"
-              value={cardName}
-              onChange={(e) => setCardName(e.target.value)}
+              value={form.cardName}
+              onChange={(e) => setField('cardName', e.target.value)}
               className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Card Name"
             />
             <input
               type="text"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
+              value={form.text}
+              onChange={(e) => setField('text', e.target.value)}
               className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Text"
             />
             <input
               type="text"
-              value={rulesText}
-              onChange={(e) => setRulesText(e.target.value)}
+              value={form.rulesText}
+              onChange={(e) => setField('rulesText', e.target.value)}
               className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Rules Text (~ for card name)"
             />
             <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
-                value={typeLine}
-                onChange={(e) => setTypeLine(e.target.value)}
+                value={form.typeLine}
+                onChange={(e) => setField('typeLine', e.target.value)}
                 className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
                 placeholder="Type Line"
               />
               <select
-                value={typeMatch}
-                onChange={(e) => setTypeMatch(e.target.value)}
+                value={form.typeMatch}
+                onChange={(e) => setField('typeMatch', e.target.value)}
                 className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               >
                 <option value="partial">Partial</option>
                 <option value="exact">Exact</option>
               </select>
               <select
-                value={String(typeInclude)}
-                onChange={(e) => setTypeInclude(e.target.value === 'true')}
+                value={String(form.typeInclude)}
+                onChange={(e) => setField('typeInclude', e.target.value === 'true')}
                 className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               >
                 <option value="true">Include</option>
@@ -191,12 +243,12 @@ const CardSearch = () => {
             <div>
               <h4 className="font-bold mb-2">Card Colors</h4>
               <div className="flex gap-2">
-                {Object.entries(colors).map(([color, active]) => (
+                {Object.entries(form.colors).map(([color, active]) => (
                   <label key={color} className="flex items-center space-x-2">
                     <input
                       type="checkbox"
                       checked={active}
-                      onChange={() => setColors({ ...colors, [color]: !active })}
+                      onChange={() => setField('colors', { ...form.colors, [color]: !active })}
                       className="rounded border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                     {getManaIconPath(color) ? (
@@ -208,8 +260,8 @@ const CardSearch = () => {
                 ))}
               </div>
               <select
-                value={colorMode}
-                onChange={(e) => setColorMode(e.target.value)}
+                value={form.colorMode}
+                onChange={(e) => setField('colorMode', e.target.value)}
                 className="mt-2 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               >
                 <option value="exactly">Exactly these colors</option>
@@ -219,12 +271,12 @@ const CardSearch = () => {
             <div>
               <h4 className="font-bold mb-2">Commander Colors</h4>
               <div className="flex gap-2">
-                {Object.entries(commanderColors).map(([color, active]) => (
+                {Object.entries(form.commanderColors).map(([color, active]) => (
                   <label key={color} className="flex items-center space-x-2">
                     <input
                       type="checkbox"
                       checked={active}
-                      onChange={() => setCommanderColors({ ...commanderColors, [color]: !active })}
+                      onChange={() => setField('commanderColors', { ...form.commanderColors, [color]: !active })}
                       className="rounded border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                     {getManaIconPath(color) ? (
@@ -240,7 +292,7 @@ const CardSearch = () => {
 
           {/* Mana Cost */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-            {Object.entries(manaCost).map(([color, count]) => {
+            {Object.entries(form.manaCost).map(([color, count]) => {
               const iconPath = getManaIconPath(color);
               return (
                 <div key={color} className="flex items-center space-x-2">
@@ -254,7 +306,7 @@ const CardSearch = () => {
                   <input
                     type="number"
                     value={count}
-                    onChange={(e) => setManaCost({ ...manaCost, [color]: parseInt(e.target.value) })}
+                    onChange={(e) => setField('manaCost', { ...form.manaCost, [color]: parseInt(e.target.value) })}
                     className="w-14 sm:w-16 px-2 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
                     min="0"
                   />
@@ -266,8 +318,8 @@ const CardSearch = () => {
           {/* Stats */}
           <div className="flex flex-col sm:flex-row gap-2">
             <select
-              value={manaValueComparison}
-              onChange={(e) => setManaValueComparison(e.target.value)}
+              value={form.manaValueComparison}
+              onChange={(e) => setField('manaValueComparison', e.target.value)}
               className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
               <option value="=">Equal to</option>
@@ -279,8 +331,8 @@ const CardSearch = () => {
             </select>
             <input
               type="number"
-              value={manaValue}
-              onChange={(e) => setManaValue(e.target.value)}
+              value={form.manaValue}
+              onChange={(e) => setField('manaValue', e.target.value)}
               className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Mana Value"
             />
@@ -294,8 +346,8 @@ const CardSearch = () => {
                 <label key={game} className="flex items-center space-x-2">
                   <input
                     type="checkbox"
-                    checked={games[game as keyof typeof games]}
-                    onChange={() => setGames({ ...games, [game]: !games[game as keyof typeof games] })}
+                    checked={form.games[game as keyof typeof form.games]}
+                    onChange={() => setField('games', { ...form.games, [game]: !form.games[game as keyof typeof form.games] })}
                     className="rounded border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   <span>{game}</span>
@@ -307,8 +359,8 @@ const CardSearch = () => {
           {/* Formats */}
           <div className="flex flex-col sm:flex-row gap-2">
             <select
-              value={format}
-              onChange={(e) => setFormat(e.target.value)}
+              value={form.format}
+              onChange={(e) => setField('format', e.target.value)}
               className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
               <option value="">Select Format</option>
@@ -336,8 +388,8 @@ const CardSearch = () => {
               <option value="predh">PreDH</option>
             </select>
             <select
-              value={formatStatus}
-              onChange={(e) => setFormatStatus(e.target.value)}
+              value={form.formatStatus}
+              onChange={(e) => setField('formatStatus', e.target.value)}
               className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
               <option value="">Select Status</option>
@@ -350,15 +402,15 @@ const CardSearch = () => {
           <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
-              value={set}
-              onChange={(e) => setSet(e.target.value)}
+              value={form.set}
+              onChange={(e) => setField('set', e.target.value)}
               className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Set Code"
             />
             <input
               type="text"
-              value={block}
-              onChange={(e) => setBlock(e.target.value)}
+              value={form.block}
+              onChange={(e) => setField('block', e.target.value)}
               className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Block Code"
             />
@@ -372,8 +424,8 @@ const CardSearch = () => {
                 <label key={r} className="flex items-center space-x-2">
                   <input
                     type="checkbox"
-                    checked={rarity[r as keyof typeof rarity]}
-                    onChange={() => setRarity({ ...rarity, [r]: !rarity[r as keyof typeof rarity] })}
+                    checked={form.rarity[r as keyof typeof form.rarity]}
+                    onChange={() => setField('rarity', { ...form.rarity, [r]: !form.rarity[r as keyof typeof form.rarity] })}
                     className="rounded border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   <span>{r}</span>
@@ -386,22 +438,22 @@ const CardSearch = () => {
           <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
-              value={criteria}
-              onChange={(e) => setCriteria(e.target.value)}
+              value={form.criteria}
+              onChange={(e) => setField('criteria', e.target.value)}
               className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Criteria"
             />
             <select
-              value={criteriaMatch}
-              onChange={(e) => setCriteriaMatch(e.target.value)}
+              value={form.criteriaMatch}
+              onChange={(e) => setField('criteriaMatch', e.target.value)}
               className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
               <option value="partial">Partial</option>
               <option value="exact">Exact</option>
             </select>
             <select
-              value={String(criteriaInclude)}
-              onChange={(e) => setCriteriaInclude(e.target.value === 'true')}
+              value={String(form.criteriaInclude)}
+              onChange={(e) => setField('criteriaInclude', e.target.value === 'true')}
               className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
               <option value="true">Include</option>
@@ -412,8 +464,8 @@ const CardSearch = () => {
           {/* Prices */}
           <div className="flex flex-col sm:flex-row gap-2">
             <select
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
+              value={form.currency}
+              onChange={(e) => setField('currency', e.target.value)}
               className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
               <option value="usd">USD</option>
@@ -421,8 +473,8 @@ const CardSearch = () => {
               <option value="tix">TIX</option>
             </select>
             <select
-              value={priceComparison}
-              onChange={(e) => setPriceComparison(e.target.value)}
+              value={form.priceComparison}
+              onChange={(e) => setField('priceComparison', e.target.value)}
               className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
               <option value="=">Equal to</option>
@@ -434,8 +486,8 @@ const CardSearch = () => {
             </select>
             <input
               type="number"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
+              value={form.price}
+              onChange={(e) => setField('price', e.target.value)}
               className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Price"
             />
@@ -445,28 +497,28 @@ const CardSearch = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <input
               type="text"
-              value={artist}
-              onChange={(e) => setArtist(e.target.value)}
+              value={form.artist}
+              onChange={(e) => setField('artist', e.target.value)}
               className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Artist"
             />
             <input
               type="text"
-              value={flavorText}
-              onChange={(e) => setFlavorText(e.target.value)}
+              value={form.flavorText}
+              onChange={(e) => setField('flavorText', e.target.value)}
               className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Flavor Text"
             />
             <input
               type="text"
-              value={loreFinder}
-              onChange={(e) => setLoreFinder(e.target.value)}
+              value={form.loreFinder}
+              onChange={(e) => setField('loreFinder', e.target.value)}
               className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
               placeholder="Lore Finder™"
             />
             <select
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
+              value={form.language}
+              onChange={(e) => setField('language', e.target.value)}
               className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
               <option value="en">English</option>
@@ -488,15 +540,15 @@ const CardSearch = () => {
             <label className="flex items-center space-x-2">
               <input
                 type="checkbox"
-                checked={displayImages}
-                onChange={() => setDisplayImages(!displayImages)}
+                checked={form.displayImages}
+                onChange={() => setField('displayImages', !form.displayImages)}
                 className="rounded border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <span>Display as Images</span>
             </label>
             <select
-              value={order}
-              onChange={(e) => setOrder(e.target.value)}
+              value={form.order}
+              onChange={(e) => setField('order', e.target.value)}
               className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
             >
               <option value="name">Name</option>
@@ -518,8 +570,8 @@ const CardSearch = () => {
             <label className="flex items-center space-x-2">
               <input
                 type="checkbox"
-                checked={showAllPrints}
-                onChange={() => setShowAllPrints(!showAllPrints)}
+                checked={form.showAllPrints}
+                onChange={() => setField('showAllPrints', !form.showAllPrints)}
                 className="rounded border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <span>Show All Prints</span>
@@ -527,8 +579,8 @@ const CardSearch = () => {
             <label className="flex items-center space-x-2">
               <input
                 type="checkbox"
-                checked={includeExtras}
-                onChange={() => setIncludeExtras(!includeExtras)}
+                checked={form.includeExtras}
+                onChange={() => setField('includeExtras', !form.includeExtras)}
                 className="rounded border-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <span>Include Extra Cards</span>
