@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Library, LogOut, ChevronDown, Search, Heart, Users, Star, MoreHorizontal, X } from 'lucide-react';
+import { Library, LogOut, ChevronDown, Search, Heart, Users, Star, Bell, MoreHorizontal, X } from 'lucide-react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
@@ -45,6 +45,7 @@ export default function Navigation() {
     { to: '/community', label: 'Community', icon: Users },
     { to: '/search', label: 'Search', icon: Search },
     { to: '/life-counter', label: 'Life', icon: Heart },
+    { to: '/alerts', label: 'Alerts', icon: Bell },
   ] as const;
 
   const isActive = (to: string) => (to === '/' ? currentPath === '/' : currentPath.startsWith(to));
