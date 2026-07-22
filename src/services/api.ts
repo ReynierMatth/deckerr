@@ -305,3 +305,64 @@ export const markAllNotificationsRead = async (userId: string): Promise<void> =>
     .eq('read', false);
   if (error) throw error;
 };
+
+// ---- Price alerts ----
+export interface PriceAlert {
+  id: string;
+  card_id: string;
+  card_name: string | null;
+  target_price: number;
+  direction: 'above' | 'below';
+  last_triggered_at: string | null;
+}
+
+export const getPriceAlerts = async (userId: string): Promise<PriceAlert[]> => {
+  const { data, error } = await supabase
+    .from('price_alerts')
+    .select('id, card_id, card_name, target_price, direction, last_triggered_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((a) => ({
+    id: a.id,
+    card_id: a.card_id,
+    card_name: a.card_name ?? null,
+    target_price: Number(a.target_price),
+    direction: a.direction === 'below' ? 'below' : 'above',
+    last_triggered_at: a.last_triggered_at ?? null,
+  }));
+};
+
+export const addPriceAlert = async (
+  userId: string,
+  cardId: string,
+  cardName: string,
+  targetPrice: number,
+  direction: 'above' | 'below',
+): Promise<void> => {
+  const { error } = await supabase
+    .from('price_alerts')
+    .upsert(
+      { user_id: userId, card_id: cardId, card_name: cardName, target_price: targetPrice, direction },
+      { onConflict: 'user_id,card_id,direction' },
+    );
+  if (error) throw error;
+};
+
+export const removePriceAlert = async (id: string): Promise<void> => {
+  const { error } = await supabase.from('price_alerts').delete().eq('id', id);
+  if (error) throw error;
+};
+
+/** Fetch current prices for the user's alert cards and let the DB fire crossings. */
+export const runPriceAlertCheck = async (userId: string): Promise<void> => {
+  const alerts = await getPriceAlerts(userId);
+  if (alerts.length === 0) return;
+  const cards = await fetchCardsByIds([...new Set(alerts.map((a) => a.card_id))]);
+  const prices: Record<string, number> = {};
+  cards.forEach((c) => {
+    prices[c.id] = priceFromCard(c.prices);
+  });
+  const { error } = await supabase.rpc('check_price_alerts', { prices });
+  if (error) throw error;
+};

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Loader2, Trash2, RefreshCw, Plus, Minus, X } from 'lucide-react';
 import { Card } from '../types';
-import { getUserCollectionPaginated, getCardsByIds, getCollectionTotalValue, refreshCollectionPrices, getCollectionValueHistory, ValueHistoryPoint } from '../services/api';
+import { getUserCollectionPaginated, getCardsByIds, getCollectionTotalValue, refreshCollectionPrices, getCollectionValueHistory, ValueHistoryPoint, runPriceAlertCheck } from '../services/api';
 import CollectionValueChart from './CollectionValueChart';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -87,6 +87,7 @@ export default function Collection() {
         await refreshCollectionPrices(user.id);
         setTotalCollectionValue(await getCollectionTotalValue(user.id));
         setValueHistory(await getCollectionValueHistory(user.id));
+        runPriceAlertCheck(user.id).catch(() => { /* alerts are best-effort */ });
         try {
           localStorage.setItem(`deckerr:pricesRefreshedAt:${user.id}`, String(Date.now()));
         } catch { /* localStorage unavailable — ignore */ }
