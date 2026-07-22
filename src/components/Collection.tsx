@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Loader2, Trash2, RefreshCw, Plus, Minus, X } from 'lucide-react';
 import { Card } from '../types';
-import { getUserCollectionPaginated, getCardsByIds, getCollectionTotalValue, refreshCollectionPrices } from '../services/api';
+import { getUserCollectionPaginated, getCardsByIds, getCollectionTotalValue, refreshCollectionPrices, getCollectionValueHistory, ValueHistoryPoint } from '../services/api';
+import CollectionValueChart from './CollectionValueChart';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
@@ -32,6 +33,7 @@ export default function Collection() {
   const [totalCollectionValue, setTotalCollectionValue] = useState<number>(0);
   const [isLoadingTotalValue, setIsLoadingTotalValue] = useState(true);
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
+  const [valueHistory, setValueHistory] = useState<ValueHistoryPoint[]>([]);
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const [selectedCard, setSelectedCard] = useState<{ card: Card; quantity: number } | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -63,6 +65,7 @@ export default function Collection() {
         // Get total value directly from database (no need to fetch all cards!)
         const totalValue = await getCollectionTotalValue(user.id);
         setTotalCollectionValue(totalValue);
+        setValueHistory(await getCollectionValueHistory(user.id));
       } catch (error) {
         console.error('Error calculating total collection value:', error);
         setTotalCollectionValue(0);
@@ -83,6 +86,7 @@ export default function Collection() {
         setIsRefreshingPrices(true);
         await refreshCollectionPrices(user.id);
         setTotalCollectionValue(await getCollectionTotalValue(user.id));
+        setValueHistory(await getCollectionValueHistory(user.id));
         try {
           localStorage.setItem(`deckerr:pricesRefreshedAt:${user.id}`, String(Date.now()));
         } catch { /* localStorage unavailable — ignore */ }
@@ -389,6 +393,12 @@ export default function Collection() {
               </button>
             </div>
           </div>
+
+          {valueHistory.length >= 2 && !searchQuery && (
+            <div className="mb-4 bg-gray-800 border border-gray-700 rounded-lg p-3">
+              <CollectionValueChart history={valueHistory} />
+            </div>
+          )}
 
           {isLoadingCollection ? (
             <div className="flex items-center justify-center py-12">
