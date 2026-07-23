@@ -257,6 +257,91 @@ export default function Collection() {
     }
   };
 
+  // Swap a collection entry to another printing of the same card. The
+  // collections table enforces collections_user_card_unique (user_id, card_id),
+  // so when the user already owns the target printing we MERGE quantities into
+  // that row (keeping its foil/condition) and delete the old row; otherwise a
+  // single UPDATE rewrites card_id in place. card_name is unchanged (same card).
+  const changePrinting = async (item: CollectionItem, printing: Card) => {
+    if (!user || printing.id === item.card.id) return;
+
+    try {
+      setIsUpdating(true);
+
+      const { data: existing, error: fetchError } = await supabase
+        .from('collections')
+        .select('quantity, is_foil, condition')
+        .eq('user_id', user.id)
+        .eq('card_id', printing.id)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      if (existing) {
+        // Merge into the row the user already owns for the target printing.
+        const isFoil = existing.is_foil ?? false;
+        const condition = existing.condition ?? '';
+        const mergedQuantity = (existing.quantity ?? 0) + item.quantity;
+
+        const { error: updateError } = await supabase
+          .from('collections')
+          .update({
+            quantity: mergedQuantity,
+            price_usd: priceForVariant(printing, isFoil),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', user.id)
+          .eq('card_id', printing.id);
+
+        if (updateError) throw updateError;
+
+        const { error: deleteError } = await supabase
+          .from('collections')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('card_id', item.card.id);
+
+        if (deleteError) throw deleteError;
+
+        updateCachedItems(cached => {
+          if (cached.card.id === item.card.id) return null;
+          if (cached.card.id === printing.id) return { ...cached, quantity: mergedQuantity };
+          return cached;
+        });
+        setSelectedCard({ card: printing, quantity: mergedQuantity, isFoil, condition });
+        toast.success('Merged with the copies you already own');
+      } else {
+        // No row for the target printing: rewrite card_id in place.
+        const { error } = await supabase
+          .from('collections')
+          .update({
+            card_id: printing.id,
+            price_usd: priceForVariant(printing, item.isFoil),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', user.id)
+          .eq('card_id', item.card.id);
+
+        if (error) throw error;
+
+        updateCachedItems(cached =>
+          cached.card.id === item.card.id ? { ...cached, card: printing } : cached
+        );
+        setSelectedCard(prev =>
+          prev && prev.card.id === item.card.id ? { ...prev, card: printing } : prev
+        );
+        toast.success('Printing updated');
+      }
+
+      invalidateCollectionCaches();
+    } catch (error) {
+      console.error('Error changing printing:', error);
+      toast.error('Failed to change printing');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   // Export the loaded collection to a downloadable CSV file.
   const handleExportCsv = () => {
     const rows: CollectionCsvRow[] = collection.map(({ card, quantity, isFoil, condition }) => ({
@@ -374,6 +459,7 @@ export default function Collection() {
           isUpdating={isUpdating}
           onClose={() => setSelectedCard(null)}
           onUpdateVariant={updateCardVariant}
+          onChangePrinting={(printing) => changePrinting(selectedCard, printing)}
           onIncrementQuantity={incrementQuantity}
           onDecrementQuantity={decrementQuantity}
           onRequestRemove={(cardId, cardName) => setConfirmModal({ isOpen: true, cardId, cardName })}

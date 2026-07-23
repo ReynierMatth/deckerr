@@ -43,6 +43,8 @@ export interface Card {
   collector_number?: string;
   lang?: string;
   artist?: string;
+  /** Scryfall search URI listing every printing of this card. */
+  prints_search_uri?: string;
   prices?: {
     usd?: string;
     usd_foil?: string;

@@ -1,7 +1,9 @@
-import { X, RefreshCw, Minus, Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { X, RefreshCw, Minus, Plus, Trash2, Layers } from 'lucide-react';
 import { Card } from '../../types';
 import { isDoubleFaced, getCardLargeImageUri } from '../../utils/cardFaces';
 import { CARD_CONDITIONS } from '../../utils/collectionCsv';
+import PrintingPickerModal from '../card/PrintingPickerModal';
 import { CollectionItem } from './types';
 
 interface CardDetailModalProps {
@@ -9,6 +11,7 @@ interface CardDetailModalProps {
   isUpdating: boolean;
   onClose: () => void;
   onUpdateVariant: (card: Card, isFoil: boolean, condition: string) => void;
+  onChangePrinting: (printing: Card) => void;
   onIncrementQuantity: (cardId: string, currentQuantity: number) => void;
   onDecrementQuantity: (cardId: string, currentQuantity: number) => void;
   onRequestRemove: (cardId: string, cardName: string) => void;
@@ -22,12 +25,14 @@ export default function CardDetailModal({
   isUpdating,
   onClose,
   onUpdateVariant,
+  onChangePrinting,
   onIncrementQuantity,
   onDecrementQuantity,
   onRequestRemove,
   getCurrentFaceIndex,
   toggleCardFace,
 }: CardDetailModalProps) {
+  const [showPrintingPicker, setShowPrintingPicker] = useState(false);
   const currentFaceIndex = getCurrentFaceIndex(item.card.id);
   const isMultiFaced = isDoubleFaced(item.card);
   const currentFace = isMultiFaced && item.card.card_faces
@@ -48,14 +53,17 @@ export default function CardDetailModal({
 
       {/* Sliding Panel */}
       <div className="fixed top-0 right-0 h-full w-full md:w-96 bg-gray-800 shadow-2xl z-[120] overflow-y-auto animate-slide-in-right">
-        {/* Close button - fixed position, stays visible when scrolling */}
-        <button
-          onClick={onClose}
-          className="fixed top-4 right-4 bg-gray-700 hover:bg-gray-600 text-white p-2 md:p-1.5 rounded-full transition-colors z-[130] shadow-lg"
-          aria-label="Close"
-        >
-          <X size={24} className="md:w-5 md:h-5" />
-        </button>
+        {/* Close button - fixed position, stays visible when scrolling
+            (hidden while the printing picker is open so it can't float above it) */}
+        {!showPrintingPicker && (
+          <button
+            onClick={onClose}
+            className="fixed top-4 right-4 bg-gray-700 hover:bg-gray-600 text-white p-2 md:p-1.5 rounded-full transition-colors z-[130] shadow-lg"
+            aria-label="Close"
+          >
+            <X size={24} className="md:w-5 md:h-5" />
+          </button>
+        )}
 
         <div className="p-4 sm:p-6">
 
@@ -105,6 +113,26 @@ export default function CardDetailModal({
                 </div>
               </div>
             )}
+
+            {/* Printing / edition */}
+            <div className="border-t border-gray-700 pt-3">
+              {item.card.set_name && (
+                <div className="text-sm text-gray-400 mb-2">
+                  {item.card.set_name}
+                  {item.card.set && <span className="uppercase"> ({item.card.set})</span>}
+                  {item.card.collector_number && <span> #{item.card.collector_number}</span>}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowPrintingPicker(true)}
+                disabled={isUpdating}
+                className="w-full min-h-[44px] px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+              >
+                <Layers size={18} />
+                Change printing
+              </button>
+            </div>
 
             {/* Foil & Condition */}
             <div className="border-t border-gray-700 pt-3 space-y-3">
@@ -191,6 +219,14 @@ export default function CardDetailModal({
           </div>
         </div>
       </div>
+
+      {/* Printing/edition picker (drawer on mobile) */}
+      <PrintingPickerModal
+        card={item.card}
+        isOpen={showPrintingPicker}
+        onClose={() => setShowPrintingPicker(false)}
+        onSelect={onChangePrinting}
+      />
     </>
   );
 }
