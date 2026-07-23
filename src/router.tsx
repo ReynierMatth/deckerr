@@ -4,6 +4,7 @@ import {
   createRouter,
   Outlet,
   useNavigate,
+  useRouterState,
 } from '@tanstack/react-router';
 import { useAuth } from './contexts/AuthContext';
 import Navigation from './components/Navigation';
@@ -23,10 +24,13 @@ import PublicDeck from './components/PublicDeck';
 /**
  * App shell + auth gate. Mirrors the previous behaviour: a spinner while auth
  * resolves, the login form when signed out, and the navigation + routed page
- * once signed in.
+ * once signed in. Exception: public deck links (/decks/:id/view) render for
+ * signed-out visitors too — that's the whole point of sharing a deck.
  */
 function RootLayout() {
   const { user, loading } = useAuth();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isPublicRoute = /^\/decks\/[^/]+\/view\/?$/.test(pathname);
 
   if (loading) {
     return (
@@ -37,6 +41,14 @@ function RootLayout() {
   }
 
   if (!user) {
+    if (isPublicRoute) {
+      // Minimal shell: no navbar (it's all auth-gated), just the shared deck.
+      return (
+        <div className="min-h-screen bg-gray-900">
+          <Outlet />
+        </div>
+      );
+    }
     return <LoginForm />;
   }
 
