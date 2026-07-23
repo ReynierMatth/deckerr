@@ -66,24 +66,31 @@ export const getCollectionTotalValue = async (userId: string): Promise<number> =
 export const getUserCollectionPaginated = async (
   userId: string,
   pageSize: number = 50,
-  offset: number = 0
+  offset: number = 0,
+  search: string = ''
 ): Promise<PaginatedCollectionResult> => {
-  // First, get the total count
-  const { count: totalCount, error: countError } = await supabase
+  const term = search.trim();
+
+  // First, get the total count (server-side name filter when searching)
+  let countQuery = supabase
     .from('collections')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId);
+  if (term) countQuery = countQuery.ilike('card_name', `%${term}%`);
+  const { count: totalCount, error: countError } = await countQuery;
 
   if (countError) {
     console.error('Error counting user collection:', countError);
     throw countError;
   }
 
-  // Then get the paginated data
-  const { data, error } = await supabase
+  // Then get the paginated (and filtered) data
+  let dataQuery = supabase
     .from('collections')
     .select('card_id, quantity')
-    .eq('user_id', userId)
+    .eq('user_id', userId);
+  if (term) dataQuery = dataQuery.ilike('card_name', `%${term}%`);
+  const { data, error } = await dataQuery
     .order('created_at', { ascending: false })
     .range(offset, offset + pageSize - 1);
 
@@ -109,7 +116,8 @@ export const addCardToCollection = async (
   userId: string,
   cardId: string,
   quantity: number = 1,
-  priceUsd: number = 0
+  priceUsd: number = 0,
+  cardName?: string
 ): Promise<void> => {
   // Read the current quantity so we can add to it, then upsert the final value
   // in a single write (relies on the collections_user_card_unique constraint).
@@ -130,6 +138,7 @@ export const addCardToCollection = async (
         card_id: cardId,
         quantity: (existing?.quantity ?? 0) + quantity,
         price_usd: priceUsd,
+        ...(cardName ? { card_name: cardName } : {}),
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'user_id,card_id' }
@@ -140,18 +149,19 @@ export const addCardToCollection = async (
 
 export const addMultipleCardsToCollection = async (
   userId: string,
-  cards: { cardId: string; quantity: number; priceUsd?: number }[]
+  cards: { cardId: string; quantity: number; priceUsd?: number; cardName?: string }[]
 ): Promise<void> => {
   if (cards.length === 0) return;
 
   // Aggregate duplicate cardIds from the input so the upsert never targets the
   // same (user_id, card_id) row twice (Postgres rejects that in one statement).
-  const requested = new Map<string, { quantity: number; priceUsd: number }>();
+  const requested = new Map<string, { quantity: number; priceUsd: number; cardName?: string }>();
   for (const card of cards) {
     const prev = requested.get(card.cardId);
     requested.set(card.cardId, {
       quantity: (prev?.quantity ?? 0) + card.quantity,
       priceUsd: card.priceUsd ?? prev?.priceUsd ?? 0,
+      cardName: card.cardName ?? prev?.cardName,
     });
   }
 
@@ -169,11 +179,12 @@ export const addMultipleCardsToCollection = async (
 
   // ...then a single bulk upsert instead of one UPDATE per card.
   const now = new Date().toISOString();
-  const rows = [...requested.entries()].map(([cardId, { quantity, priceUsd }]) => ({
+  const rows = [...requested.entries()].map(([cardId, { quantity, priceUsd, cardName }]) => ({
     user_id: userId,
     card_id: cardId,
     quantity: (existingQty.get(cardId) ?? 0) + quantity,
     price_usd: priceUsd,
+    ...(cardName ? { card_name: cardName } : {}),
     updated_at: now,
   }));
 
@@ -202,7 +213,8 @@ export const refreshCollectionPrices = async (userId: string): Promise<void> => 
 
   const now = new Date().toISOString();
   const rows = items.map((i) => {
-    const prices = byId.get(i.card_id)?.prices;
+    const card = byId.get(i.card_id);
+    const prices = card?.prices;
     // foil entries are valued at the foil price (Scryfall's usd_foil)
     const price = i.is_foil
       ? Number(prices?.usd_foil ?? prices?.usd ?? 0)
@@ -213,6 +225,7 @@ export const refreshCollectionPrices = async (userId: string): Promise<void> => 
       quantity: i.quantity,
       is_foil: i.is_foil,
       price_usd: price,
+      ...(card?.name ? { card_name: card.name } : {}),
       updated_at: now,
     };
   });
