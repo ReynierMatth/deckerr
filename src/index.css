@@ -295,3 +295,18 @@
   border-radius: 50%;
   animation: loading 1s linear infinite;
 }
+
+/* iOS safe areas: keep fixed bottom UI above the home indicator.
+   Used by the mobile bottom navbar and bottom sheets (Navigation.tsx). */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Hide scrollbars on horizontal scrollers (tab bars) without disabling scroll. */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

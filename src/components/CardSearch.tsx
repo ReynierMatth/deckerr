@@ -665,6 +665,8 @@ const CardSearch = () => {
                       <img
                         src={getCardArtCrop(card, currentFaceIndex)}
                         alt={displayName}
+                        loading="lazy"
+                        decoding="async"
                         className="w-full h-full object-cover rounded-l-lg"
                       />
                       {isMultiFaced && (
@@ -743,6 +745,8 @@ const CardSearch = () => {
                         <img
                           src={getCardImageUri(card, currentFaceIndex)}
                           alt={displayName}
+                          loading="lazy"
+                          decoding="async"
                           className="w-full h-auto"
                         />
                       ) : (

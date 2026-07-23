@@ -1,14 +1,21 @@
 import { useEffect, useState } from 'react';
-import { Download, X } from 'lucide-react';
+import { Download, Share, PlusSquare, X } from 'lucide-react';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+/** iOS Safari never fires beforeinstallprompt — detect it to show manual A2HS steps. */
+const isIos = () =>
+  /iphone|ipad|ipod/i.test(window.navigator.userAgent) ||
+  // iPadOS 13+ reports as Mac but has touch
+  (window.navigator.userAgent.includes('Mac') && 'ontouchend' in document);
+
 export default function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
+  const [showIosHint, setShowIosHint] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
@@ -27,6 +34,15 @@ export default function PWAInstallPrompt() {
     // Show prompt again after 7 days
     if (daysSinceDismissed > 7) {
       localStorage.removeItem('pwa-install-dismissed');
+    }
+
+    // iOS: no install event exists; show manual "Add to Home Screen" steps.
+    if (isIos()) {
+      if (!dismissed || daysSinceDismissed > 7) {
+        setShowIosHint(true);
+        setShowPrompt(true);
+      }
+      return;
     }
 
     const handler = (e: Event) => {
@@ -102,24 +118,48 @@ export default function PWAInstallPrompt() {
 
           <div className="flex-1">
             <h3 className="font-bold text-lg mb-1">Install Deckerr</h3>
-            <p className="text-sm text-white/90 mb-3">
-              Install our app for quick access and offline support!
-            </p>
+            {showIosHint ? (
+              <>
+                <p className="text-sm text-white/90 mb-3">
+                  Add Deckerr to your Home Screen for the full-screen app experience:
+                </p>
+                <ol className="text-sm text-white/90 mb-3 space-y-1.5">
+                  <li className="flex items-center gap-2">
+                    <span className="font-bold">1.</span> Tap <Share size={16} className="inline" aria-label="Share" /> in the Safari toolbar
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="font-bold">2.</span> Select <PlusSquare size={16} className="inline" aria-label="Add" /> “Add to Home Screen”
+                  </li>
+                </ol>
+                <button
+                  onClick={handleDismiss}
+                  className="w-full bg-white/20 font-semibold py-2 px-4 rounded-lg hover:bg-white/30 transition-colors min-h-[44px]"
+                >
+                  Got it
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-white/90 mb-3">
+                  Install our app for quick access and offline support!
+                </p>
 
-            <div className="flex gap-2">
-              <button
-                onClick={handleInstallClick}
-                className="flex-1 bg-white text-blue-600 font-semibold py-2 px-4 rounded-lg hover:bg-blue-50 transition-colors min-h-[44px]"
-              >
-                Install
-              </button>
-              <button
-                onClick={handleDismiss}
-                className="flex-1 bg-white/20 font-semibold py-2 px-4 rounded-lg hover:bg-white/30 transition-colors min-h-[44px]"
-              >
-                Not Now
-              </button>
-            </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleInstallClick}
+                    className="flex-1 bg-white text-blue-600 font-semibold py-2 px-4 rounded-lg hover:bg-blue-50 transition-colors min-h-[44px]"
+                  >
+                    Install
+                  </button>
+                  <button
+                    onClick={handleDismiss}
+                    className="flex-1 bg-white/20 font-semibold py-2 px-4 rounded-lg hover:bg-white/30 transition-colors min-h-[44px]"
+                  >
+                    Not Now
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

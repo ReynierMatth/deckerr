@@ -6,7 +6,7 @@ import { toCsv, parseCsv, CARD_CONDITIONS, CollectionCsvRow } from '../utils/col
 import CollectionValueChart from './CollectionValueChart';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
+import { isDoubleFaced, getCardImageSmall } from '../utils/cardFaces';
 import { useCardFaces } from '../hooks/useCardFaces';
 import { supabase } from '../lib/supabase';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
@@ -611,8 +611,10 @@ export default function Collection() {
                     {/* Small card thumbnail */}
                     <div className="relative rounded-lg overflow-hidden shadow-lg transition-all group-hover:ring-2 group-hover:ring-blue-500">
                       <img
-                        src={getCardImageUri(card, currentFaceIndex)}
+                        src={getCardImageSmall(card, currentFaceIndex)}
                         alt={displayName}
+                        loading="lazy"
+                        decoding="async"
                         className="w-full h-auto"
                       />
                       <WishlistButton cardId={card.id} className="absolute top-1 left-1" size={16} />
