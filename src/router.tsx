@@ -2,24 +2,28 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  lazyRouteComponent,
   Outlet,
   useNavigate,
   useRouterState,
 } from '@tanstack/react-router';
+import { lazy, Suspense } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import Navigation from './components/Navigation';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import LoginForm from './components/LoginForm';
+// The home page stays in the main chunk (it's the first thing rendered);
+// every other page is code-split and loaded on navigation.
 import DeckList from './components/DeckList';
-import DeckManager from './components/DeckManager';
-import Collection from './components/Collection';
-import Wishlist from './components/Wishlist';
-import Community from './components/Community';
-import CardSearch from './components/CardSearch';
-import LifeCounter from './components/LifeCounter';
-import PriceAlerts from './components/PriceAlerts';
-import DeckEditor from './components/DeckEditor';
-import PublicDeck from './components/PublicDeck';
+
+const DeckEditor = lazy(() => import('./components/DeckEditor'));
+const PublicDeck = lazy(() => import('./components/PublicDeck'));
+
+const PageSpinner = () => (
+  <div className="flex items-center justify-center h-64">
+    <div className="loading-spinner h-16 w-16"></div>
+  </div>
+);
 
 /**
  * App shell + auth gate. Mirrors the previous behaviour: a spinner while auth
@@ -85,22 +89,58 @@ function HomePage() {
 function EditDeckPage() {
   const { deckId } = editDeckRoute.useParams();
   const navigate = useNavigate();
-  return <DeckEditor deckId={deckId} onClose={() => navigate({ to: '/' })} />;
+  return (
+    <Suspense fallback={<PageSpinner />}>
+      <DeckEditor deckId={deckId} onClose={() => navigate({ to: '/' })} />
+    </Suspense>
+  );
 }
 
 function ViewDeckPage() {
   const { deckId } = viewDeckRoute.useParams();
-  return <PublicDeck deckId={deckId} />;
+  return (
+    <Suspense fallback={<PageSpinner />}>
+      <PublicDeck deckId={deckId} />
+    </Suspense>
+  );
 }
 
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: HomePage });
-const deckRoute = createRoute({ getParentRoute: () => rootRoute, path: '/deck', component: DeckManager });
-const collectionRoute = createRoute({ getParentRoute: () => rootRoute, path: '/collection', component: Collection });
-const wishlistRoute = createRoute({ getParentRoute: () => rootRoute, path: '/wishlist', component: Wishlist });
-const communityRoute = createRoute({ getParentRoute: () => rootRoute, path: '/community', component: Community });
-const searchRoute = createRoute({ getParentRoute: () => rootRoute, path: '/search', component: CardSearch });
-const lifeCounterRoute = createRoute({ getParentRoute: () => rootRoute, path: '/life-counter', component: LifeCounter });
-const alertsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/alerts', component: PriceAlerts });
+const deckRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/deck',
+  component: lazyRouteComponent(() => import('./components/DeckManager')),
+});
+const collectionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/collection',
+  component: lazyRouteComponent(() => import('./components/Collection')),
+});
+const wishlistRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/wishlist',
+  component: lazyRouteComponent(() => import('./components/Wishlist')),
+});
+const communityRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/community',
+  component: lazyRouteComponent(() => import('./components/Community')),
+});
+const searchRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/search',
+  component: lazyRouteComponent(() => import('./components/CardSearch')),
+});
+const lifeCounterRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/life-counter',
+  component: lazyRouteComponent(() => import('./components/LifeCounter')),
+});
+const alertsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/alerts',
+  component: lazyRouteComponent(() => import('./components/PriceAlerts')),
+});
 const editDeckRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/decks/$deckId/edit',
@@ -125,7 +165,10 @@ const routeTree = rootRoute.addChildren([
   viewDeckRoute,
 ]);
 
-export const router = createRouter({ routeTree });
+export const router = createRouter({
+  routeTree,
+  defaultPendingComponent: PageSpinner,
+});
 
 declare module '@tanstack/react-router' {
   interface Register {
