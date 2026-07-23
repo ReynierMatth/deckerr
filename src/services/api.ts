@@ -236,6 +236,20 @@ export const refreshCollectionPrices = async (userId: string): Promise<void> => 
 
   if (error) throw error;
 
+  // Record today's per-card price point (one row per card per day) for the
+  // card price-history chart. Single batched upsert across all fetched cards.
+  const today = now.slice(0, 10);
+  const historyRows = cards.map((card) => ({
+    card_id: card.id,
+    recorded_at: today,
+    price_usd: card.prices?.usd ? Number(card.prices.usd) : null,
+    price_usd_foil: card.prices?.usd_foil ? Number(card.prices.usd_foil) : null,
+  }));
+  const { error: historyError } = await supabase
+    .from('card_price_history')
+    .upsert(historyRows, { onConflict: 'card_id,recorded_at' });
+  if (historyError) throw historyError;
+
   await snapshotCollectionValue(userId);
 };
 
@@ -263,6 +277,30 @@ export const getCollectionValueHistory = async (userId: string): Promise<ValueHi
     .order('snapshot_date', { ascending: true });
   if (error) throw error;
   return (data ?? []).map((r) => ({ date: r.snapshot_date as string, value: Number(r.value) }));
+};
+
+// ---- Per-card price history ----
+export interface CardPriceHistoryPoint {
+  date: string;
+  usd: number | null;
+  usdFoil: number | null;
+}
+
+/** Last 90 days of recorded prices for one card, oldest first. */
+export const getCardPriceHistory = async (cardId: string): Promise<CardPriceHistoryPoint[]> => {
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const { data, error } = await supabase
+    .from('card_price_history')
+    .select('recorded_at, price_usd, price_usd_foil')
+    .eq('card_id', cardId)
+    .gte('recorded_at', since)
+    .order('recorded_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    date: r.recorded_at as string,
+    usd: r.price_usd === null ? null : Number(r.price_usd),
+    usdFoil: r.price_usd_foil === null ? null : Number(r.price_usd_foil),
+  }));
 };
 
 // ---- Wishlist ----

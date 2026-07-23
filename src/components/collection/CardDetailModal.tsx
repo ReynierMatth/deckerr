@@ -1,9 +1,12 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { X, RefreshCw, Minus, Plus, Trash2, Layers } from 'lucide-react';
 import { Card } from '../../types';
+import { getCardPriceHistory } from '../../services/api';
 import { isDoubleFaced, getCardLargeImageUri } from '../../utils/cardFaces';
 import { CARD_CONDITIONS } from '../../utils/collectionCsv';
 import PrintingPickerModal from '../card/PrintingPickerModal';
+import PriceLineChart from '../charts/PriceLineChart';
 import { CollectionItem } from './types';
 
 interface CardDetailModalProps {
@@ -33,6 +36,22 @@ export default function CardDetailModal({
   toggleCardFace,
 }: CardDetailModalProps) {
   const [showPrintingPicker, setShowPrintingPicker] = useState(false);
+
+  // Only mounted while the panel is open, so this fetches on open. If the
+  // table has no rows (or the query errors), the empty state renders instead.
+  const { data: priceHistory } = useQuery({
+    queryKey: ['cardPriceHistory', item.card.id],
+    queryFn: () => getCardPriceHistory(item.card.id),
+  });
+  // Chart the series matching this copy's foil flag (foil falls back to
+  // non-foil when Scryfall has no foil price for a given day).
+  const pricePoints = (priceHistory ?? []).flatMap((p) => {
+    const value = item.isFoil ? p.usdFoil ?? p.usd : p.usd;
+    return value === null ? [] : [{ date: p.date, value }];
+  });
+  const priceDelta =
+    pricePoints.length >= 2 ? pricePoints[pricePoints.length - 1].value - pricePoints[0].value : 0;
+
   const currentFaceIndex = getCurrentFaceIndex(item.card.id);
   const isMultiFaced = isDoubleFaced(item.card);
   const currentFace = isMultiFaced && item.card.card_faces
@@ -132,6 +151,33 @@ export default function CardDetailModal({
                 <Layers size={18} />
                 Change printing
               </button>
+            </div>
+
+            {/* Price history */}
+            <div className="border-t border-gray-700 pt-3">
+              {pricePoints.length >= 2 ? (
+                <div>
+                  <div className="flex items-baseline justify-between mb-1">
+                    <span className="text-xs text-gray-400">
+                      Price history{item.isFoil ? ' (foil)' : ''}
+                    </span>
+                    <span className={`text-xs font-semibold ${priceDelta >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {priceDelta >= 0 ? '+' : '−'}${Math.abs(priceDelta).toFixed(2)}
+                    </span>
+                  </div>
+                  <PriceLineChart
+                    points={pricePoints}
+                    ariaLabel={`Price history for ${item.card.name}`}
+                  />
+                </div>
+              ) : (
+                <div>
+                  <span className="text-xs text-gray-400 block mb-1">Price history</span>
+                  <p className="text-xs text-gray-500">
+                    No history yet — prices are recorded on each refresh.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Foil & Condition */}

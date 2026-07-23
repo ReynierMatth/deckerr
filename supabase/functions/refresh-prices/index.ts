@@ -32,7 +32,9 @@ Deno.serve(async () => {
   const cardIds = [...new Set((rows ?? []).map((r) => r.card_id as string))];
 
   // 2. Fetch current prices from Scryfall (batched; UA header required off-browser)
+  const today = new Date().toISOString().slice(0, 10);
   const priceById = new Map<string, number>();
+  const historyRows: { card_id: string; recorded_at: string; price_usd: number | null; price_usd_foil: number | null }[] = [];
   for (const ids of chunk(cardIds, CHUNK)) {
     const res = await fetch(`${SCRYFALL}/cards/collection`, {
       method: 'POST',
@@ -40,7 +42,15 @@ Deno.serve(async () => {
       body: JSON.stringify({ identifiers: ids.map((id) => ({ id })) }),
     });
     const json = await res.json();
-    for (const card of json.data ?? []) priceById.set(card.id, priceOf(card.prices));
+    for (const card of json.data ?? []) {
+      priceById.set(card.id, priceOf(card.prices));
+      historyRows.push({
+        card_id: card.id,
+        recorded_at: today,
+        price_usd: card.prices?.usd ? Number(card.prices.usd) : null,
+        price_usd_foil: card.prices?.usd_foil ? Number(card.prices.usd_foil) : null,
+      });
+    }
     await new Promise((r) => setTimeout(r, 100)); // Scryfall rate limit
   }
 
@@ -49,9 +59,13 @@ Deno.serve(async () => {
     await supabase.from('collections').update({ price_usd: price }).eq('card_id', cardId);
   }
 
+  // 3b. Record today's per-card price point for the card price-history chart
+  if (historyRows.length > 0) {
+    await supabase.from('card_price_history').upsert(historyRows, { onConflict: 'card_id,recorded_at' });
+  }
+
   // 4. Snapshot each user's value for today's history point
   const { data: profiles } = await supabase.from('profiles').select('id, collection_total_value');
-  const today = new Date().toISOString().slice(0, 10);
   for (const p of profiles ?? []) {
     await supabase
       .from('collection_value_history')
