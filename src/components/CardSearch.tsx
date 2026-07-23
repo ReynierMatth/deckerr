@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useReducer } from 'react';
-import { RefreshCw, PackagePlus, Loader2, CheckCircle, Star } from 'lucide-react';
+import { RefreshCw, PackagePlus, Loader2, CheckCircle, Heart } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   searchCards,
@@ -698,13 +698,13 @@ const CardSearch = () => {
                         onClick={() => handleToggleWishlist(card.id)}
                         className={`p-2.5 rounded-lg ${
                           wishlist?.includes(card.id)
-                            ? 'bg-yellow-500/20 text-yellow-400'
+                            ? 'bg-rose-500/20 text-rose-400'
                             : 'bg-gray-700 text-gray-300 active:bg-gray-600'
                         }`}
                         title={wishlist?.includes(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
                         aria-label={wishlist?.includes(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
                       >
-                        <Star size={18} fill={wishlist?.includes(card.id) ? 'currentColor' : 'none'} />
+                        <Heart size={18} fill={wishlist?.includes(card.id) ? 'currentColor' : 'none'} />
                       </button>
                       <button
                         onClick={() => handleAddCardToCollection(card.id)}
@@ -773,13 +773,13 @@ const CardSearch = () => {
                         }}
                         className={`absolute top-1 left-1 p-2 rounded-full shadow-lg transition-all ${
                           wishlist?.includes(card.id)
-                            ? 'bg-yellow-500/90 text-white'
+                            ? 'bg-rose-500/90 text-white'
                             : 'bg-gray-900/70 text-gray-200 hover:bg-gray-900'
                         }`}
                         title={wishlist?.includes(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
                         aria-label={wishlist?.includes(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
                       >
-                        <Star size={16} fill={wishlist?.includes(card.id) ? 'currentColor' : 'none'} />
+                        <Heart size={16} fill={wishlist?.includes(card.id) ? 'currentColor' : 'none'} />
                       </button>
                     </div>
                     <div className="p-3">
