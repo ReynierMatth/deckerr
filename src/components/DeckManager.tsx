@@ -147,6 +147,28 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const [deckFormat, setDeckFormat] = useState(initialDeck?.format || 'standard');
   const [tags, setTags] = useState<string[]>(initialDeck?.tags ?? []);
   const [isPublic, setIsPublic] = useState<boolean>(initialDeck?.isPublic ?? false);
+
+  /**
+   * Toggling visibility applies immediately for an already-saved deck: the
+   * share link is shown (and likely copied) right away, so waiting for the
+   * next explicit Save would hand out links to a still-private deck.
+   */
+  const setIsPublicPersisted: React.Dispatch<React.SetStateAction<boolean>> = (value) => {
+    const next = typeof value === 'function' ? value(isPublic) : value;
+    setIsPublic(next);
+    if (currentDeckId) {
+      supabase
+        .from('decks')
+        .update({ is_public: next })
+        .eq('id', currentDeckId)
+        .then(({ error }) => {
+          if (error) {
+            console.error('Error updating deck visibility:', error);
+            toast.error('Failed to update deck visibility');
+          }
+        });
+    }
+  };
   const [commander, setCommander] = useState<Card | null>(
       initialDeck?.cards.find(card =>
           card.is_commander
@@ -583,7 +605,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
             addTag={addTag}
             removeTag={removeTag}
             isPublic={isPublic}
-            setIsPublic={setIsPublic}
+            setIsPublic={setIsPublicPersisted}
             deckId={currentDeckId}
             commander={commander}
             setCommander={setCommander}
