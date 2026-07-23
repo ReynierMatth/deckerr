@@ -6,7 +6,8 @@ import { toCsv, parseCsv, CARD_CONDITIONS, CollectionCsvRow } from '../utils/col
 import CollectionValueChart from './CollectionValueChart';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { isDoubleFaced, getCardImageSmall } from '../utils/cardFaces';
+import { isDoubleFaced } from '../utils/cardFaces';
+import CardTile from './card/CardTile';
 import { useCardFaces } from '../hooks/useCardFaces';
 import { supabase } from '../lib/supabase';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
@@ -601,41 +602,40 @@ export default function Collection() {
                   : card.name;
 
                 return (
-                  <div
+                  <CardTile
                     key={card.id}
+                    card={card}
+                    faceIndex={currentFaceIndex}
+                    imageSize="small"
                     className="relative group cursor-pointer"
+                    imageWrapperClassName="rounded-lg overflow-hidden shadow-lg transition-all group-hover:ring-2 group-hover:ring-blue-500"
                     onMouseEnter={() => setHoveredCard(card)}
                     onMouseLeave={() => setHoveredCard(null)}
                     onClick={() => setSelectedCard(item)}
-                  >
-                    {/* Small card thumbnail */}
-                    <div className="relative rounded-lg overflow-hidden shadow-lg transition-all group-hover:ring-2 group-hover:ring-blue-500">
-                      <img
-                        src={getCardImageSmall(card, currentFaceIndex)}
-                        alt={displayName}
-                        loading="lazy"
-                        decoding="async"
-                        className="w-full h-auto"
-                      />
-                      <WishlistButton cardId={card.id} className="absolute top-1 left-1" size={16} />
-                      {/* Quantity badge */}
-                      <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs sm:text-sm font-bold px-2 py-1 rounded-full shadow-lg">
-                        x{quantity}
-                      </div>
-                      {/* Foil badge */}
-                      {isFoil && (
-                        <div className="absolute top-8 right-1 bg-gradient-to-r from-fuchsia-500 to-amber-400 text-white text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded shadow-lg">
-                          FOIL
+                    topLeft={<WishlistButton cardId={card.id} className="absolute top-1 left-1" size={16} />}
+                    topRight={
+                      <>
+                        {/* Quantity badge */}
+                        <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs sm:text-sm font-bold px-2 py-1 rounded-full shadow-lg">
+                          x{quantity}
                         </div>
-                      )}
-                      {/* Price badge */}
-                      {card.prices?.usd && (
+                        {/* Foil badge */}
+                        {isFoil && (
+                          <div className="absolute top-8 right-1 bg-gradient-to-r from-fuchsia-500 to-amber-400 text-white text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded shadow-lg">
+                            FOIL
+                          </div>
+                        )}
+                      </>
+                    }
+                    bottomLeft={
+                      card.prices?.usd && (
                         <div className="absolute bottom-1 left-1 bg-green-600 text-white text-[10px] sm:text-xs font-bold px-1.5 py-0.5 rounded shadow-lg">
                           ${card.prices.usd}
                         </div>
-                      )}
-                      {/* Flip button for double-faced cards */}
-                      {isMultiFaced && (
+                      )
+                    }
+                    bottomRight={
+                      isMultiFaced && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -647,14 +647,14 @@ export default function Collection() {
                         >
                           <RefreshCw size={12} />
                         </button>
-                      )}
-                    </div>
-
-                    {/* Card name below thumbnail */}
-                    <div className="mt-1 text-xs text-center truncate px-1">
-                      {displayName}
-                    </div>
-                  </div>
+                      )
+                    }
+                    footer={
+                      <div className="mt-1 text-xs text-center truncate px-1">
+                        {displayName}
+                      </div>
+                    }
+                  />
                 );
               })}
             </div>

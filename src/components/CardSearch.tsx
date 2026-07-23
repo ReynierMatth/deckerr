@@ -12,10 +12,12 @@ import {
 import { Card } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { isDoubleFaced, getCardImageUri, getCardArtCrop } from '../utils/cardFaces';
+import { isDoubleFaced } from '../utils/cardFaces';
 import { buildScryfallQuery } from '../utils/scryfallQuery';
 import { useCardFaces } from '../hooks/useCardFaces';
 import MagicCard from './MagicCard';
+import CardRow from './card/CardRow';
+import CardTile from './card/CardTile';
 import { getManaIconPath } from './ManaCost';
 
 type ColorKey = 'W' | 'U' | 'B' | 'R' | 'G' | 'C';
@@ -654,22 +656,13 @@ const CardSearch = () => {
                 const inCollection = userCollection.get(card.id) || 0;
                 const isAddingThisCard = addingCardId === card.id;
 
-                const displayName = isMultiFaced && card.card_faces
-                  ? card.card_faces[currentFaceIndex]?.name || card.name
-                  : card.name;
-
                 return (
-                  <div key={card.id} className="flex bg-gray-800 rounded-lg overflow-hidden">
-                    {/* Card art crop */}
-                    <div className="relative w-16 h-16 flex-shrink-0">
-                      <img
-                        src={getCardArtCrop(card, currentFaceIndex)}
-                        alt={displayName}
-                        loading="lazy"
-                        decoding="async"
-                        className="w-full h-full object-cover rounded-l-lg"
-                      />
-                      {isMultiFaced && (
+                  <CardRow
+                    key={card.id}
+                    card={card}
+                    faceIndex={currentFaceIndex}
+                    imageOverlay={
+                      isMultiFaced && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -680,49 +673,45 @@ const CardSearch = () => {
                         >
                           <RefreshCw size={12} />
                         </button>
-                      )}
-                    </div>
-                    {/* Info */}
-                    <div className="flex-1 p-2 flex flex-col justify-center min-w-0">
-                      <h3 className="font-bold text-sm truncate">{displayName}</h3>
-                      <div className="flex items-center gap-2 text-xs text-gray-400">
-                        {card.prices?.usd && <span>${card.prices.usd}</span>}
-                        {inCollection > 0 && (
-                          <span className="text-green-400 flex items-center gap-0.5">
-                            <CheckCircle size={10} />
-                            x{inCollection}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {/* Action buttons */}
-                    <div className="flex items-center gap-1.5 p-2">
-                      <button
-                        onClick={() => handleToggleWishlist(card.id)}
-                        className={`p-2.5 rounded-lg ${
-                          wishlist?.includes(card.id)
-                            ? 'bg-rose-500/20 text-rose-400'
-                            : 'bg-gray-700 text-gray-300 active:bg-gray-600'
-                        }`}
-                        title={wishlist?.includes(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
-                        aria-label={wishlist?.includes(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
-                      >
-                        <Heart size={18} fill={wishlist?.includes(card.id) ? 'currentColor' : 'none'} />
-                      </button>
-                      <button
-                        onClick={() => handleAddCardToCollection(card.id)}
-                        disabled={isAddingThisCard}
-                        className="p-2.5 bg-green-600 active:bg-green-700 disabled:bg-gray-600 rounded-lg"
-                        title="Add to collection"
-                      >
-                        {isAddingThisCard ? (
-                          <Loader2 className="animate-spin" size={18} />
-                        ) : (
-                          <PackagePlus size={18} />
-                        )}
-                      </button>
-                    </div>
-                  </div>
+                      )
+                    }
+                    badges={
+                      inCollection > 0 && (
+                        <span className="text-green-400 flex items-center gap-0.5">
+                          <CheckCircle size={10} />
+                          x{inCollection}
+                        </span>
+                      )
+                    }
+                    actions={
+                      <>
+                        <button
+                          onClick={() => handleToggleWishlist(card.id)}
+                          className={`p-2.5 rounded-lg ${
+                            wishlist?.includes(card.id)
+                              ? 'bg-rose-500/20 text-rose-400'
+                              : 'bg-gray-700 text-gray-300 active:bg-gray-600'
+                          }`}
+                          title={wishlist?.includes(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
+                          aria-label={wishlist?.includes(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
+                        >
+                          <Heart size={18} fill={wishlist?.includes(card.id) ? 'currentColor' : 'none'} />
+                        </button>
+                        <button
+                          onClick={() => handleAddCardToCollection(card.id)}
+                          disabled={isAddingThisCard}
+                          className="p-2.5 bg-green-600 active:bg-green-700 disabled:bg-gray-600 rounded-lg"
+                          title="Add to collection"
+                        >
+                          {isAddingThisCard ? (
+                            <Loader2 className="animate-spin" size={18} />
+                          ) : (
+                            <PackagePlus size={18} />
+                          )}
+                        </button>
+                      </>
+                    }
+                  />
                 );
               })}
             </div>
@@ -740,38 +729,13 @@ const CardSearch = () => {
                   : card.name;
 
                 return (
-                  <div key={card.id} className="bg-gray-800 rounded-lg overflow-hidden hover:ring-2 hover:ring-blue-500 transition-all">
-                    <div className="relative">
-                      {getCardImageUri(card, currentFaceIndex) ? (
-                        <img
-                          src={getCardImageUri(card, currentFaceIndex)}
-                          alt={displayName}
-                          loading="lazy"
-                          decoding="async"
-                          className="w-full h-auto"
-                        />
-                      ) : (
-                        <MagicCard card={card} />
-                      )}
-                      {isMultiFaced && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleCardFace(card.id, card.card_faces!.length);
-                          }}
-                          className="absolute bottom-2 right-2 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full shadow-lg transition-all"
-                          title="Flip card"
-                          aria-label="Flip card"
-                        >
-                          <RefreshCw size={16} />
-                        </button>
-                      )}
-                      {inCollection > 0 && (
-                        <span className="absolute top-1 right-1 text-xs bg-green-600 px-2 py-0.5 rounded-full flex items-center gap-1">
-                          <CheckCircle size={12} />
-                          x{inCollection}
-                        </span>
-                      )}
+                  <CardTile
+                    key={card.id}
+                    card={card}
+                    faceIndex={currentFaceIndex}
+                    className="bg-gray-800 rounded-lg overflow-hidden hover:ring-2 hover:ring-blue-500 transition-all"
+                    fallback={<MagicCard card={card} />}
+                    topLeft={
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -787,34 +751,59 @@ const CardSearch = () => {
                       >
                         <Heart size={16} fill={wishlist?.includes(card.id) ? 'currentColor' : 'none'} />
                       </button>
-                    </div>
-                    <div className="p-3">
-                      <h3 className="font-bold text-sm truncate mb-1">{displayName}</h3>
-                      <p className="text-gray-400 text-xs truncate mb-2">
-                        {isMultiFaced && card.card_faces
-                          ? card.card_faces[currentFaceIndex]?.type_line || card.type_line
-                          : card.type_line}
-                      </p>
-                      {card.prices?.usd && (
-                        <div className="text-xs text-gray-400 mb-2">${card.prices.usd}</div>
-                      )}
-                      <button
-                        onClick={() => handleAddCardToCollection(card.id)}
-                        disabled={isAddingThisCard}
-                        className="w-full px-3 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 text-sm"
-                        title="Add to collection"
-                      >
-                        {isAddingThisCard ? (
-                          <Loader2 className="animate-spin" size={16} />
-                        ) : (
-                          <>
-                            <PackagePlus size={16} />
-                            Add
-                          </>
+                    }
+                    topRight={
+                      inCollection > 0 && (
+                        <span className="absolute top-1 right-1 text-xs bg-green-600 px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <CheckCircle size={12} />
+                          x{inCollection}
+                        </span>
+                      )
+                    }
+                    bottomRight={
+                      isMultiFaced && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleCardFace(card.id, card.card_faces!.length);
+                          }}
+                          className="absolute bottom-2 right-2 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full shadow-lg transition-all"
+                          title="Flip card"
+                          aria-label="Flip card"
+                        >
+                          <RefreshCw size={16} />
+                        </button>
+                      )
+                    }
+                    footer={
+                      <div className="p-3">
+                        <h3 className="font-bold text-sm truncate mb-1">{displayName}</h3>
+                        <p className="text-gray-400 text-xs truncate mb-2">
+                          {isMultiFaced && card.card_faces
+                            ? card.card_faces[currentFaceIndex]?.type_line || card.type_line
+                            : card.type_line}
+                        </p>
+                        {card.prices?.usd && (
+                          <div className="text-xs text-gray-400 mb-2">${card.prices.usd}</div>
                         )}
-                      </button>
-                    </div>
-                  </div>
+                        <button
+                          onClick={() => handleAddCardToCollection(card.id)}
+                          disabled={isAddingThisCard}
+                          className="w-full px-3 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 text-sm"
+                          title="Add to collection"
+                        >
+                          {isAddingThisCard ? (
+                            <Loader2 className="animate-spin" size={16} />
+                          ) : (
+                            <>
+                              <PackagePlus size={16} />
+                              Add
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    }
+                  />
                 );
               })}
             </div>
