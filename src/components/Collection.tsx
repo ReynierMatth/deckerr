@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Search, Loader2, Trash2, RefreshCw, Plus, Minus, X, Download, Upload } from 'lucide-react';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { InfiniteData } from '@tanstack/react-query';
 import { Card } from '../types';
-import { getUserCollectionPaginated, getCardsByIds, getCollectionTotalValue, refreshCollectionPrices, getCollectionValueHistory, ValueHistoryPoint, runPriceAlertCheck, addMultipleCardsToCollection } from '../services/api';
+import { getUserCollectionPaginated, getCardsByIds, getCollectionTotalValue, refreshCollectionPrices, getCollectionValueHistory, runPriceAlertCheck, addMultipleCardsToCollection } from '../services/api';
 import { toCsv, parseCsv, CARD_CONDITIONS, CollectionCsvRow } from '../utils/collectionCsv';
 import CollectionValueChart from './CollectionValueChart';
 import { useAuth } from '../contexts/AuthContext';
@@ -34,21 +36,23 @@ interface CollectionMetaRow {
   condition: string | null;
 }
 
+interface CollectionPage {
+  items: CollectionItem[];
+  totalCount: number;
+  hasMore: boolean;
+  nextOffset: number;
+}
+
 export default function Collection() {
   const { user } = useAuth();
   const toast = useToast();
   const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
-  const [collection, setCollection] = useState<CollectionItem[]>([]);
-  const [isLoadingCollection, setIsLoadingCollection] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-  const [offset, setOffset] = useState(0);
-  const [totalCount, setTotalCount] = useState(0);
-  const [totalCollectionValue, setTotalCollectionValue] = useState<number>(0);
-  const [isLoadingTotalValue, setIsLoadingTotalValue] = useState(true);
-  const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
-  const [valueHistory, setValueHistory] = useState<ValueHistoryPoint[]>([]);
+  // Search term backing the currently-loaded pages: trails searchQuery by
+  // ~300ms so the (server-filtered) pages aren't refetched on every keystroke.
+  // Starts as '' (matching searchQuery) so the initial mount loads immediately.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const [selectedCard, setSelectedCard] = useState<CollectionItem | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -60,13 +64,11 @@ export default function Collection() {
     cardName: string;
   }>({ isOpen: false, cardId: '', cardName: '' });
   const observerTarget = useRef<HTMLDivElement>(null);
-  // The search term backing the currently-loaded pages. Kept in a ref so
-  // loadMoreCards (triggered by the intersection observer) can read it without
-  // being re-created on every keystroke.
-  const searchTermRef = useRef('');
-  // Whether the very first collection load has happened; used so the initial
-  // mount loads immediately while later search changes are debounced.
-  const hasLoadedOnceRef = useRef(false);
+
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300);
+    return () => clearTimeout(handle);
+  }, [searchQuery]);
 
   // Helper function to get the large image URI for hover preview
   const getCardLargeImageUri = (card: Card, faceIndex: number = 0) => {
@@ -76,41 +78,44 @@ export default function Collection() {
     return card.image_uris?.large || card.image_uris?.normal;
   };
 
-  // Calculate total collection value (lightweight query from database)
-  useEffect(() => {
-    const calculateTotalValue = async () => {
-      if (!user) {
-        setIsLoadingTotalValue(false);
-        return;
-      }
+  // Total collection value (pre-calculated in the database) and its history.
+  const { data: totalValueData, isPending: isTotalValuePending } = useQuery({
+    queryKey: ['collectionValue', user?.id],
+    enabled: !!user,
+    queryFn: () => getCollectionTotalValue(user!.id),
+  });
+  const totalCollectionValue = totalValueData ?? 0;
+  const isLoadingTotalValue = !!user && isTotalValuePending;
 
-      try {
-        setIsLoadingTotalValue(true);
-        // Get total value directly from database (no need to fetch all cards!)
-        const totalValue = await getCollectionTotalValue(user.id);
-        setTotalCollectionValue(totalValue);
-        setValueHistory(await getCollectionValueHistory(user.id));
-      } catch (error) {
-        console.error('Error calculating total collection value:', error);
-        setTotalCollectionValue(0);
-      } finally {
-        setIsLoadingTotalValue(false);
-      }
-    };
+  const { data: valueHistoryData } = useQuery({
+    queryKey: ['collectionValueHistory', user?.id],
+    enabled: !!user,
+    queryFn: () => getCollectionValueHistory(user!.id),
+  });
+  const valueHistory = valueHistoryData ?? [];
 
-    calculateTotalValue();
-  }, [user]);
+  // Every write path funnels through this: the paginated pages, the totals and
+  // the ['collection'] prefix (DeckManager/CardSearch counts, TradeCreator's
+  // full list) all read from caches that just went stale.
+  const invalidateCollectionCaches = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['myCollection'] });
+    queryClient.invalidateQueries({ queryKey: ['collectionValue'] });
+    queryClient.invalidateQueries({ queryKey: ['collectionValueHistory'] });
+    queryClient.invalidateQueries({ queryKey: ['collection'] });
+  }, [queryClient]);
 
   // Re-fetch Scryfall prices for the whole collection and persist them; the DB
   // trigger recomputes the total (which also arrives via realtime below).
+  const { mutateAsync: refreshPricesAsync, isPending: isRefreshingPrices } = useMutation({
+    mutationFn: (userId: string) => refreshCollectionPrices(userId),
+    onSuccess: invalidateCollectionCaches,
+  });
+
   const handleRefreshPrices = useCallback(
     async (opts?: { silent?: boolean }) => {
       if (!user) return;
       try {
-        setIsRefreshingPrices(true);
-        await refreshCollectionPrices(user.id);
-        setTotalCollectionValue(await getCollectionTotalValue(user.id));
-        setValueHistory(await getCollectionValueHistory(user.id));
+        await refreshPricesAsync(user.id);
         runPriceAlertCheck(user.id).catch(() => { /* alerts are best-effort */ });
         try {
           localStorage.setItem(`deckerr:pricesRefreshedAt:${user.id}`, String(Date.now()));
@@ -119,11 +124,9 @@ export default function Collection() {
       } catch (error) {
         console.error('Error refreshing prices:', error);
         if (!opts?.silent) toast.error('Failed to refresh prices');
-      } finally {
-        setIsRefreshingPrices(false);
       }
     },
-    [user, toast],
+    [user, toast, refreshPricesAsync],
   );
 
   // Auto-refresh prices at most once per day (per device) when the page opens.
@@ -154,8 +157,8 @@ export default function Collection() {
         (payload: RealtimePostgresChangesPayload<ProfileTotalValueRow>) => {
           const newProfile = payload.new as Partial<ProfileTotalValueRow>;
           if (newProfile?.collection_total_value !== undefined) {
-            console.log('Collection total value updated:', newProfile.collection_total_value);
-            setTotalCollectionValue(newProfile.collection_total_value);
+            queryClient.setQueryData(['collectionValue', user.id], newProfile.collection_total_value);
+            queryClient.invalidateQueries({ queryKey: ['collectionValueHistory', user.id] });
           }
         }
       )
@@ -164,7 +167,7 @@ export default function Collection() {
     return () => {
       supabase.removeChannel(profileChannel);
     };
-  }, [user]);
+  }, [user, queryClient]);
 
   // Fetch per-entry foil/condition metadata (not returned by the paginated API)
   // for the given card ids and index it by card_id.
@@ -195,120 +198,104 @@ export default function Collection() {
     [user],
   );
 
-  // Load user's collection (first page) from Supabase, filtered server-side by
-  // the given search term (empty string = whole collection).
-  const loadCollection = useCallback(async (search: string) => {
-    if (!user) {
-      setIsLoadingCollection(false);
-      return;
-    }
-
-    try {
-      setIsLoadingCollection(true);
-      searchTermRef.current = search;
-      setOffset(0);
-      setCollection([]);
-
+  // User's own collection, paginated (and server-side filtered by the
+  // debounced search term) for infinite scroll.
+  const collectionKey = useMemo(
+    () => ['myCollection', user?.id, debouncedSearch] as const,
+    [user?.id, debouncedSearch],
+  );
+  const {
+    data: collectionPages,
+    isPending: isCollectionPending,
+    isError: isCollectionError,
+    hasNextPage: hasMore,
+    isFetchingNextPage: isLoadingMore,
+    fetchNextPage,
+  } = useInfiniteQuery({
+    queryKey: collectionKey,
+    enabled: !!user,
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }): Promise<CollectionPage> => {
       // Get paginated (and server-side filtered) collection from Supabase
-      const result = await getUserCollectionPaginated(user.id, PAGE_SIZE, 0, search);
-      setTotalCount(result.totalCount);
-      setHasMore(result.hasMore);
+      const result = await getUserCollectionPaginated(user!.id, PAGE_SIZE, pageParam, debouncedSearch);
 
-      if (result.items.size === 0) {
-        setCollection([]);
-        return;
+      let items: CollectionItem[] = [];
+      if (result.items.size > 0) {
+        // Get the actual card data from Scryfall for all cards in this page
+        const cardIds = Array.from(result.items.keys());
+        const [cards, meta] = await Promise.all([getCardsByIds(cardIds), fetchCollectionMeta(cardIds)]);
+
+        // Combine card data with quantities and per-entry metadata
+        items = cards.map(card => ({
+          card,
+          quantity: result.items.get(card.id) || 0,
+          isFoil: meta.get(card.id)?.isFoil ?? false,
+          condition: meta.get(card.id)?.condition ?? '',
+        }));
       }
 
-      // Get the actual card data from Scryfall for all cards in this page
-      const cardIds = Array.from(result.items.keys());
-      const [cards, meta] = await Promise.all([getCardsByIds(cardIds), fetchCollectionMeta(cardIds)]);
+      return {
+        items,
+        totalCount: result.totalCount,
+        hasMore: result.hasMore,
+        nextOffset: pageParam + PAGE_SIZE,
+      };
+    },
+    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextOffset : undefined),
+  });
 
-      // Combine card data with quantities and per-entry metadata
-      const collectionWithCards: CollectionItem[] = cards.map(card => ({
-        card,
-        quantity: result.items.get(card.id) || 0,
-        isFoil: meta.get(card.id)?.isFoil ?? false,
-        condition: meta.get(card.id)?.condition ?? '',
-      }));
+  const isLoadingCollection = !!user && isCollectionPending;
+  const totalCount = collectionPages?.pages[0]?.totalCount ?? 0;
 
-      setCollection(collectionWithCards);
-      setOffset(PAGE_SIZE);
-    } catch (error) {
-      console.error('Error loading collection:', error);
-      toast.error('Failed to load collection');
-    } finally {
-      setIsLoadingCollection(false);
+  // Flatten pages, deduplicating by card id (a card can reappear across pages
+  // when the underlying collection shifts between fetches).
+  const collection = useMemo(() => {
+    const seen = new Set<string>();
+    const items: CollectionItem[] = [];
+    for (const page of collectionPages?.pages ?? []) {
+      for (const item of page.items) {
+        if (seen.has(item.card.id)) continue;
+        seen.add(item.card.id);
+        items.push(item);
+      }
     }
-  }, [user, toast, fetchCollectionMeta]);
+    return items;
+  }, [collectionPages]);
 
-  // Initial mount loads immediately; subsequent search-term changes reload the
-  // (server-filtered) first page, debounced so it doesn't fire every keystroke.
   useEffect(() => {
-    if (!user) return;
-    const term = searchQuery.trim();
+    if (isCollectionError) toast.error('Failed to load collection');
+  }, [isCollectionError, toast]);
 
-    if (!hasLoadedOnceRef.current) {
-      hasLoadedOnceRef.current = true;
-      loadCollection(term);
-      return;
-    }
-
-    const handle = setTimeout(() => {
-      loadCollection(term);
-    }, 300);
-    return () => clearTimeout(handle);
-  }, [searchQuery, user, loadCollection]);
-
-  // Load more cards for infinite scroll
-  const loadMoreCards = useCallback(async () => {
-    if (!user || isLoadingMore || !hasMore) return;
-
-    try {
-      setIsLoadingMore(true);
-
-      // Get next page of collection (same server-side search filter as the
-      // currently-loaded pages).
-      const result = await getUserCollectionPaginated(user.id, PAGE_SIZE, offset, searchTermRef.current);
-      setHasMore(result.hasMore);
-
-      if (result.items.size === 0) {
-        return;
-      }
-
-      // Get card data from Scryfall
-      const cardIds = Array.from(result.items.keys());
-      const [cards, meta] = await Promise.all([getCardsByIds(cardIds), fetchCollectionMeta(cardIds)]);
-
-      // Combine card data with quantities and per-entry metadata
-      const newCards: CollectionItem[] = cards.map(card => ({
-        card,
-        quantity: result.items.get(card.id) || 0,
-        isFoil: meta.get(card.id)?.isFoil ?? false,
-        condition: meta.get(card.id)?.condition ?? '',
-      }));
-
-      // Deduplicate: only add cards that aren't already in the collection
-      setCollection(prev => {
-        const existingIds = new Set(prev.map(item => item.card.id));
-        const uniqueNewCards = newCards.filter(item => !existingIds.has(item.card.id));
-        return [...prev, ...uniqueNewCards];
-      });
-
-      setOffset(prev => prev + PAGE_SIZE);
-    } catch (error) {
-      console.error('Error loading more cards:', error);
-      toast.error('Failed to load more cards');
-    } finally {
-      setIsLoadingMore(false);
-    }
-  }, [user, offset, hasMore, isLoadingMore, fetchCollectionMeta]);
+  // Surgically update the loaded pages so edits show up instantly; the
+  // follow-up invalidation refetches the server truth in the background.
+  const updateCachedItems = useCallback(
+    (updater: (item: CollectionItem) => CollectionItem | null) => {
+      queryClient.setQueryData<InfiniteData<CollectionPage, number>>(
+        collectionKey,
+        (prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            pages: prev.pages.map((page) => ({
+              ...page,
+              items: page.items.flatMap((item) => {
+                const next = updater(item);
+                return next ? [next] : [];
+              }),
+            })),
+          };
+        },
+      );
+    },
+    [queryClient, collectionKey],
+  );
 
   // Intersection Observer for infinite scroll
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
-          loadMoreCards();
+          fetchNextPage();
         }
       },
       { threshold: 0.1 }
@@ -324,7 +311,7 @@ export default function Collection() {
         observer.unobserve(currentTarget);
       }
     };
-  }, [hasMore, isLoadingMore, loadMoreCards]);
+  }, [hasMore, isLoadingMore, fetchNextPage]);
 
   // Update card quantity in collection
   const updateCardQuantity = async (cardId: string, newQuantity: number) => {
@@ -343,8 +330,7 @@ export default function Collection() {
 
         if (error) throw error;
 
-        // Update local state
-        setCollection(prev => prev.filter(item => item.card.id !== cardId));
+        updateCachedItems(item => (item.card.id === cardId ? null : item));
         setSelectedCard(null);
         toast.success('Card removed from collection');
       } else {
@@ -357,11 +343,8 @@ export default function Collection() {
 
         if (error) throw error;
 
-        // Update local state
-        setCollection(prev =>
-          prev.map(item =>
-            item.card.id === cardId ? { ...item, quantity: newQuantity } : item
-          )
+        updateCachedItems(item =>
+          item.card.id === cardId ? { ...item, quantity: newQuantity } : item
         );
 
         if (selectedCard && selectedCard.card.id === cardId) {
@@ -370,6 +353,8 @@ export default function Collection() {
 
         toast.success('Quantity updated');
       }
+
+      invalidateCollectionCaches();
     } catch (error) {
       console.error('Error updating card quantity:', error);
       toast.error('Failed to update quantity');
@@ -414,14 +399,11 @@ export default function Collection() {
       if (error) throw error;
 
       // Reflect the change locally right away...
-      setCollection(prev =>
-        prev.map(item => (item.card.id === card.id ? { ...item, isFoil, condition } : item)),
-      );
+      updateCachedItems(item => (item.card.id === card.id ? { ...item, isFoil, condition } : item));
       setSelectedCard(prev => (prev && prev.card.id === card.id ? { ...prev, isFoil, condition } : prev));
 
-      // ...then reload the DB-computed total (trigger recomputes it on write).
-      setTotalCollectionValue(await getCollectionTotalValue(user.id));
-      setValueHistory(await getCollectionValueHistory(user.id));
+      // ...then refetch the DB-computed totals (trigger recomputes on write).
+      invalidateCollectionCaches();
       toast.success('Card updated');
     } catch (error) {
       console.error('Error updating card variant:', error);
@@ -478,9 +460,7 @@ export default function Collection() {
       const totalAdded = rows.reduce((sum, row) => sum + row.quantity, 0);
       toast.success(`Imported ${totalAdded} card(s)`);
 
-      await loadCollection(searchTermRef.current);
-      setTotalCollectionValue(await getCollectionTotalValue(user.id));
-      setValueHistory(await getCollectionValueHistory(user.id));
+      invalidateCollectionCaches();
     } catch (error) {
       console.error('Error importing collection CSV:', error);
       toast.error('Failed to import CSV');

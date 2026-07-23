@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef, useReducer } from 'react';
+import React, { useState, useRef, useReducer } from 'react';
 import { RefreshCw, PackagePlus, Loader2, CheckCircle, Heart } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   searchCards,
-  getUserCollection,
   addCardToCollection,
   getWishlist,
   addToWishlist,
@@ -15,6 +14,7 @@ import { useToast } from '../contexts/ToastContext';
 import { isDoubleFaced } from '../utils/cardFaces';
 import { buildScryfallQuery } from '../utils/scryfallQuery';
 import { useCardFaces } from '../hooks/useCardFaces';
+import { useCollectionCounts } from '../hooks/useCollectionCounts';
 import MagicCard from './MagicCard';
 import CardRow from './card/CardRow';
 import CardTile from './card/CardTile';
@@ -147,23 +147,10 @@ const CardSearch = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Collection state
-  const [userCollection, setUserCollection] = useState<Map<string, number>>(new Map());
+  // Collection state (card_id -> quantity), same cache entry as DeckManager.
+  const { data: collectionCounts } = useCollectionCounts(user?.id);
+  const userCollection = collectionCounts ?? {};
   const [addingCardId, setAddingCardId] = useState<string | null>(null);
-
-  // Load user collection
-  useEffect(() => {
-    const loadUserCollection = async () => {
-      if (!user) return;
-      try {
-        const collection = await getUserCollection(user.id);
-        setUserCollection(collection);
-      } catch (error) {
-        console.error('Error loading user collection:', error);
-      }
-    };
-    loadUserCollection();
-  }, [user]);
 
   // Add card to collection
   const handleAddCardToCollection = async (cardId: string) => {
@@ -178,12 +165,14 @@ const CardSearch = () => {
       const priceUsd = card?.prices?.usd ? Number(card.prices.usd) : 0;
       await addCardToCollection(user.id, cardId, 1, priceUsd, card?.name);
 
-      setUserCollection(prev => {
-        const newMap = new Map(prev);
-        const currentQty = newMap.get(cardId) || 0;
-        newMap.set(cardId, currentQty + 1);
-        return newMap;
-      });
+      // Bump the cached count right away (instant feedback), then invalidate
+      // the collection caches so every consumer refetches the server truth.
+      queryClient.setQueryData<Record<string, number>>(
+        ['collection', user.id, 'counts'],
+        (prev) => ({ ...(prev ?? {}), [cardId]: (prev?.[cardId] ?? 0) + 1 }),
+      );
+      queryClient.invalidateQueries({ queryKey: ['collection'] });
+      queryClient.invalidateQueries({ queryKey: ['myCollection'] });
 
       toast.success('Card added to collection!');
     } catch (error) {
@@ -653,7 +642,7 @@ const CardSearch = () => {
               {searchResults.map((card) => {
                 const currentFaceIndex = getCurrentFaceIndex(card.id);
                 const isMultiFaced = isDoubleFaced(card);
-                const inCollection = userCollection.get(card.id) || 0;
+                const inCollection = userCollection[card.id] ?? 0;
                 const isAddingThisCard = addingCardId === card.id;
 
                 return (
@@ -721,7 +710,7 @@ const CardSearch = () => {
               {searchResults.map((card) => {
                 const currentFaceIndex = getCurrentFaceIndex(card.id);
                 const isMultiFaced = isDoubleFaced(card);
-                const inCollection = userCollection.get(card.id) || 0;
+                const inCollection = userCollection[card.id] ?? 0;
                 const isAddingThisCard = addingCardId === card.id;
 
                 const displayName = isMultiFaced && card.card_faces

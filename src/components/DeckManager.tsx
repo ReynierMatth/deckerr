@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Save, Loader2, PackagePlus, Download, Search, X, Heart } from 'lucide-react';
 import { Card, Deck } from '../types';
-import { searchCards, resolveCardsByNames, getUserCollection, addCardToCollection, addMultipleCardsToCollection, addCardsToWishlist } from '../services/api';
+import { searchCards, resolveCardsByNames, addCardToCollection, addMultipleCardsToCollection, addCardsToWishlist } from '../services/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { isDoubleFaced } from '../utils/cardFaces';
 import { useCardFaces } from '../hooks/useCardFaces';
+import { useCollectionCounts } from '../hooks/useCollectionCounts';
 import { supabase } from '../lib/supabase';
 import { validateDeck } from '../utils/deckValidation';
 import { parseDeckList } from '../utils/parseDeckList';
@@ -182,8 +183,6 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const [showSearch, setShowSearch] = useState(false);
 
   // Collection management state
-  const [userCollection, setUserCollection] = useState<Map<string, number>>(new Map());
-  const [isLoadingCollection, setIsLoadingCollection] = useState(true);
   const [addingCardId, setAddingCardId] = useState<string | null>(null);
   const [isAddingAll, setIsAddingAll] = useState(false);
   const [isAddingToWishlist, setIsAddingToWishlist] = useState(false);
@@ -192,25 +191,28 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const [hoverSource, setHoverSource] = useState<'search' | 'deck' | null>(null);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
 
-  // Load user collection on component mount
-  useEffect(() => {
-    const loadUserCollection = async () => {
-      if (!user) return;
+  // User's collection (card_id -> quantity), cached under the same key as
+  // CardSearch so both screens share one fetch.
+  const { data: collectionCounts, isPending: isLoadingCollection } = useCollectionCounts(user?.id);
+  const userCollection = collectionCounts ?? {};
 
-      try {
-        setIsLoadingCollection(true);
-        const collection = await getUserCollection(user.id);
-        setUserCollection(collection);
-      } catch (error) {
-        console.error('Error loading user collection:', error);
-        toast.error('Failed to load collection');
-      } finally {
-        setIsLoadingCollection(false);
-      }
-    };
-
-    loadUserCollection();
-  }, [user]);
+  // Bump the cached counts right away (instant feedback), then invalidate the
+  // collection caches so every consumer refetches the server truth.
+  const applyCollectionAdds = (added: { cardId: string; quantity: number }[]) => {
+    if (!user) return;
+    queryClient.setQueryData<Record<string, number>>(
+      ['collection', user.id, 'counts'],
+      (prev) => {
+        const next = { ...(prev ?? {}) };
+        added.forEach(({ cardId, quantity }) => {
+          next[cardId] = (next[cardId] ?? 0) + quantity;
+        });
+        return next;
+      },
+    );
+    queryClient.invalidateQueries({ queryKey: ['collection'] });
+    queryClient.invalidateQueries({ queryKey: ['myCollection'] });
+  };
 
   // Helper functions for double-faced cards
   const getCardLargeImageUri = (card: Card, faceIndex: number = 0) => {
@@ -222,7 +224,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
   // Helper function to check if a card is in the collection
   const isCardInCollection = (cardId: string, requiredQuantity: number = 1): boolean => {
-    const ownedQuantity = userCollection.get(cardId) || 0;
+    const ownedQuantity = userCollection[cardId] ?? 0;
     return ownedQuantity >= requiredQuantity;
   };
 
@@ -243,13 +245,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       const priceUsd = card?.prices?.usd ? Number(card.prices.usd) : 0;
       await addCardToCollection(user.id, cardId, quantity, priceUsd, card?.name);
 
-      // Update local collection state
-      setUserCollection(prev => {
-        const newMap = new Map(prev);
-        const currentQty = newMap.get(cardId) || 0;
-        newMap.set(cardId, currentQty + quantity);
-        return newMap;
-      });
+      applyCollectionAdds([{ cardId, quantity }]);
 
       toast.success('Card added to collection!');
     } catch (error) {
@@ -274,7 +270,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       setIsAddingAll(true);
 
       const cardsToAdd = missingCards.map(({ card, quantity }) => {
-        const ownedQuantity = userCollection.get(card.id) || 0;
+        const ownedQuantity = userCollection[card.id] ?? 0;
         const neededQuantity = Math.max(0, quantity - ownedQuantity);
         return {
           cardId: card.id,
@@ -286,15 +282,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
       await addMultipleCardsToCollection(user.id, cardsToAdd);
 
-      // Update local collection state
-      setUserCollection(prev => {
-        const newMap = new Map(prev);
-        cardsToAdd.forEach(({ cardId, quantity }) => {
-          const currentQty = newMap.get(cardId) || 0;
-          newMap.set(cardId, currentQty + quantity);
-        });
-        return newMap;
-      });
+      applyCollectionAdds(cardsToAdd);
 
       toast.success(`Successfully added ${cardsToAdd.length} card(s) to collection!`);
     } catch (error) {
@@ -780,7 +768,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
           card={selectedCard}
           quantityInDeck={selectedCards.find(c => c.card.id === selectedCard.id)?.quantity || 0}
           inDeck={Boolean(selectedCards.find(c => c.card.id === selectedCard.id))}
-          collectionQuantity={userCollection.has(selectedCard.id) ? userCollection.get(selectedCard.id) : undefined}
+          collectionQuantity={userCollection[selectedCard.id]}
           getCurrentFaceIndex={getCurrentFaceIndex}
           toggleCardFace={toggleCardFace}
           getLargeImageUri={getCardLargeImageUri}
