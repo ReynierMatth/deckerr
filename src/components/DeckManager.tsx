@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Loader2, PackagePlus, Download, Search, X, Star } from 'lucide-react';
+import { Save, Loader2, PackagePlus, Download, Search, X, Heart } from 'lucide-react';
 import { Card, Deck } from '../types';
 import { searchCards, resolveCardsByNames, getUserCollection, addCardToCollection, addMultipleCardsToCollection, addCardsToWishlist } from '../services/api';
 import { useQueryClient } from '@tanstack/react-query';
@@ -658,7 +658,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
                     <Loader2 className="animate-spin" size={18} />
                   ) : (
                     <>
-                      <Star size={18} />
+                      <Heart size={18} />
                       <span className="hidden sm:inline">Missing to wishlist</span>
                     </>
                   )}

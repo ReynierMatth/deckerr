@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Star, Trash2, Search } from 'lucide-react';
+import { Loader2, Heart, Trash2, Search } from 'lucide-react';
 import { Card } from '../types';
 import { getWishlist, getCardsByIds, removeFromWishlist, searchCards, addToWishlist } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -113,7 +113,7 @@ export default function Wishlist() {
           </div>
         ) : cards.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
-            <Star size={40} className="mx-auto mb-3 text-gray-600" />
+            <Heart size={40} className="mx-auto mb-3 text-gray-600" />
             <p className="text-lg mb-2">Your wishlist is empty</p>
             <p className="text-sm">Tap the star on a card in Search to add it here</p>
           </div>
