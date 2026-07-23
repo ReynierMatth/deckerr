@@ -12,7 +12,10 @@ export const suggestLandCountAndDistribution = (
   const formatRules = {
     standard: { minCards: 60 },
     modern: { minCards: 60 },
+    pioneer: { minCards: 60 },
     commander: { minCards: 100 },
+    brawl: { minCards: 60 },
+    oathbreaker: { minCards: 60 },
     legacy: { minCards: 60 },
     vintage: { minCards: 60 },
     pauper: { minCards: 60 },

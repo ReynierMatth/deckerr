@@ -210,6 +210,51 @@ export const resolveCardsByNames = async (
   return byRequested;
 };
 
+/** Lookup key for a specific printing: lower-cased "set:collector_number". */
+export const setNumberKey = (set: string, collectorNumber: string): string =>
+  `${set.trim().toLowerCase()}:${collectorNumber.trim().toLowerCase()}`;
+
+/**
+ * Batch-fetch exact printings by set code + collector number via
+ * POST /cards/collection, chunked at 75. Returns a lookup keyed by
+ * setNumberKey(set, collector_number); identifiers Scryfall cannot resolve
+ * are simply absent from the map (callers fall back to name resolution).
+ */
+export const getCardsBySetNumber = async (
+  identifiers: { set: string; collector_number: string }[],
+  signal?: AbortSignal,
+): Promise<Map<string, Card>> => {
+  const seen = new Set<string>();
+  const unique: { set: string; collector_number: string }[] = [];
+  for (const { set, collector_number } of identifiers) {
+    const normalizedSet = set.trim().toLowerCase();
+    const normalizedNumber = collector_number.trim();
+    if (!normalizedSet || !normalizedNumber) continue;
+    const key = setNumberKey(normalizedSet, normalizedNumber);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push({ set: normalizedSet, collector_number: normalizedNumber });
+  }
+
+  const byKey = new Map<string, Card>();
+  for (const chunk of chunkArray(unique, COLLECTION_CHUNK_SIZE)) {
+    const result = await scryfallFetch<ScryfallList<Card>>('/cards/collection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifiers: chunk }),
+      signal,
+    });
+    result.data?.forEach((card) => {
+      cacheCard(card);
+      if (card.set && card.collector_number) {
+        byKey.set(setNumberKey(card.set, card.collector_number), card);
+      }
+    });
+  }
+
+  return byKey;
+};
+
 /**
  * Batch-fetch cards by id via POST /cards/collection, chunked at 75.
  * Ids already in the in-memory cache are served without a network call;

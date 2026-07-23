@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 const PAGE_SIZE = 20;
 
-const FORMATS = ['standard', 'modern', 'commander', 'legacy', 'vintage', 'pauper'] as const;
+const FORMATS = ['standard', 'modern', 'pioneer', 'commander', 'brawl', 'oathbreaker', 'legacy', 'vintage', 'pauper'] as const;
 
 interface DiscoverDeck {
   id: string;

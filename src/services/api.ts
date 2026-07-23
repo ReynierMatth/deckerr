@@ -9,6 +9,8 @@ export {
   getCardById,
   getCardsByIds,
   getCardsByNames,
+  getCardsBySetNumber,
+  setNumberKey,
   getCardByFuzzyName,
   resolveCardsByNames,
   ScryfallHttpError,
@@ -310,6 +312,51 @@ export const getWishlist = async (userId: string): Promise<string[]> => {
   const { data, error } = await supabase.from('wishlists').select('card_id').eq('user_id', userId);
   if (error) throw error;
   return (data ?? []).map((r) => r.card_id);
+};
+
+export type WishlistPriority = 'high' | 'medium' | 'low';
+
+export interface WishlistEntry {
+  cardId: string;
+  quantity: number;
+  priority: WishlistPriority;
+}
+
+const WISHLIST_PRIORITIES: readonly WishlistPriority[] = ['high', 'medium', 'low'];
+
+const asWishlistPriority = (value: unknown): WishlistPriority =>
+  WISHLIST_PRIORITIES.includes(value as WishlistPriority) ? (value as WishlistPriority) : 'medium';
+
+/** Full wishlist rows (quantity + priority), unlike getWishlist's id-only membership list. */
+export const getWishlistDetailed = async (userId: string): Promise<WishlistEntry[]> => {
+  const { data, error } = await supabase
+    .from('wishlists')
+    .select('card_id, quantity, priority')
+    .eq('user_id', userId);
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    cardId: r.card_id,
+    quantity: Math.max(1, Number(r.quantity) || 1),
+    priority: asWishlistPriority(r.priority),
+  }));
+};
+
+export const updateWishlistItem = async (
+  userId: string,
+  cardId: string,
+  updates: { quantity?: number; priority?: WishlistPriority },
+): Promise<void> => {
+  const payload: { quantity?: number; priority?: WishlistPriority } = {};
+  if (updates.quantity !== undefined) payload.quantity = Math.max(1, Math.floor(updates.quantity));
+  if (updates.priority !== undefined) payload.priority = updates.priority;
+  if (Object.keys(payload).length === 0) return;
+
+  const { error } = await supabase
+    .from('wishlists')
+    .update(payload)
+    .eq('user_id', userId)
+    .eq('card_id', cardId);
+  if (error) throw error;
 };
 
 export const addToWishlist = async (userId: string, cardId: string): Promise<void> => {

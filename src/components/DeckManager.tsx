@@ -401,7 +401,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       )}
 
       {showExport && (
-        <DeckExportModal cards={selectedCards} onClose={() => setShowExport(false)} />
+        <DeckExportModal cards={selectedCards} deckName={deckName} onClose={() => setShowExport(false)} />
       )}
 
       {/* Hover Card Preview - only show if no card is selected */}
