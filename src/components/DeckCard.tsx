@@ -59,6 +59,19 @@ export default function DeckCard({ deck, onEdit }: DeckCardProps) {
             </div>
           )}
 
+          {deck.tags && deck.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1 mb-2">
+              {deck.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="px-1.5 py-0.5 bg-blue-600/30 text-blue-200 rounded text-[10px] leading-tight"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+
           <button
             onClick={(e) => {
               e.stopPropagation();

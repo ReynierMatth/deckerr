@@ -2,6 +2,7 @@ import React from 'react';
 import { Plus, Minus, Search, Loader2, CheckCircle, XCircle, AlertCircle, PackagePlus, RefreshCw } from 'lucide-react';
 import { Card } from '../../types';
 import { isDoubleFaced, getCardImageUri } from '../../utils/cardFaces';
+import WishlistButton from '../WishlistButton';
 import { ManaCost } from '../ManaCost';
 
 interface DeckCardEntry {
@@ -151,6 +152,7 @@ export default function DeckSearchPanel({
                 ) : (
                   <div className="w-full h-full bg-gray-700" />
                 )}
+                <WishlistButton cardId={card.id} className="absolute top-0.5 left-0.5" size={13} />
                 {isMultiFaced && (
                   <button
                     onClick={(e) => {

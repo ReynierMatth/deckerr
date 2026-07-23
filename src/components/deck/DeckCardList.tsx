@@ -1,7 +1,9 @@
-import React from 'react';
-import { Plus, Trash2, Loader2, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { Plus, Trash2, Loader2, AlertCircle, X, Share2, Copy, Check, PackagePlus, CheckCircle } from 'lucide-react';
 import { Card } from '../../types';
 import { ManaSymbol } from '../ManaCost';
+import { getCardArtCrop } from '../../utils/cardFaces';
+import WishlistButton from '../WishlistButton';
 
 interface DeckCardEntry {
   card: Card;
@@ -19,6 +21,12 @@ interface DeckCardListProps {
   setDeckName: React.Dispatch<React.SetStateAction<string>>;
   deckFormat: string;
   setDeckFormat: React.Dispatch<React.SetStateAction<string>>;
+  tags: string[];
+  addTag: (tag: string) => void;
+  removeTag: (tag: string) => void;
+  isPublic: boolean;
+  setIsPublic: React.Dispatch<React.SetStateAction<boolean>>;
+  deckId: string | null;
   commander: Card | null;
   setCommander: React.Dispatch<React.SetStateAction<Card | null>>;
   selectedCards: DeckCardEntry[];
@@ -29,6 +37,9 @@ interface DeckCardListProps {
   validation: DeckValidation;
   updateCardQuantity: (cardId: string, quantity: number) => void;
   removeCardFromDeck: (cardId: string) => void;
+  handleAddCardToCollection: (cardId: string, quantity: number) => void;
+  addingCardId: string | null;
+  userCollection: Map<string, number>;
   setHoveredCard: React.Dispatch<React.SetStateAction<Card | null>>;
   setHoverSource: React.Dispatch<React.SetStateAction<'search' | 'deck' | null>>;
   setSelectedCard: React.Dispatch<React.SetStateAction<Card | null>>;
@@ -49,6 +60,12 @@ export default function DeckCardList({
   setDeckName,
   deckFormat,
   setDeckFormat,
+  tags,
+  addTag,
+  removeTag,
+  isPublic,
+  setIsPublic,
+  deckId,
   commander,
   setCommander,
   selectedCards,
@@ -59,6 +76,9 @@ export default function DeckCardList({
   validation,
   updateCardQuantity,
   removeCardFromDeck,
+  handleAddCardToCollection,
+  addingCardId,
+  userCollection,
   setHoveredCard,
   setHoverSource,
   setSelectedCard,
@@ -67,6 +87,27 @@ export default function DeckCardList({
   suggestedLands,
   addSuggestedLandsToDeck,
 }: DeckCardListProps) {
+  const [tagInput, setTagInput] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const commitTag = () => {
+    addTag(tagInput);
+    setTagInput('');
+  };
+
+  const shareUrl = deckId ? `${window.location.origin}/decks/${deckId}/view` : '';
+
+  const handleCopyLink = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+
   return (
     <div className="bg-gray-800 rounded-lg p-6">
       <div className="space-y-4">
@@ -90,6 +131,101 @@ export default function DeckCardList({
           <option value="vintage">Vintage</option>
           <option value="pauper">Pauper</option>
         </select>
+
+        {/* Tags editor: add on Enter, removable chips */}
+        <div className="space-y-2">
+          <input
+            type="text"
+            value={tagInput}
+            onChange={e => setTagInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                commitTag();
+              }
+            }}
+            onBlur={commitTag}
+            className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
+            placeholder="Add tag (press Enter)"
+          />
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {tags.map(tag => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center gap-1 pl-3 pr-2 py-1 bg-blue-600/20 border border-blue-500/40 text-blue-200 rounded-full text-xs"
+                >
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => removeTag(tag)}
+                    className="text-blue-300 hover:text-white"
+                    aria-label={`Remove tag ${tag}`}
+                  >
+                    <X size={14} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Public / share controls */}
+        <div className="bg-gray-700/60 border border-gray-600 rounded-lg p-3 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Share2 size={18} className="text-blue-400 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-white">Public deck</p>
+                <p className="text-xs text-gray-400 truncate">
+                  Anyone with the link can view this deck.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isPublic}
+              aria-label="Make deck public"
+              onClick={() => setIsPublic(prev => !prev)}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                isPublic ? 'bg-blue-600' : 'bg-gray-500'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  isPublic ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {isPublic && (
+            deckId ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={shareUrl}
+                  readOnly
+                  onFocus={e => e.currentTarget.select()}
+                  className="flex-1 min-w-0 px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-xs text-gray-300"
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium text-white transition-colors"
+                >
+                  {copied ? <Check size={16} /> : <Copy size={16} />}
+                  <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy link'}</span>
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-yellow-400">
+                Save the deck first to get a shareable link.
+              </p>
+            )
+          )}
+        </div>
 
         {deckFormat === 'commander' && (
           <div className="space-y-2">
@@ -167,12 +303,13 @@ export default function DeckCardList({
 
           {selectedCards.map(({ card, quantity }) => {
             const isValidForCommander = deckFormat !== 'commander' || !commander || isCardValidForCommander(card, commanderColors);
+            const inCollection = userCollection.get(card.id) || 0;
 
             return (
               <div
                 key={card.id}
-                className={`flex items-center gap-3 p-2 rounded-lg bg-gray-700 cursor-pointer hover:bg-gray-650 transition-colors ${
-                  !isValidForCommander ? 'border border-yellow-500/50' : ''
+                className={`flex bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-750 transition-colors cursor-pointer ${
+                  !isValidForCommander ? 'ring-1 ring-yellow-500/50' : ''
                 }`}
                 onMouseEnter={() => {
                   setHoveredCard(card);
@@ -184,16 +321,27 @@ export default function DeckCardList({
                 }}
                 onClick={() => setSelectedCard(card)}
               >
-                <img
-                  src={card.image_uris?.art_crop}
-                  alt={card.name}
-                  className="w-10 h-10 rounded"
-                />
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-medium text-sm truncate">{card.name}</h4>
-                  {card.prices?.usd && (
-                    <div className="text-xs text-gray-400">${card.prices.usd}</div>
+                {/* Card art crop */}
+                <div className="relative w-16 h-16 flex-shrink-0">
+                  {getCardArtCrop(card) ? (
+                    <img src={getCardArtCrop(card)} alt={card.name} className="w-full h-full object-cover rounded-l-lg" />
+                  ) : (
+                    <div className="w-full h-full bg-gray-700 rounded-l-lg" />
                   )}
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 p-2 flex flex-col justify-center min-w-0">
+                  <h4 className="font-bold text-sm truncate">{card.name}</h4>
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    {card.prices?.usd && <span>${card.prices.usd}</span>}
+                    {inCollection > 0 && (
+                      <span className="text-green-400 flex items-center gap-0.5">
+                        <CheckCircle size={10} />
+                        x{inCollection}
+                      </span>
+                    )}
+                  </div>
                   {!isValidForCommander && (
                     <div className="text-xs text-yellow-400 flex items-center gap-1 mt-0.5">
                       <AlertCircle size={10} />
@@ -201,21 +349,33 @@ export default function DeckCardList({
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+
+                {/* Controls: quantity + remove-from-deck + wishlist + add-to-collection */}
+                <div className="flex items-center gap-1.5 p-2" onClick={(e) => e.stopPropagation()}>
                   <input
                     type="number"
                     value={quantity}
-                    onChange={e =>
-                      updateCardQuantity(card.id, parseInt(e.target.value))
-                    }
+                    onChange={e => updateCardQuantity(card.id, parseInt(e.target.value))}
                     min="1"
-                    className="w-14 px-2 py-1 bg-gray-600 border border-gray-500 rounded text-center text-sm"
+                    className="w-12 px-1 py-2 bg-gray-700 border border-gray-600 rounded-lg text-center text-sm"
                   />
                   <button
                     onClick={() => removeCardFromDeck(card.id)}
-                    className="text-red-500 hover:text-red-400"
+                    title="Remove from deck"
+                    aria-label="Remove from deck"
+                    className="p-2.5 bg-gray-700 text-red-400 active:bg-gray-600 rounded-lg"
                   >
                     <Trash2 size={18} />
+                  </button>
+                  <WishlistButton cardId={card.id} variant="button" size={18} />
+                  <button
+                    onClick={() => handleAddCardToCollection(card.id, 1)}
+                    disabled={addingCardId === card.id}
+                    title="Add to collection"
+                    aria-label="Add to collection"
+                    className="p-2.5 bg-green-600 active:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg"
+                  >
+                    {addingCardId === card.id ? <Loader2 className="animate-spin" size={18} /> : <PackagePlus size={18} />}
                   </button>
                 </div>
               </div>

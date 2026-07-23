@@ -12,10 +12,13 @@ import LoginForm from './components/LoginForm';
 import DeckList from './components/DeckList';
 import DeckManager from './components/DeckManager';
 import Collection from './components/Collection';
+import Wishlist from './components/Wishlist';
 import Community from './components/Community';
 import CardSearch from './components/CardSearch';
 import LifeCounter from './components/LifeCounter';
+import PriceAlerts from './components/PriceAlerts';
 import DeckEditor from './components/DeckEditor';
+import PublicDeck from './components/PublicDeck';
 
 /**
  * App shell + auth gate. Mirrors the previous behaviour: a spinner while auth
@@ -41,7 +44,7 @@ function RootLayout() {
     <div className="min-h-screen bg-gray-900 flex flex-col">
       <Navigation />
       <main className="relative flex-1 overflow-y-auto">
-        <div className="relative min-h-full md:min-h-0 pt-0 md:pt-16 pb-20 md:pb-0">
+        <div className="relative min-h-full md:min-h-0 pt-14 md:pt-16 pb-20 md:pb-0">
           <Outlet />
         </div>
       </main>
@@ -73,26 +76,41 @@ function EditDeckPage() {
   return <DeckEditor deckId={deckId} onClose={() => navigate({ to: '/' })} />;
 }
 
+function ViewDeckPage() {
+  const { deckId } = viewDeckRoute.useParams();
+  return <PublicDeck deckId={deckId} />;
+}
+
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: HomePage });
 const deckRoute = createRoute({ getParentRoute: () => rootRoute, path: '/deck', component: DeckManager });
 const collectionRoute = createRoute({ getParentRoute: () => rootRoute, path: '/collection', component: Collection });
+const wishlistRoute = createRoute({ getParentRoute: () => rootRoute, path: '/wishlist', component: Wishlist });
 const communityRoute = createRoute({ getParentRoute: () => rootRoute, path: '/community', component: Community });
 const searchRoute = createRoute({ getParentRoute: () => rootRoute, path: '/search', component: CardSearch });
 const lifeCounterRoute = createRoute({ getParentRoute: () => rootRoute, path: '/life-counter', component: LifeCounter });
+const alertsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/alerts', component: PriceAlerts });
 const editDeckRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/decks/$deckId/edit',
   component: EditDeckPage,
+});
+const viewDeckRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/decks/$deckId/view',
+  component: ViewDeckPage,
 });
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
   deckRoute,
   collectionRoute,
+  wishlistRoute,
   communityRoute,
   searchRoute,
   lifeCounterRoute,
+  alertsRoute,
   editDeckRoute,
+  viewDeckRoute,
 ]);
 
 export const router = createRouter({ routeTree });

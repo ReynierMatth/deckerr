@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Loader2, PackagePlus } from 'lucide-react';
+import { Save, Loader2, PackagePlus, Download, Search, X, Heart } from 'lucide-react';
 import { Card, Deck } from '../types';
-import { searchCards, resolveCardsByNames, getUserCollection, addCardToCollection, addMultipleCardsToCollection } from '../services/api';
+import { searchCards, resolveCardsByNames, getUserCollection, addCardToCollection, addMultipleCardsToCollection, addCardsToWishlist } from '../services/api';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { isDoubleFaced } from '../utils/cardFaces';
@@ -11,8 +12,11 @@ import { validateDeck } from '../utils/deckValidation';
 import { parseDeckList } from '../utils/parseDeckList';
 import CardDetailPanel from './deck/CardDetailPanel';
 import HoverCardPreview from './deck/HoverCardPreview';
+import DeckExportModal from './deck/DeckExportModal';
 import DeckSearchPanel from './deck/DeckSearchPanel';
 import DeckCardList from './deck/DeckCardList';
+import DeckStats from './deck/DeckStats';
+import SampleHand from './deck/SampleHand';
 
 interface DeckManagerProps {
   initialDeck?: Deck;
@@ -141,6 +145,8 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   }[]>(initialDeck?.cards || []);
   const [deckName, setDeckName] = useState(initialDeck?.name || '');
   const [deckFormat, setDeckFormat] = useState(initialDeck?.format || 'standard');
+  const [tags, setTags] = useState<string[]>(initialDeck?.tags ?? []);
+  const [isPublic, setIsPublic] = useState<boolean>(initialDeck?.isPublic ?? false);
   const [commander, setCommander] = useState<Card | null>(
       initialDeck?.cards.find(card =>
           card.is_commander
@@ -150,12 +156,16 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const { user } = useAuth();
   const [isImporting, setIsImporting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
 
   // Collection management state
   const [userCollection, setUserCollection] = useState<Map<string, number>>(new Map());
   const [isLoadingCollection, setIsLoadingCollection] = useState(true);
   const [addingCardId, setAddingCardId] = useState<string | null>(null);
   const [isAddingAll, setIsAddingAll] = useState(false);
+  const [isAddingToWishlist, setIsAddingToWishlist] = useState(false);
+  const queryClient = useQueryClient();
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const [hoverSource, setHoverSource] = useState<'search' | 'deck' | null>(null);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
@@ -209,7 +219,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       setAddingCardId(cardId);
       const card = selectedCards.find(c => c.card.id === cardId)?.card;
       const priceUsd = card?.prices?.usd ? Number(card.prices.usd) : 0;
-      await addCardToCollection(user.id, cardId, quantity, priceUsd);
+      await addCardToCollection(user.id, cardId, quantity, priceUsd, card?.name);
 
       // Update local collection state
       setUserCollection(prev => {
@@ -248,6 +258,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
           cardId: card.id,
           quantity: neededQuantity,
           priceUsd: card.prices?.usd ? Number(card.prices.usd) : 0,
+          cardName: card.name,
         };
       }).filter(c => c.quantity > 0);
 
@@ -269,6 +280,26 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       toast.error('Failed to add cards to collection');
     } finally {
       setIsAddingAll(false);
+    }
+  };
+
+  const handleAddMissingToWishlist = async () => {
+    if (!user) return;
+    const missing = getMissingCards();
+    if (missing.length === 0) {
+      toast.success('You already own every card in this deck!');
+      return;
+    }
+    try {
+      setIsAddingToWishlist(true);
+      await addCardsToWishlist(user.id, missing.map((m) => m.card.id));
+      await queryClient.invalidateQueries({ queryKey: ['wishlist'] });
+      toast.success(`Added ${missing.length} missing card(s) to your wishlist`);
+    } catch (error) {
+      console.error('Error adding to wishlist:', error);
+      toast.error('Failed to add to wishlist');
+    } finally {
+      setIsAddingToWishlist(false);
     }
   };
 
@@ -305,6 +336,15 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const removeCardFromDeck = (cardId: string) =>
     setSelectedCards(prev => prev.filter(c => c.card.id !== cardId));
 
+  const addTag = (tag: string) => {
+    const trimmed = tag.trim();
+    if (!trimmed) return;
+    setTags(prev => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
+  };
+
+  const removeTag = (tag: string) =>
+    setTags(prev => prev.filter(t => t !== tag));
+
   const updateCardQuantity = (cardId: string, quantity: number) => {
     setSelectedCards(prev => {
       return prev.map(c => {
@@ -330,6 +370,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         userId: user.id,
         createdAt: initialDeck?.createdAt || new Date(),
         updatedAt: new Date(),
+        tags,
       };
 
       // Calculate validation for storage
@@ -354,6 +395,8 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         validation_errors: validation.errors,
         is_valid: validation.isValid,
         card_count: totalCardCount,
+        tags,
+        is_public: isPublic,
       };
 
       // Save or update the deck
@@ -521,32 +564,14 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   return (
     <div className="relative bg-gray-900 text-white p-3 sm:p-6 pt-6 pb-44 md:pt-20 md:pb-6 md:min-h-screen">
       <div className="max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-          {/* Card Search Section */}
-          <DeckSearchPanel
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            setSearchResults={setSearchResults}
-            handleSearch={handleSearch}
-            isSearching={isSearching}
-            searchResults={searchResults}
-            selectedCards={selectedCards}
-            userCollection={userCollection}
-            addingCardId={addingCardId}
-            deckFormat={deckFormat}
-            commander={commander}
-            commanderColors={commanderColors}
-            isCardValidForCommander={isCardValidForCommander}
-            getCurrentFaceIndex={getCurrentFaceIndex}
-            toggleCardFace={toggleCardFace}
-            addCardToDeck={addCardToDeck}
-            removeCardFromDeck={removeCardFromDeck}
-            updateCardQuantity={updateCardQuantity}
-            handleAddCardToCollection={handleAddCardToCollection}
-            setHoveredCard={setHoveredCard}
-            setHoverSource={setHoverSource}
-            setSelectedCard={setSelectedCard}
-          />
+        <div className="max-w-3xl mx-auto">
+          {/* Open the card-search drawer/modal */}
+          <button
+            onClick={() => setShowSearch(true)}
+            className="w-full mb-4 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium text-white transition-colors"
+          >
+            <Search size={18} /> Add cards
+          </button>
 
           {/* Deck Builder Section */}
           <DeckCardList
@@ -554,6 +579,12 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
             setDeckName={setDeckName}
             deckFormat={deckFormat}
             setDeckFormat={setDeckFormat}
+            tags={tags}
+            addTag={addTag}
+            removeTag={removeTag}
+            isPublic={isPublic}
+            setIsPublic={setIsPublic}
+            deckId={currentDeckId}
             commander={commander}
             setCommander={setCommander}
             selectedCards={selectedCards}
@@ -564,6 +595,9 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
             validation={validation}
             updateCardQuantity={updateCardQuantity}
             removeCardFromDeck={removeCardFromDeck}
+            handleAddCardToCollection={handleAddCardToCollection}
+            addingCardId={addingCardId}
+            userCollection={userCollection}
             setHoveredCard={setHoveredCard}
             setHoverSource={setHoverSource}
             setSelectedCard={setSelectedCard}
@@ -572,6 +606,18 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
             suggestedLands={suggestedLands}
             addSuggestedLandsToDeck={addSuggestedLandsToDeck}
           />
+
+          {/* Deck Stats */}
+          <div className="mt-6 bg-gray-800 border border-gray-700 rounded-lg p-4">
+            <h2 className="text-lg font-semibold text-white mb-3">Deck Stats</h2>
+            <DeckStats cards={selectedCards} />
+          </div>
+
+          {/* Sample Hand */}
+          <div className="mt-4 bg-gray-800 border border-gray-700 rounded-lg p-4">
+            <h2 className="text-lg font-semibold text-white mb-3">Sample Hand</h2>
+            <SampleHand cards={selectedCards} />
+          </div>
         </div>
       </div>
 
@@ -587,22 +633,47 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
           {/* Action Buttons */}
           <div className="flex gap-2">
             {!isLoadingCollection && getMissingCards().length > 0 && (
-              <button
-                onClick={handleAddAllMissingCards}
-                disabled={isAddingAll}
-                className="flex-1 px-3 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors"
-                title="Add missing cards to collection"
-              >
-                {isAddingAll ? (
-                  <Loader2 className="animate-spin" size={18} />
-                ) : (
-                  <>
-                    <PackagePlus size={18} />
-                    <span className="hidden sm:inline">Add Missing</span>
-                  </>
-                )}
-              </button>
+              <>
+                <button
+                  onClick={handleAddAllMissingCards}
+                  disabled={isAddingAll}
+                  className="flex-1 px-3 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors"
+                  title="Add missing cards to your collection"
+                >
+                  {isAddingAll ? (
+                    <Loader2 className="animate-spin" size={18} />
+                  ) : (
+                    <>
+                      <PackagePlus size={18} />
+                      <span className="hidden sm:inline">Missing to collection</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleAddMissingToWishlist}
+                  disabled={isAddingToWishlist}
+                  className="flex-1 px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors"
+                  title="Add missing cards to your wishlist"
+                >
+                  {isAddingToWishlist ? (
+                    <Loader2 className="animate-spin" size={18} />
+                  ) : (
+                    <>
+                      <Heart size={18} />
+                      <span className="hidden sm:inline">Missing to wishlist</span>
+                    </>
+                  )}
+                </button>
+              </>
             )}
+            <button
+              onClick={() => setShowExport(true)}
+              disabled={selectedCards.length === 0}
+              title="Export deck"
+              className="px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed rounded-lg flex items-center justify-center transition-colors"
+            >
+              <Download size={18} />
+            </button>
             <button
               onClick={saveDeck}
               disabled={
@@ -625,6 +696,51 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
           </div>
         </div>
       </div>
+
+      {/* Card search — bottom drawer on mobile, centered modal on desktop */}
+      {showSearch && (
+        <div className="fixed inset-0 z-40 flex items-end md:items-center md:justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowSearch(false)} />
+          <div className="relative w-full md:max-w-3xl bg-gray-900 border border-gray-700 rounded-t-2xl md:rounded-xl max-h-[90vh] md:max-h-[85vh] flex flex-col shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between p-3 border-b border-gray-700 bg-gray-900 rounded-t-2xl md:rounded-t-xl">
+              <h2 className="text-lg font-semibold text-white">Add cards</h2>
+              <button onClick={() => setShowSearch(false)} className="p-1 text-gray-400 hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-3">
+              <DeckSearchPanel
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                setSearchResults={setSearchResults}
+                handleSearch={handleSearch}
+                isSearching={isSearching}
+                searchResults={searchResults}
+                selectedCards={selectedCards}
+                userCollection={userCollection}
+                addingCardId={addingCardId}
+                deckFormat={deckFormat}
+                commander={commander}
+                commanderColors={commanderColors}
+                isCardValidForCommander={isCardValidForCommander}
+                getCurrentFaceIndex={getCurrentFaceIndex}
+                toggleCardFace={toggleCardFace}
+                addCardToDeck={addCardToDeck}
+                removeCardFromDeck={removeCardFromDeck}
+                updateCardQuantity={updateCardQuantity}
+                handleAddCardToCollection={handleAddCardToCollection}
+                setHoveredCard={setHoveredCard}
+                setHoverSource={setHoverSource}
+                setSelectedCard={setSelectedCard}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showExport && (
+        <DeckExportModal cards={selectedCards} onClose={() => setShowExport(false)} />
+      )}
 
       {/* Hover Card Preview - only show if no card is selected */}
       {hoveredCard && !selectedCard && (
