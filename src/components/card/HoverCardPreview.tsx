@@ -1,15 +1,14 @@
 import { Card } from '../../types';
-import { isDoubleFaced } from '../../utils/cardFaces';
+import { isDoubleFaced, getCardLargeImageUri } from '../../utils/cardFaces';
 
 interface HoverCardPreviewProps {
   card: Card;
   hoverSource: 'search' | 'deck' | null;
   getCurrentFaceIndex: (cardId: string) => number;
-  getLargeImageUri: (card: Card, faceIndex?: number) => string | undefined;
 }
 
 /**
- * Presentational hover preview shown next to the search/deck lists. Rendering is
+ * Presentational hover preview shown next to card lists/grids. Rendering is
  * gated by the parent ("only show if no card is selected"); this component just
  * draws the hovered card.
  */
@@ -17,7 +16,6 @@ export default function HoverCardPreview({
   card,
   hoverSource,
   getCurrentFaceIndex,
-  getLargeImageUri,
 }: HoverCardPreviewProps) {
   const currentFaceIndex = getCurrentFaceIndex(card.id);
   const isMultiFaced = isDoubleFaced(card);
@@ -37,7 +35,7 @@ export default function HoverCardPreview({
       <div className="bg-gray-800 rounded-lg shadow-2xl p-4 max-w-md">
         <div className="relative">
           <img
-            src={getLargeImageUri(card, currentFaceIndex)}
+            src={getCardLargeImageUri(card, currentFaceIndex)}
             alt={displayName}
             className="w-full h-auto rounded-lg shadow-lg"
           />
