@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Library, LogOut, ChevronDown, Search, Heart, HeartPulse, Users, Bell, MoreHorizontal, X } from 'lucide-react';
+import { Library, LogOut, ChevronDown, Compass, Search, Heart, HeartPulse, Users, Bell, MoreHorizontal, X } from 'lucide-react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
@@ -43,6 +43,7 @@ export default function Navigation() {
     { to: '/collection', label: 'Collection', icon: Library },
     { to: '/wishlist', label: 'Wishlist', icon: Heart },
     { to: '/community', label: 'Community', icon: Users },
+    { to: '/discover', label: 'Discover', icon: Compass },
     { to: '/search', label: 'Search', icon: Search },
     { to: '/life-counter', label: 'Life', icon: HeartPulse },
     { to: '/alerts', label: 'Alerts', icon: Bell },
