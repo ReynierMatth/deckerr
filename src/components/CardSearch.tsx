@@ -174,7 +174,7 @@ const CardSearch = () => {
       setAddingCardId(cardId);
       const card = searchResults.find(c => c.id === cardId);
       const priceUsd = card?.prices?.usd ? Number(card.prices.usd) : 0;
-      await addCardToCollection(user.id, cardId, 1, priceUsd);
+      await addCardToCollection(user.id, cardId, 1, priceUsd, card?.name);
 
       setUserCollection(prev => {
         const newMap = new Map(prev);

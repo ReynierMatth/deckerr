@@ -39,7 +39,6 @@ export default function Collection() {
   const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
   const [searchQuery, setSearchQuery] = useState('');
   const [collection, setCollection] = useState<CollectionItem[]>([]);
-  const [filteredCollection, setFilteredCollection] = useState<CollectionItem[]>([]);
   const [isLoadingCollection, setIsLoadingCollection] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -60,6 +59,13 @@ export default function Collection() {
     cardName: string;
   }>({ isOpen: false, cardId: '', cardName: '' });
   const observerTarget = useRef<HTMLDivElement>(null);
+  // The search term backing the currently-loaded pages. Kept in a ref so
+  // loadMoreCards (triggered by the intersection observer) can read it without
+  // being re-created on every keystroke.
+  const searchTermRef = useRef('');
+  // Whether the very first collection load has happened; used so the initial
+  // mount loads immediately while later search changes are debounced.
+  const hasLoadedOnceRef = useRef(false);
 
   // Helper function to get the large image URI for hover preview
   const getCardLargeImageUri = (card: Card, faceIndex: number = 0) => {
@@ -188,8 +194,9 @@ export default function Collection() {
     [user],
   );
 
-  // Load user's collection (first page) from Supabase.
-  const loadCollection = useCallback(async () => {
+  // Load user's collection (first page) from Supabase, filtered server-side by
+  // the given search term (empty string = whole collection).
+  const loadCollection = useCallback(async (search: string) => {
     if (!user) {
       setIsLoadingCollection(false);
       return;
@@ -197,17 +204,17 @@ export default function Collection() {
 
     try {
       setIsLoadingCollection(true);
+      searchTermRef.current = search;
       setOffset(0);
       setCollection([]);
 
-      // Get paginated collection from Supabase
-      const result = await getUserCollectionPaginated(user.id, PAGE_SIZE, 0);
+      // Get paginated (and server-side filtered) collection from Supabase
+      const result = await getUserCollectionPaginated(user.id, PAGE_SIZE, 0, search);
       setTotalCount(result.totalCount);
       setHasMore(result.hasMore);
 
       if (result.items.size === 0) {
         setCollection([]);
-        setFilteredCollection([]);
         return;
       }
 
@@ -224,7 +231,6 @@ export default function Collection() {
       }));
 
       setCollection(collectionWithCards);
-      setFilteredCollection(collectionWithCards);
       setOffset(PAGE_SIZE);
     } catch (error) {
       console.error('Error loading collection:', error);
@@ -234,9 +240,23 @@ export default function Collection() {
     }
   }, [user, toast, fetchCollectionMeta]);
 
+  // Initial mount loads immediately; subsequent search-term changes reload the
+  // (server-filtered) first page, debounced so it doesn't fire every keystroke.
   useEffect(() => {
-    loadCollection();
-  }, [loadCollection]);
+    if (!user) return;
+    const term = searchQuery.trim();
+
+    if (!hasLoadedOnceRef.current) {
+      hasLoadedOnceRef.current = true;
+      loadCollection(term);
+      return;
+    }
+
+    const handle = setTimeout(() => {
+      loadCollection(term);
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [searchQuery, user, loadCollection]);
 
   // Load more cards for infinite scroll
   const loadMoreCards = useCallback(async () => {
@@ -245,8 +265,9 @@ export default function Collection() {
     try {
       setIsLoadingMore(true);
 
-      // Get next page of collection
-      const result = await getUserCollectionPaginated(user.id, PAGE_SIZE, offset);
+      // Get next page of collection (same server-side search filter as the
+      // currently-loaded pages).
+      const result = await getUserCollectionPaginated(user.id, PAGE_SIZE, offset, searchTermRef.current);
       setHasMore(result.hasMore);
 
       if (result.items.size === 0) {
@@ -303,26 +324,6 @@ export default function Collection() {
       }
     };
   }, [hasMore, isLoadingMore, loadMoreCards]);
-
-  // Filter collection based on search query
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredCollection(collection);
-      return;
-    }
-
-    const query = searchQuery.toLowerCase();
-    const filtered = collection.filter(({ card }) => {
-      return (
-        card.name.toLowerCase().includes(query) ||
-        card.type_line?.toLowerCase().includes(query) ||
-        card.oracle_text?.toLowerCase().includes(query) ||
-        card.colors?.some(color => color.toLowerCase().includes(query))
-      );
-    });
-
-    setFilteredCollection(filtered);
-  }, [searchQuery, collection]);
 
   // Update card quantity in collection
   const updateCardQuantity = async (cardId: string, newQuantity: number) => {
@@ -476,7 +477,7 @@ export default function Collection() {
       const totalAdded = rows.reduce((sum, row) => sum + row.quantity, 0);
       toast.success(`Imported ${totalAdded} card(s)`);
 
-      await loadCollection();
+      await loadCollection(searchTermRef.current);
       setTotalCollectionValue(await getCollectionTotalValue(user.id));
       setValueHistory(await getCollectionValueHistory(user.id));
     } catch (error) {
@@ -510,7 +511,7 @@ export default function Collection() {
         <div>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
             <h2 className="text-xl font-semibold">
-              {searchQuery ? `Found ${filteredCollection.length} card(s)` : `My Cards (${collection.length} unique, ${collection.reduce((acc, c) => acc + c.quantity, 0)} total)`}
+              {searchQuery ? `Found ${totalCount} card(s)` : `My Cards (${collection.length} unique, ${collection.reduce((acc, c) => acc + c.quantity, 0)} total)`}
             </h2>
             {/* Collection Value Summary */}
             <div className="flex items-center gap-2">
@@ -522,8 +523,8 @@ export default function Collection() {
                   {isLoadingTotalValue ? (
                     <Loader2 className="animate-spin" size={20} />
                   ) : searchQuery ? (
-                    // For search results, calculate from filtered collection
-                    `$${filteredCollection.reduce((total, { card, quantity }) => {
+                    // For search results, best-effort sum over currently-loaded results
+                    `$${collection.reduce((total, { card, quantity }) => {
                       const price = card.prices?.usd ? parseFloat(card.prices.usd) : 0;
                       return total + (price * quantity);
                     }, 0).toFixed(2)}`
@@ -578,18 +579,20 @@ export default function Collection() {
               <Loader2 className="animate-spin text-blue-500" size={48} />
             </div>
           ) : collection.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <p className="text-lg mb-2">Your collection is empty</p>
-              <p className="text-sm">Add cards from the Deck Manager to build your collection</p>
-            </div>
-          ) : filteredCollection.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <p className="text-lg mb-2">No cards found</p>
-              <p className="text-sm">Try a different search term</p>
-            </div>
+            searchQuery.trim() ? (
+              <div className="text-center py-12 text-gray-400">
+                <p className="text-lg mb-2">No cards found</p>
+                <p className="text-sm">Try a different search term</p>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-400">
+                <p className="text-lg mb-2">Your collection is empty</p>
+                <p className="text-sm">Add cards from the Deck Manager to build your collection</p>
+              </div>
+            )
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-1.5 sm:gap-2">
-              {filteredCollection.map((item) => {
+              {collection.map((item) => {
                 const { card, quantity, isFoil } = item;
                 const currentFaceIndex = getCurrentFaceIndex(card.id);
                 const isMultiFaced = isDoubleFaced(card);
@@ -655,21 +658,21 @@ export default function Collection() {
           )}
 
           {/* Infinite scroll loading indicator */}
-          {!searchQuery && isLoadingMore && (
+          {isLoadingMore && (
             <div className="flex justify-center py-8">
               <Loader2 className="animate-spin text-blue-500" size={32} />
             </div>
           )}
 
           {/* Observer target for infinite scroll */}
-          {!searchQuery && hasMore && !isLoadingMore && (
+          {hasMore && !isLoadingMore && (
             <div ref={observerTarget} className="h-20" />
           )}
 
           {/* End of collection indicator */}
-          {!searchQuery && !hasMore && collection.length > 0 && (
+          {!hasMore && collection.length > 0 && (
             <div className="text-center py-8 text-gray-500 text-sm">
-              End of collection • {totalCount} total cards
+              {searchQuery ? `End of results • ${totalCount} matching card(s)` : `End of collection • ${totalCount} total cards`}
             </div>
           )}
         </div>
