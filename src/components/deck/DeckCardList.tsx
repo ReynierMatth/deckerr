@@ -39,7 +39,7 @@ interface DeckCardListProps {
   removeCardFromDeck: (cardId: string) => void;
   handleAddCardToCollection: (cardId: string, quantity: number) => void;
   addingCardId: string | null;
-  userCollection: Map<string, number>;
+  userCollection: Record<string, number>;
   setHoveredCard: React.Dispatch<React.SetStateAction<Card | null>>;
   setHoverSource: React.Dispatch<React.SetStateAction<'search' | 'deck' | null>>;
   setSelectedCard: React.Dispatch<React.SetStateAction<Card | null>>;
@@ -303,7 +303,7 @@ export default function DeckCardList({
 
           {selectedCards.map(({ card, quantity }) => {
             const isValidForCommander = deckFormat !== 'commander' || !commander || isCardValidForCommander(card, commanderColors);
-            const inCollection = userCollection.get(card.id) || 0;
+            const inCollection = userCollection[card.id] ?? 0;
 
             return (
               <CardRow
