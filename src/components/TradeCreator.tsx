@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, ArrowLeftRight, ArrowRight, ArrowLeft, Minus, Send, Gift, Loader2, Search } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -16,6 +17,8 @@ interface SelectedCard {
   quantity: number;
   maxQuantity: number;
 }
+
+const EMPTY_COLLECTION: CollectionItem[] = [];
 
 // ============ MOVED OUTSIDE TO PREVENT RE-RENDER ============
 
@@ -236,8 +239,7 @@ export default function TradeCreator({
 }: TradeCreatorProps) {
   const { user } = useAuth();
   const toast = useToast();
-  const [myCollection, setMyCollection] = useState<CollectionItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(initialMessage);
 
@@ -250,9 +252,24 @@ export default function TradeCreator({
   const [myCollectionSearch, setMyCollectionSearch] = useState('');
   const [theirCollectionSearch, setTheirCollectionSearch] = useState('');
 
-  useEffect(() => {
-    loadMyCollection();
-  }, [user]);
+  // My full collection joined with card data (never returns Map/Set: arrays only).
+  const { data: myCollectionData, isPending: loading } = useQuery({
+    queryKey: ['collection', user?.id, 'full'],
+    enabled: !!user,
+    queryFn: async (): Promise<CollectionItem[]> => {
+      const collectionMap = await getUserCollection(user!.id);
+      if (collectionMap.size === 0) return [];
+
+      const cardIds = Array.from(collectionMap.keys());
+      const cards = await getCardsByIds(cardIds);
+
+      return cards.map((card) => ({
+        card,
+        quantity: collectionMap.get(card.id) || 0,
+      }));
+    },
+  });
+  const myCollection = myCollectionData ?? EMPTY_COLLECTION;
 
   useEffect(() => {
     if (isGiftMode) {
@@ -313,32 +330,6 @@ export default function TradeCreator({
     });
     setWantedCards(receiverMap);
   }, [editMode, myCollection, receiverCollection, initialSenderCards, initialReceiverCards]);
-
-  const loadMyCollection = async () => {
-    if (!user) return;
-    setLoading(true);
-    try {
-      const collectionMap = await getUserCollection(user.id);
-      if (collectionMap.size === 0) {
-        setMyCollection([]);
-        return;
-      }
-
-      const cardIds = Array.from(collectionMap.keys());
-      const cards = await getCardsByIds(cardIds);
-
-      const collectionWithCards = cards.map((card) => ({
-        card,
-        quantity: collectionMap.get(card.id) || 0,
-      }));
-
-      setMyCollection(collectionWithCards);
-    } catch (error) {
-      console.error('Error loading my collection:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const addToOffer = (card: Card, maxQuantity: number) => {
     setMyOfferedCards((prev) => {
@@ -437,6 +428,11 @@ export default function TradeCreator({
         });
         toast.success('Trade offer sent!');
       }
+
+      // Realtime also covers these, but invalidate eagerly so lists/badges
+      // update even if the websocket is flaky.
+      queryClient.invalidateQueries({ queryKey: ['trades'] });
+      queryClient.invalidateQueries({ queryKey: ['communityPendingTrades'] });
 
       onTradeCreated();
     } catch (error) {

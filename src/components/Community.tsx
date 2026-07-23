@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, X, Settings, ChevronLeft, RefreshCw, Sparkles } from 'lucide-react';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { useAuth } from '../contexts/AuthContext';
@@ -49,9 +49,19 @@ interface TradeRealtimeRow {
   user2_id: string;
 }
 
+/** One page of a viewed user's collection. Arrays/objects only — TanStack
+ * Query structural sharing does not preserve Map/Set. */
+interface UserCollectionPage {
+  items: CollectionItem[];
+  totalCount: number;
+  hasMore: boolean;
+  nextOffset: number;
+}
+
 type Tab = 'browse' | 'friends' | 'trades' | 'suggestions' | 'profile';
 
 const PAGE_SIZE = 50;
+const EMPTY_PROFILES: UserProfile[] = [];
 
 export default function Community() {
   const { user } = useAuth();
@@ -59,20 +69,10 @@ export default function Community() {
   const queryClient = useQueryClient();
   const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
   const [activeTab, setActiveTab] = useState<Tab>('browse');
-  const [loading, setLoading] = useState(true);
 
-  // Browse state
+  // Browse state (local UI only — server data lives in queries below)
   const [browseSearch, setBrowseSearch] = useState('');
-  const [publicUsers, setPublicUsers] = useState<UserProfile[]>([]);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
-  const [selectedUserCollection, setSelectedUserCollection] = useState<CollectionItem[]>([]);
-  const [loadingCollection, setLoadingCollection] = useState(false);
-  const [isLoadingMoreUserCards, setIsLoadingMoreUserCards] = useState(false);
-  const [hasMoreUserCards, setHasMoreUserCards] = useState(false);
-  const [userCollectionOffset, setUserCollectionOffset] = useState(0);
-  const [userCollectionTotalCount, setUserCollectionTotalCount] = useState(0);
-  const [userCollectionTotalValue, setUserCollectionTotalValue] = useState<number>(0);
-  const [isLoadingUserTotalValue, setIsLoadingUserTotalValue] = useState(true);
   const [showTradeCreator, setShowTradeCreator] = useState(false);
   const [userCollectionSearch, setUserCollectionSearch] = useState('');
   const [hoveredUserCard, setHoveredUserCard] = useState<Card | null>(null);
@@ -93,19 +93,92 @@ export default function Community() {
     queryFn: () => getPendingTrades(user!.id),
   });
 
-  useEffect(() => {
-    if (user) {
-      loadAllData();
+  // Public profiles for the Browse tab.
+  const { data: publicUsersData, isLoading: loading } = useQuery({
+    queryKey: ['publicUsers', user?.id],
+    enabled: !!user,
+    queryFn: async (): Promise<UserProfile[]> => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, username, collection_visibility')
+        .eq('collection_visibility', 'public')
+        .neq('id', user!.id)
+        .order('username');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const publicUsers = publicUsersData ?? EMPTY_PROFILES;
+
+  // Selected user's collection, paginated for infinite scroll.
+  const selectedUserId = selectedUser?.id;
+  const {
+    data: collectionPages,
+    isLoading: loadingCollection,
+    hasNextPage: hasMoreUserCards,
+    isFetchingNextPage: isLoadingMoreUserCards,
+    fetchNextPage: fetchMoreUserCards,
+  } = useInfiniteQuery({
+    queryKey: ['userCollection', selectedUserId],
+    enabled: !!selectedUserId,
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }): Promise<UserCollectionPage> => {
+      const result = await getUserCollectionPaginated(selectedUserId!, PAGE_SIZE, pageParam);
+
+      let items: CollectionItem[] = [];
+      if (result.items.size > 0) {
+        const cardIds = Array.from(result.items.keys());
+        const cards = await getCardsByIds(cardIds);
+        items = cards.map((card) => ({
+          card,
+          quantity: result.items.get(card.id) || 0,
+        }));
+      }
+
+      return {
+        items,
+        totalCount: result.totalCount,
+        hasMore: result.hasMore,
+        nextOffset: pageParam + PAGE_SIZE,
+      };
+    },
+    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextOffset : undefined),
+  });
+
+  // Flatten pages, deduplicating by card id (a card can reappear across pages
+  // when the underlying collection shifts between fetches).
+  const selectedUserCollection = useMemo(() => {
+    const seen = new Set<string>();
+    const items: CollectionItem[] = [];
+    for (const page of collectionPages?.pages ?? []) {
+      for (const item of page.items) {
+        if (seen.has(item.card.id)) continue;
+        seen.add(item.card.id);
+        items.push(item);
+      }
     }
-  }, [user]);
+    return items;
+  }, [collectionPages]);
+
+  const userCollectionTotalCount = collectionPages?.pages[0]?.totalCount ?? 0;
+
+  // Pre-calculated total value of the selected user's collection.
+  const { data: totalValueData, isLoading: isLoadingUserTotalValue } = useQuery({
+    queryKey: ['collectionValue', selectedUserId],
+    enabled: !!selectedUserId,
+    queryFn: () => getCollectionTotalValue(selectedUserId!),
+  });
+  const userCollectionTotalValue = totalValueData ?? 0;
 
   // ============ REALTIME SUBSCRIPTIONS ============
-  // Subscribe to profile changes (for visibility updates)
+  // One channel for the page-level listeners (profiles visibility, friendships,
+  // trades); they share the same lifetime so separate channels bought nothing.
   useEffect(() => {
     if (!user) return;
 
-    const profilesChannel = supabase
-      .channel('profiles-changes')
+    const communityChannel = supabase
+      .channel('community-changes')
+      // Profile visibility changes affect the Browse tab's public users list.
       .on(
         'postgres_changes',
         {
@@ -117,25 +190,12 @@ export default function Community() {
           console.log('Profile change:', payload);
           const newProfile = payload.new as Partial<ProfileRealtimeRow>;
           const oldProfile = payload.old as Partial<ProfileRealtimeRow>;
-          // Reload public users if a profile's visibility changed
           if (newProfile && oldProfile && newProfile.collection_visibility !== oldProfile.collection_visibility) {
-            loadPublicUsers();
+            queryClient.invalidateQueries({ queryKey: ['publicUsers'] });
           }
         }
       )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(profilesChannel);
-    };
-  }, [user]);
-
-  // Keep the Friends tab badge + Browse shortcut fresh even when the tab is closed.
-  useEffect(() => {
-    if (!user) return;
-
-    const friendshipsChannel = supabase
-      .channel('community-friendships-changes')
+      // Keep the Friends tab badge + Browse shortcut fresh even when the tab is closed.
       .on(
         'postgres_changes',
         {
@@ -150,19 +210,7 @@ export default function Community() {
           }
         }
       )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(friendshipsChannel);
-    };
-  }, [user, queryClient]);
-
-  // Keep the Trades tab badge fresh even when the tab is closed.
-  useEffect(() => {
-    if (!user) return;
-
-    const tradesChannel = supabase
-      .channel('community-trades-changes')
+      // Keep the Trades tab badge fresh even when the tab is closed.
       .on(
         'postgres_changes',
         {
@@ -180,17 +228,19 @@ export default function Community() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(tradesChannel);
+      supabase.removeChannel(communityChannel);
     };
   }, [user, queryClient]);
 
-  // Subscribe to collection changes when viewing someone's collection
-  // Auto-price trigger is disabled, so no more infinite loops!
+  // One channel scoped to the currently viewed user: their collection rows and
+  // their profile's pre-calculated total value. Both share the same lifetime.
   useEffect(() => {
     if (!user || !selectedUser) return;
 
-    const collectionsChannel = supabase
-      .channel(`collections-${selectedUser.id}`)
+    const selectedUserChannel = supabase
+      .channel(`community-user-${selectedUser.id}`)
+      // Collection changes when viewing someone's collection.
+      // Auto-price trigger is disabled, so no more infinite loops!
       .on(
         'postgres_changes',
         {
@@ -202,18 +252,35 @@ export default function Community() {
           const data = (payload.new || payload.old) as Partial<CollectionRealtimeRow>;
           if (data && data.user_id === selectedUser.id) {
             console.log('Collection change for viewed user:', payload.eventType);
-            // Reload on any change (INSERT/UPDATE/DELETE)
-            // No more infinite loops since auto-price trigger is disabled
-            loadUserCollection(selectedUser.id);
+            // Refetch on any change (INSERT/UPDATE/DELETE)
+            queryClient.invalidateQueries({ queryKey: ['userCollection', selectedUser.id] });
+            queryClient.invalidateQueries({ queryKey: ['collectionValue', selectedUser.id] });
+          }
+        }
+      )
+      // Live updates for the viewed user's collection total value.
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${selectedUser.id}`,
+        },
+        (payload: RealtimePostgresChangesPayload<ProfileRealtimeRow>) => {
+          const newProfile = payload.new as Partial<ProfileRealtimeRow>;
+          if (newProfile?.collection_total_value !== undefined) {
+            console.log(`User ${selectedUser.username}'s collection total value updated:`, newProfile.collection_total_value);
+            queryClient.setQueryData(['collectionValue', selectedUser.id], newProfile.collection_total_value);
           }
         }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(collectionsChannel);
+      supabase.removeChannel(selectedUserChannel);
     };
-  }, [user, selectedUser]);
+  }, [user, selectedUser, queryClient]);
 
   // Helper function to get the large image URI for hover preview
   const getCardLargeImageUri = (card: Card, faceIndex: number = 0) => {
@@ -223,115 +290,6 @@ export default function Community() {
     return card.image_uris?.large || card.image_uris?.normal;
   };
 
-  const loadAllData = async () => {
-    if (!user) return;
-    setLoading(true);
-    try {
-      await Promise.all([
-        loadPublicUsers(),
-      ]);
-    } catch (error) {
-      console.error('Error loading data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ============ BROWSE FUNCTIONS ============
-  const loadPublicUsers = async () => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, username, collection_visibility')
-      .eq('collection_visibility', 'public')
-      .neq('id', user?.id)
-      .order('username');
-
-    if (!error && data) {
-      setPublicUsers(data);
-    }
-  };
-
-  const loadUserCollection = async (userId: string) => {
-    setLoadingCollection(true);
-    setIsLoadingUserTotalValue(true);
-    setSelectedUserCollection([]);
-    setUserCollectionOffset(0);
-
-    try {
-      // Load paginated collection for display
-      const result = await getUserCollectionPaginated(userId, PAGE_SIZE, 0);
-      setUserCollectionTotalCount(result.totalCount);
-      setHasMoreUserCards(result.hasMore);
-
-      if (result.items.size === 0) {
-        setSelectedUserCollection([]);
-        setUserCollectionTotalValue(0);
-        setIsLoadingUserTotalValue(false);
-        return;
-      }
-
-      const cardIds = Array.from(result.items.keys());
-      const cards = await getCardsByIds(cardIds);
-      setSelectedUserCollection(cards.map((card) => ({
-        card,
-        quantity: result.items.get(card.id) || 0,
-      })));
-      setUserCollectionOffset(PAGE_SIZE);
-
-      // Calculate total value (lightweight query from database)
-      const totalValue = await getCollectionTotalValue(userId);
-      setUserCollectionTotalValue(totalValue);
-    } catch (error) {
-      console.error('Error loading collection:', error);
-      setSelectedUserCollection([]);
-      setUserCollectionTotalValue(0);
-    } finally {
-      setLoadingCollection(false);
-      setIsLoadingUserTotalValue(false);
-    }
-  };
-
-  // Load more cards for infinite scroll in user collection view
-  const loadMoreUserCards = useCallback(async () => {
-    if (!selectedUser || isLoadingMoreUserCards || !hasMoreUserCards) return;
-
-    try {
-      setIsLoadingMoreUserCards(true);
-
-      const result = await getUserCollectionPaginated(
-        selectedUser.id,
-        PAGE_SIZE,
-        userCollectionOffset
-      );
-      setHasMoreUserCards(result.hasMore);
-
-      if (result.items.size === 0) {
-        return;
-      }
-
-      const cardIds = Array.from(result.items.keys());
-      const cards = await getCardsByIds(cardIds);
-
-      const newCards = cards.map(card => ({
-        card,
-        quantity: result.items.get(card.id) || 0,
-      }));
-
-      // Deduplicate: only add cards that aren't already in the collection
-      setSelectedUserCollection(prev => {
-        const existingIds = new Set(prev.map(item => item.card.id));
-        const uniqueNewCards = newCards.filter(item => !existingIds.has(item.card.id));
-        return [...prev, ...uniqueNewCards];
-      });
-
-      setUserCollectionOffset(prev => prev + PAGE_SIZE);
-    } catch (error) {
-      console.error('Error loading more cards:', error);
-    } finally {
-      setIsLoadingMoreUserCards(false);
-    }
-  }, [selectedUser, userCollectionOffset, hasMoreUserCards, isLoadingMoreUserCards]);
-
   // Intersection Observer for infinite scroll in user collection view
   useEffect(() => {
     if (!selectedUser) return;
@@ -339,7 +297,7 @@ export default function Community() {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMoreUserCards && !isLoadingMoreUserCards) {
-          loadMoreUserCards();
+          fetchMoreUserCards();
         }
       },
       { threshold: 0.1 }
@@ -355,36 +313,7 @@ export default function Community() {
         observer.unobserve(currentTarget);
       }
     };
-  }, [selectedUser, hasMoreUserCards, isLoadingMoreUserCards, loadMoreUserCards]);
-
-  // Subscribe to realtime updates for selected user's collection total value
-  useEffect(() => {
-    if (!selectedUser) return;
-
-    const userProfileChannel = supabase
-      .channel(`user-profile-value-${selectedUser.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'profiles',
-          filter: `id=eq.${selectedUser.id}`,
-        },
-        (payload: RealtimePostgresChangesPayload<ProfileRealtimeRow>) => {
-          const newProfile = payload.new as Partial<ProfileRealtimeRow>;
-          if (newProfile?.collection_total_value !== undefined) {
-            console.log(`User ${selectedUser.username}'s collection total value updated:`, newProfile.collection_total_value);
-            setUserCollectionTotalValue(newProfile.collection_total_value);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(userProfileChannel);
-    };
-  }, [selectedUser]);
+  }, [selectedUser, hasMoreUserCards, isLoadingMoreUserCards, fetchMoreUserCards]);
 
   // Loading state
   if (loading) {
@@ -409,7 +338,6 @@ export default function Community() {
             <button
               onClick={() => {
                 setSelectedUser(null);
-                setSelectedUserCollection([]);
                 setUserCollectionSearch('');
                 setSelectedUserCard(null);
                 setHoveredUserCard(null);
@@ -792,7 +720,7 @@ export default function Community() {
                 {filteredPublicUsers.map((userProfile) => (
                   <button
                     key={userProfile.id}
-                    onClick={() => { setSelectedUser(userProfile); loadUserCollection(userProfile.id); }}
+                    onClick={() => setSelectedUser(userProfile)}
                     className="w-full flex items-center justify-between bg-gray-800 p-3 rounded-lg active:bg-gray-700 transition"
                   >
                     <div className="flex items-center gap-2 min-w-0">
@@ -815,7 +743,6 @@ export default function Community() {
                       key={friend.id}
                       onClick={() => {
                         setSelectedUser({ id: friend.id, username: friend.username, collection_visibility: 'friends' });
-                        loadUserCollection(friend.id);
                       }}
                       className="w-full flex items-center justify-between bg-gray-800 p-3 rounded-lg active:bg-gray-700 transition"
                     >
@@ -842,9 +769,7 @@ export default function Community() {
 
         {/* ============ FRIENDS TAB ============ */}
         {activeTab === 'friends' && (
-          <FriendsTab
-            onViewCollection={(u) => { setSelectedUser(u); loadUserCollection(u.id); }}
-          />
+          <FriendsTab onViewCollection={(u) => setSelectedUser(u)} />
         )}
 
         {/* ============ TRADES TAB ============ */}
