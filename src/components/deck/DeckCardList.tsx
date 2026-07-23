@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Plus, Trash2, Loader2, AlertCircle, X, Share2, Copy, Check, PackagePlus } from 'lucide-react';
 import { Card } from '../../types';
 import { ManaSymbol } from '../ManaCost';
-import { getCardImageUri } from '../../utils/cardFaces';
+import { getCardArtCrop } from '../../utils/cardFaces';
 import WishlistButton from '../WishlistButton';
 
 interface DeckCardEntry {
@@ -305,8 +305,8 @@ export default function DeckCardList({
             return (
               <div
                 key={card.id}
-                className={`bg-gray-800 rounded-lg p-3 flex items-center gap-3 hover:bg-gray-750 transition-colors cursor-pointer ${
-                  !isValidForCommander ? 'border border-yellow-500/50' : ''
+                className={`flex bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-750 transition-colors cursor-pointer ${
+                  !isValidForCommander ? 'ring-1 ring-yellow-500/50' : ''
                 }`}
                 onMouseEnter={() => {
                   setHoveredCard(card);
@@ -318,22 +318,22 @@ export default function DeckCardList({
                 }}
                 onClick={() => setSelectedCard(card)}
               >
-                {/* Thumbnail + wishlist */}
-                <div className="relative flex-shrink-0 w-14 h-20 rounded overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                  {getCardImageUri(card) ? (
-                    <img src={getCardImageUri(card)} alt={card.name} className="w-full h-full object-cover" />
+                {/* Card art crop + wishlist */}
+                <div className="relative w-16 h-16 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                  {getCardArtCrop(card) ? (
+                    <img src={getCardArtCrop(card)} alt={card.name} className="w-full h-full object-cover rounded-l-lg" />
                   ) : (
-                    <div className="w-full h-full bg-gray-700" />
+                    <div className="w-full h-full bg-gray-700 rounded-l-lg" />
                   )}
                   <WishlistButton cardId={card.id} className="absolute top-0.5 left-0.5" size={13} />
                 </div>
 
-                {/* Name + price */}
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-medium text-sm truncate">{card.name}</h4>
-                  {card.prices?.usd && (
-                    <div className="text-xs text-gray-400">${card.prices.usd}</div>
-                  )}
+                {/* Info */}
+                <div className="flex-1 p-2 flex flex-col justify-center min-w-0">
+                  <h4 className="font-bold text-sm truncate">{card.name}</h4>
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    {card.prices?.usd && <span>${card.prices.usd}</span>}
+                  </div>
                   {!isValidForCommander && (
                     <div className="text-xs text-yellow-400 flex items-center gap-1 mt-0.5">
                       <AlertCircle size={10} />
@@ -343,18 +343,19 @@ export default function DeckCardList({
                 </div>
 
                 {/* Controls: quantity + remove-from-deck + add-to-collection */}
-                <div className="flex-shrink-0 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-1.5 p-2" onClick={(e) => e.stopPropagation()}>
                   <input
                     type="number"
                     value={quantity}
                     onChange={e => updateCardQuantity(card.id, parseInt(e.target.value))}
                     min="1"
-                    className="w-12 px-1 py-1 bg-gray-700 border border-gray-600 rounded text-center text-sm"
+                    className="w-12 px-1 py-2 bg-gray-700 border border-gray-600 rounded-lg text-center text-sm"
                   />
                   <button
                     onClick={() => removeCardFromDeck(card.id)}
                     title="Remove from deck"
-                    className="w-9 h-9 flex items-center justify-center text-red-500 hover:text-red-400 hover:bg-gray-700 rounded-lg transition-colors"
+                    aria-label="Remove from deck"
+                    className="p-2.5 bg-gray-700 text-red-400 active:bg-gray-600 rounded-lg"
                   >
                     <Trash2 size={18} />
                   </button>
@@ -362,9 +363,10 @@ export default function DeckCardList({
                     onClick={() => handleAddCardToCollection(card.id, 1)}
                     disabled={addingCardId === card.id}
                     title="Add to collection"
-                    className="w-9 h-9 flex items-center justify-center bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+                    aria-label="Add to collection"
+                    className="p-2.5 bg-green-600 active:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg"
                   >
-                    {addingCardId === card.id ? <Loader2 className="animate-spin" size={16} /> : <PackagePlus size={16} />}
+                    {addingCardId === card.id ? <Loader2 className="animate-spin" size={18} /> : <PackagePlus size={18} />}
                   </button>
                 </div>
               </div>
