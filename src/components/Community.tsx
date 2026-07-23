@@ -1,15 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, X, Settings, ChevronLeft, RefreshCw } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Search, Globe, Users, Eye, ArrowLeftRight, Loader2, X, Settings, ChevronLeft, RefreshCw, Sparkles } from 'lucide-react';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
+import WishlistButton from './WishlistButton';
 import { useCardFaces } from '../hooks/useCardFaces';
 import { supabase } from '../lib/supabase';
 import ProfileSettings from './community/ProfileSettings';
 import FriendsTab from './community/FriendsTab';
 import TradesTab from './community/TradesTab';
-import { Friend } from '../services/friendsService';
+import TradeSuggestions from './community/TradeSuggestions';
+import { getFriends } from '../services/friendsService';
+import { getPendingTrades } from '../services/tradesService';
 import { getUserCollectionPaginated, getCardsByIds, getCollectionTotalValue } from '../services/api';
 import { Card } from '../types';
 import TradeCreator from './TradeCreator';
@@ -35,13 +39,24 @@ interface CollectionRealtimeRow {
   user_id: string;
 }
 
-type Tab = 'browse' | 'friends' | 'trades' | 'profile';
+interface FriendshipRealtimeRow {
+  requester_id: string;
+  addressee_id: string;
+}
+
+interface TradeRealtimeRow {
+  user1_id: string;
+  user2_id: string;
+}
+
+type Tab = 'browse' | 'friends' | 'trades' | 'suggestions' | 'profile';
 
 const PAGE_SIZE = 50;
 
 export default function Community() {
   const { user } = useAuth();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
   const [activeTab, setActiveTab] = useState<Tab>('browse');
   const [loading, setLoading] = useState(true);
@@ -64,11 +79,19 @@ export default function Community() {
   const [selectedUserCard, setSelectedUserCard] = useState<CollectionItem | null>(null);
   const userCollectionObserverTarget = useRef<HTMLDivElement>(null);
 
-  // Friends list mirror (owned by FriendsTab) for the tab badge + Browse shortcut
-  const [friends, setFriends] = useState<Friend[]>([]);
+  // Friends list + pending trades owned by Community so the tab badges are
+  // correct on arrival and stay fresh even when those tabs aren't open.
+  const { data: friendsList = [] } = useQuery({
+    queryKey: ['communityFriends', user?.id],
+    enabled: !!user,
+    queryFn: () => getFriends(user!.id),
+  });
 
-  // Pending trades count mirror (owned by TradesTab) for the tab badge
-  const [pendingTradesCount, setPendingTradesCount] = useState(0);
+  const { data: pendingTrades = [] } = useQuery({
+    queryKey: ['communityPendingTrades', user?.id],
+    enabled: !!user,
+    queryFn: () => getPendingTrades(user!.id),
+  });
 
   useEffect(() => {
     if (user) {
@@ -106,6 +129,60 @@ export default function Community() {
       supabase.removeChannel(profilesChannel);
     };
   }, [user]);
+
+  // Keep the Friends tab badge + Browse shortcut fresh even when the tab is closed.
+  useEffect(() => {
+    if (!user) return;
+
+    const friendshipsChannel = supabase
+      .channel('community-friendships-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'friendships',
+        },
+        (payload: RealtimePostgresChangesPayload<FriendshipRealtimeRow>) => {
+          const data = (payload.new || payload.old) as Partial<FriendshipRealtimeRow>;
+          if (data && (data.requester_id === user.id || data.addressee_id === user.id)) {
+            queryClient.invalidateQueries({ queryKey: ['communityFriends'] });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(friendshipsChannel);
+    };
+  }, [user, queryClient]);
+
+  // Keep the Trades tab badge fresh even when the tab is closed.
+  useEffect(() => {
+    if (!user) return;
+
+    const tradesChannel = supabase
+      .channel('community-trades-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'trades',
+        },
+        (payload: RealtimePostgresChangesPayload<TradeRealtimeRow>) => {
+          const data = (payload.new || payload.old) as Partial<TradeRealtimeRow>;
+          if (data && (data.user1_id === user.id || data.user2_id === user.id)) {
+            queryClient.invalidateQueries({ queryKey: ['communityPendingTrades'] });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(tradesChannel);
+    };
+  }, [user, queryClient]);
 
   // Subscribe to collection changes when viewing someone's collection
   // Auto-price trigger is disabled, so no more infinite loops!
@@ -435,6 +512,7 @@ export default function Community() {
                           alt={displayName}
                           className="w-full h-auto"
                         />
+                        <WishlistButton cardId={card.id} className="absolute top-1 left-1" size={16} />
                         {/* Quantity badge */}
                         <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs sm:text-sm font-bold px-2 py-1 rounded-full shadow-lg">
                           x{quantity}
@@ -664,8 +742,9 @@ export default function Community() {
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide mb-4 md:mb-6">
           {[
             { id: 'browse' as Tab, label: 'Browse', icon: Globe },
-            { id: 'friends' as Tab, label: `Friends`, count: friends.length, icon: Users },
-            { id: 'trades' as Tab, label: `Trades`, count: pendingTradesCount, icon: ArrowLeftRight },
+            { id: 'friends' as Tab, label: `Friends`, count: friendsList.length, icon: Users },
+            { id: 'trades' as Tab, label: `Trades`, count: pendingTrades.length, icon: ArrowLeftRight },
+            { id: 'suggestions' as Tab, label: 'Suggestions', icon: Sparkles },
             { id: 'profile' as Tab, label: 'Profile', icon: Settings },
           ].map((tab) => (
             <button
@@ -727,11 +806,11 @@ export default function Community() {
             )}
 
             {/* Friends shortcut */}
-            {friends.length > 0 && (
+            {friendsList.length > 0 && (
               <div className="pt-3 border-t border-gray-800">
                 <p className="text-xs text-gray-500 mb-2">Your friends</p>
                 <div className="space-y-2">
-                  {friends.slice(0, 3).map((friend) => (
+                  {friendsList.slice(0, 3).map((friend) => (
                     <button
                       key={friend.id}
                       onClick={() => {
@@ -747,12 +826,12 @@ export default function Community() {
                       <Eye size={18} className="text-gray-400 flex-shrink-0" />
                     </button>
                   ))}
-                  {friends.length > 3 && (
+                  {friendsList.length > 3 && (
                     <button
                       onClick={() => setActiveTab('friends')}
                       className="w-full text-center text-blue-400 text-sm py-2"
                     >
-                      View all {friends.length} friends
+                      View all {friendsList.length} friends
                     </button>
                   )}
                 </div>
@@ -765,12 +844,14 @@ export default function Community() {
         {activeTab === 'friends' && (
           <FriendsTab
             onViewCollection={(u) => { setSelectedUser(u); loadUserCollection(u.id); }}
-            onFriendsChange={setFriends}
           />
         )}
 
         {/* ============ TRADES TAB ============ */}
-        {activeTab === 'trades' && <TradesTab onPendingCountChange={setPendingTradesCount} />}
+        {activeTab === 'trades' && <TradesTab />}
+
+        {/* ============ SUGGESTIONS TAB ============ */}
+        {activeTab === 'suggestions' && <TradeSuggestions />}
 
         {/* ============ PROFILE TAB ============ */}
         {activeTab === 'profile' && <ProfileSettings />}

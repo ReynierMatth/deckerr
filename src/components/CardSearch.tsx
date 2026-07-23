@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useRef, useReducer } from 'react';
-import { RefreshCw, PackagePlus, Loader2, CheckCircle } from 'lucide-react';
-import { searchCards, getUserCollection, addCardToCollection } from '../services/api';
+import { RefreshCw, PackagePlus, Loader2, CheckCircle, Heart } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  searchCards,
+  getUserCollection,
+  addCardToCollection,
+  getWishlist,
+  addToWishlist,
+  removeFromWishlist,
+} from '../services/api';
 import { Card } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -100,7 +108,36 @@ function searchFormReducer(state: SearchForm, action: SearchFormAction): SearchF
 const CardSearch = () => {
   const { user } = useAuth();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
+
+  // Wishlist membership (Set of card ids)
+  const { data: wishlist } = useQuery<string[]>({
+    queryKey: ['wishlist', user?.id],
+    enabled: !!user,
+    queryFn: () => getWishlist(user!.id),
+  });
+
+  const handleToggleWishlist = async (cardId: string) => {
+    if (!user) {
+      toast.error('Please log in to use your wishlist');
+      return;
+    }
+    const inWishlist = wishlist?.includes(cardId) ?? false;
+    try {
+      if (inWishlist) {
+        await removeFromWishlist(user.id, cardId);
+        toast.success('Removed from wishlist');
+      } else {
+        await addToWishlist(user.id, cardId);
+        toast.success('Added to wishlist');
+      }
+      await queryClient.invalidateQueries({ queryKey: ['wishlist'] });
+    } catch (error) {
+      console.error('Error updating wishlist:', error);
+      toast.error('Failed to update wishlist');
+    }
+  };
   const [form, dispatch] = useReducer(searchFormReducer, initialSearchForm);
   const setField = <K extends keyof SearchForm>(field: K, value: SearchForm[K]) =>
     dispatch({ type: 'set', field, value });
@@ -137,7 +174,7 @@ const CardSearch = () => {
       setAddingCardId(cardId);
       const card = searchResults.find(c => c.id === cardId);
       const priceUsd = card?.prices?.usd ? Number(card.prices.usd) : 0;
-      await addCardToCollection(user.id, cardId, 1, priceUsd);
+      await addCardToCollection(user.id, cardId, 1, priceUsd, card?.name);
 
       setUserCollection(prev => {
         const newMap = new Map(prev);
@@ -655,8 +692,20 @@ const CardSearch = () => {
                         )}
                       </div>
                     </div>
-                    {/* Action button */}
-                    <div className="flex items-center p-2">
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-1.5 p-2">
+                      <button
+                        onClick={() => handleToggleWishlist(card.id)}
+                        className={`p-2.5 rounded-lg ${
+                          wishlist?.includes(card.id)
+                            ? 'bg-rose-500/20 text-rose-400'
+                            : 'bg-gray-700 text-gray-300 active:bg-gray-600'
+                        }`}
+                        title={wishlist?.includes(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
+                        aria-label={wishlist?.includes(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
+                      >
+                        <Heart size={18} fill={wishlist?.includes(card.id) ? 'currentColor' : 'none'} />
+                      </button>
                       <button
                         onClick={() => handleAddCardToCollection(card.id)}
                         disabled={isAddingThisCard}
@@ -717,6 +766,21 @@ const CardSearch = () => {
                           x{inCollection}
                         </span>
                       )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleWishlist(card.id);
+                        }}
+                        className={`absolute top-1 left-1 p-2 rounded-full shadow-lg transition-all ${
+                          wishlist?.includes(card.id)
+                            ? 'bg-rose-500/90 text-white'
+                            : 'bg-gray-900/70 text-gray-200 hover:bg-gray-900'
+                        }`}
+                        title={wishlist?.includes(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
+                        aria-label={wishlist?.includes(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
+                      >
+                        <Heart size={16} fill={wishlist?.includes(card.id) ? 'currentColor' : 'none'} />
+                      </button>
                     </div>
                     <div className="p-3">
                       <h3 className="font-bold text-sm truncate mb-1">{displayName}</h3>

@@ -1,6 +1,13 @@
-import { CheckCircle, Minus, Plus, RefreshCw, X } from 'lucide-react';
+import { useState } from 'react';
+import { Bell, CheckCircle, Minus, Plus, RefreshCw, X } from 'lucide-react';
 import { Card } from '../../types';
 import { isDoubleFaced } from '../../utils/cardFaces';
+import { addPriceAlert } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
+import WishlistButton from '../WishlistButton';
+
+type AlertDirection = 'above' | 'below';
 
 interface CardDetailPanelProps {
   card: Card;
@@ -32,6 +39,28 @@ export default function CardDetailPanel({
   onIncrement,
   onDecrement,
 }: CardDetailPanelProps) {
+  const { user } = useAuth();
+  const { success, error: toastError } = useToast();
+
+  const [alertDirection, setAlertDirection] = useState<AlertDirection>('below');
+  const [alertPrice, setAlertPrice] = useState('');
+  const [savingAlert, setSavingAlert] = useState(false);
+
+  const handleAddAlert = async () => {
+    const target = parseFloat(alertPrice);
+    if (!user || Number.isNaN(target) || target <= 0) return;
+    setSavingAlert(true);
+    try {
+      await addPriceAlert(user.id, card.id, card.name, target, alertDirection);
+      setAlertPrice('');
+      success(`Alert set for ${card.name}`);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'Failed to set alert');
+    } finally {
+      setSavingAlert(false);
+    }
+  };
+
   const currentFaceIndex = getCurrentFaceIndex(card.id);
   const isMultiFaced = isDoubleFaced(card);
   const currentFace = isMultiFaced && card.card_faces
@@ -69,6 +98,7 @@ export default function CardDetailPanel({
               alt={displayName}
               className="w-full h-auto rounded-lg shadow-lg"
             />
+            <WishlistButton cardId={card.id} className="absolute top-2 left-2" size={22} />
             {isMultiFaced && (
               <>
                 <div className="absolute top-2 right-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
@@ -105,6 +135,63 @@ export default function CardDetailPanel({
                 </div>
               </div>
             )}
+
+            {/* Price Alert */}
+            <div className="border-t border-gray-700 pt-3">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-200 mb-2">
+                <Bell size={16} />
+                Set price alert
+              </h3>
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAlertDirection('below')}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      alertDirection === 'below'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    Below
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAlertDirection('above')}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      alertDirection === 'above'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    Above
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="0.01"
+                      value={alertPrice}
+                      onChange={(e) => setAlertPrice(e.target.value)}
+                      placeholder="Target price"
+                      className="w-full bg-gray-900 text-white text-sm rounded-lg pl-7 pr-3 py-2 border border-gray-700 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddAlert}
+                    disabled={savingAlert || !alertPrice.trim()}
+                    className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors whitespace-nowrap"
+                  >
+                    Add alert
+                  </button>
+                </div>
+              </div>
+            </div>
 
             {/* Collection Status */}
             {collectionQuantity !== undefined && (

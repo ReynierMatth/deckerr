@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Loader2, Trash2, RefreshCw, Plus, Minus, X } from 'lucide-react';
+import { Search, Loader2, Trash2, RefreshCw, Plus, Minus, X, Download, Upload } from 'lucide-react';
 import { Card } from '../types';
-import { getUserCollectionPaginated, getCardsByIds, getCollectionTotalValue, refreshCollectionPrices } from '../services/api';
+import { getUserCollectionPaginated, getCardsByIds, getCollectionTotalValue, refreshCollectionPrices, getCollectionValueHistory, ValueHistoryPoint, runPriceAlertCheck, addMultipleCardsToCollection } from '../services/api';
+import { toCsv, parseCsv, CARD_CONDITIONS, CollectionCsvRow } from '../utils/collectionCsv';
+import CollectionValueChart from './CollectionValueChart';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { isDoubleFaced, getCardImageUri } from '../utils/cardFaces';
@@ -9,6 +11,7 @@ import { useCardFaces } from '../hooks/useCardFaces';
 import { supabase } from '../lib/supabase';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import ConfirmModal from './ConfirmModal';
+import WishlistButton from './WishlistButton';
 
 const PAGE_SIZE = 50;
 
@@ -16,13 +19,26 @@ interface ProfileTotalValueRow {
   collection_total_value: number;
 }
 
+interface CollectionItem {
+  card: Card;
+  quantity: number;
+  isFoil: boolean;
+  /** One of CARD_CONDITIONS, or '' when unset. */
+  condition: string;
+}
+
+interface CollectionMetaRow {
+  card_id: string;
+  is_foil: boolean | null;
+  condition: string | null;
+}
+
 export default function Collection() {
   const { user } = useAuth();
   const toast = useToast();
   const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
   const [searchQuery, setSearchQuery] = useState('');
-  const [collection, setCollection] = useState<{ card: Card; quantity: number }[]>([]);
-  const [filteredCollection, setFilteredCollection] = useState<{ card: Card; quantity: number }[]>([]);
+  const [collection, setCollection] = useState<CollectionItem[]>([]);
   const [isLoadingCollection, setIsLoadingCollection] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -31,15 +47,25 @@ export default function Collection() {
   const [totalCollectionValue, setTotalCollectionValue] = useState<number>(0);
   const [isLoadingTotalValue, setIsLoadingTotalValue] = useState(true);
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
+  const [valueHistory, setValueHistory] = useState<ValueHistoryPoint[]>([]);
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
-  const [selectedCard, setSelectedCard] = useState<{ card: Card; quantity: number } | null>(null);
+  const [selectedCard, setSelectedCard] = useState<CollectionItem | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     cardId: string;
     cardName: string;
   }>({ isOpen: false, cardId: '', cardName: '' });
   const observerTarget = useRef<HTMLDivElement>(null);
+  // The search term backing the currently-loaded pages. Kept in a ref so
+  // loadMoreCards (triggered by the intersection observer) can read it without
+  // being re-created on every keystroke.
+  const searchTermRef = useRef('');
+  // Whether the very first collection load has happened; used so the initial
+  // mount loads immediately while later search changes are debounced.
+  const hasLoadedOnceRef = useRef(false);
 
   // Helper function to get the large image URI for hover preview
   const getCardLargeImageUri = (card: Card, faceIndex: number = 0) => {
@@ -62,6 +88,7 @@ export default function Collection() {
         // Get total value directly from database (no need to fetch all cards!)
         const totalValue = await getCollectionTotalValue(user.id);
         setTotalCollectionValue(totalValue);
+        setValueHistory(await getCollectionValueHistory(user.id));
       } catch (error) {
         console.error('Error calculating total collection value:', error);
         setTotalCollectionValue(0);
@@ -82,6 +109,8 @@ export default function Collection() {
         setIsRefreshingPrices(true);
         await refreshCollectionPrices(user.id);
         setTotalCollectionValue(await getCollectionTotalValue(user.id));
+        setValueHistory(await getCollectionValueHistory(user.id));
+        runPriceAlertCheck(user.id).catch(() => { /* alerts are best-effort */ });
         try {
           localStorage.setItem(`deckerr:pricesRefreshedAt:${user.id}`, String(Date.now()));
         } catch { /* localStorage unavailable — ignore */ }
@@ -136,53 +165,98 @@ export default function Collection() {
     };
   }, [user]);
 
-  // Load user's collection from Supabase on mount
-  useEffect(() => {
-    const loadCollection = async () => {
-      if (!user) {
-        setIsLoadingCollection(false);
+  // Fetch per-entry foil/condition metadata (not returned by the paginated API)
+  // for the given card ids and index it by card_id.
+  const fetchCollectionMeta = useCallback(
+    async (cardIds: string[]): Promise<Map<string, { isFoil: boolean; condition: string }>> => {
+      const meta = new Map<string, { isFoil: boolean; condition: string }>();
+      if (!user || cardIds.length === 0) return meta;
+
+      const { data, error } = await supabase
+        .from('collections')
+        .select('card_id, is_foil, condition')
+        .eq('user_id', user.id)
+        .in('card_id', cardIds);
+
+      if (error) {
+        console.error('Error loading collection metadata:', error);
+        return meta;
+      }
+
+      (data as CollectionMetaRow[] | null)?.forEach((row) => {
+        meta.set(row.card_id, {
+          isFoil: row.is_foil ?? false,
+          condition: row.condition ?? '',
+        });
+      });
+      return meta;
+    },
+    [user],
+  );
+
+  // Load user's collection (first page) from Supabase, filtered server-side by
+  // the given search term (empty string = whole collection).
+  const loadCollection = useCallback(async (search: string) => {
+    if (!user) {
+      setIsLoadingCollection(false);
+      return;
+    }
+
+    try {
+      setIsLoadingCollection(true);
+      searchTermRef.current = search;
+      setOffset(0);
+      setCollection([]);
+
+      // Get paginated (and server-side filtered) collection from Supabase
+      const result = await getUserCollectionPaginated(user.id, PAGE_SIZE, 0, search);
+      setTotalCount(result.totalCount);
+      setHasMore(result.hasMore);
+
+      if (result.items.size === 0) {
+        setCollection([]);
         return;
       }
 
-      try {
-        setIsLoadingCollection(true);
-        setOffset(0);
-        setCollection([]);
+      // Get the actual card data from Scryfall for all cards in this page
+      const cardIds = Array.from(result.items.keys());
+      const [cards, meta] = await Promise.all([getCardsByIds(cardIds), fetchCollectionMeta(cardIds)]);
 
-        // Get paginated collection from Supabase
-        const result = await getUserCollectionPaginated(user.id, PAGE_SIZE, 0);
-        setTotalCount(result.totalCount);
-        setHasMore(result.hasMore);
+      // Combine card data with quantities and per-entry metadata
+      const collectionWithCards: CollectionItem[] = cards.map(card => ({
+        card,
+        quantity: result.items.get(card.id) || 0,
+        isFoil: meta.get(card.id)?.isFoil ?? false,
+        condition: meta.get(card.id)?.condition ?? '',
+      }));
 
-        if (result.items.size === 0) {
-          setCollection([]);
-          setFilteredCollection([]);
-          return;
-        }
+      setCollection(collectionWithCards);
+      setOffset(PAGE_SIZE);
+    } catch (error) {
+      console.error('Error loading collection:', error);
+      toast.error('Failed to load collection');
+    } finally {
+      setIsLoadingCollection(false);
+    }
+  }, [user, toast, fetchCollectionMeta]);
 
-        // Get the actual card data from Scryfall for all cards in this page
-        const cardIds = Array.from(result.items.keys());
-        const cards = await getCardsByIds(cardIds);
+  // Initial mount loads immediately; subsequent search-term changes reload the
+  // (server-filtered) first page, debounced so it doesn't fire every keystroke.
+  useEffect(() => {
+    if (!user) return;
+    const term = searchQuery.trim();
 
-        // Combine card data with quantities
-        const collectionWithCards = cards.map(card => ({
-          card,
-          quantity: result.items.get(card.id) || 0,
-        }));
+    if (!hasLoadedOnceRef.current) {
+      hasLoadedOnceRef.current = true;
+      loadCollection(term);
+      return;
+    }
 
-        setCollection(collectionWithCards);
-        setFilteredCollection(collectionWithCards);
-        setOffset(PAGE_SIZE);
-      } catch (error) {
-        console.error('Error loading collection:', error);
-        toast.error('Failed to load collection');
-      } finally {
-        setIsLoadingCollection(false);
-      }
-    };
-
-    loadCollection();
-  }, [user]);
+    const handle = setTimeout(() => {
+      loadCollection(term);
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [searchQuery, user, loadCollection]);
 
   // Load more cards for infinite scroll
   const loadMoreCards = useCallback(async () => {
@@ -191,8 +265,9 @@ export default function Collection() {
     try {
       setIsLoadingMore(true);
 
-      // Get next page of collection
-      const result = await getUserCollectionPaginated(user.id, PAGE_SIZE, offset);
+      // Get next page of collection (same server-side search filter as the
+      // currently-loaded pages).
+      const result = await getUserCollectionPaginated(user.id, PAGE_SIZE, offset, searchTermRef.current);
       setHasMore(result.hasMore);
 
       if (result.items.size === 0) {
@@ -201,12 +276,14 @@ export default function Collection() {
 
       // Get card data from Scryfall
       const cardIds = Array.from(result.items.keys());
-      const cards = await getCardsByIds(cardIds);
+      const [cards, meta] = await Promise.all([getCardsByIds(cardIds), fetchCollectionMeta(cardIds)]);
 
-      // Combine card data with quantities
-      const newCards = cards.map(card => ({
+      // Combine card data with quantities and per-entry metadata
+      const newCards: CollectionItem[] = cards.map(card => ({
         card,
         quantity: result.items.get(card.id) || 0,
+        isFoil: meta.get(card.id)?.isFoil ?? false,
+        condition: meta.get(card.id)?.condition ?? '',
       }));
 
       // Deduplicate: only add cards that aren't already in the collection
@@ -223,7 +300,7 @@ export default function Collection() {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [user, offset, hasMore, isLoadingMore]);
+  }, [user, offset, hasMore, isLoadingMore, fetchCollectionMeta]);
 
   // Intersection Observer for infinite scroll
   useEffect(() => {
@@ -247,26 +324,6 @@ export default function Collection() {
       }
     };
   }, [hasMore, isLoadingMore, loadMoreCards]);
-
-  // Filter collection based on search query
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredCollection(collection);
-      return;
-    }
-
-    const query = searchQuery.toLowerCase();
-    const filtered = collection.filter(({ card }) => {
-      return (
-        card.name.toLowerCase().includes(query) ||
-        card.type_line?.toLowerCase().includes(query) ||
-        card.oracle_text?.toLowerCase().includes(query) ||
-        card.colors?.some(color => color.toLowerCase().includes(query))
-      );
-    });
-
-    setFilteredCollection(filtered);
-  }, [searchQuery, collection]);
 
   // Update card quantity in collection
   const updateCardQuantity = async (cardId: string, newQuantity: number) => {
@@ -332,6 +389,105 @@ export default function Collection() {
     }
   };
 
+  // Compute the per-copy price for a variant (foil uses usd_foil, else usd).
+  const priceForVariant = (card: Card, isFoil: boolean): number => {
+    const raw = isFoil ? card.prices?.usd_foil : card.prices?.usd;
+    const parsed = raw ? parseFloat(raw) : 0;
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  // Update the foil flag and/or condition of a collection entry.
+  const updateCardVariant = async (card: Card, isFoil: boolean, condition: string) => {
+    if (!user) return;
+
+    try {
+      setIsUpdating(true);
+      const priceUsd = priceForVariant(card, isFoil);
+
+      const { error } = await supabase
+        .from('collections')
+        .update({ is_foil: isFoil, condition, price_usd: priceUsd, updated_at: new Date().toISOString() })
+        .eq('user_id', user.id)
+        .eq('card_id', card.id);
+
+      if (error) throw error;
+
+      // Reflect the change locally right away...
+      setCollection(prev =>
+        prev.map(item => (item.card.id === card.id ? { ...item, isFoil, condition } : item)),
+      );
+      setSelectedCard(prev => (prev && prev.card.id === card.id ? { ...prev, isFoil, condition } : prev));
+
+      // ...then reload the DB-computed total (trigger recomputes it on write).
+      setTotalCollectionValue(await getCollectionTotalValue(user.id));
+      setValueHistory(await getCollectionValueHistory(user.id));
+      toast.success('Card updated');
+    } catch (error) {
+      console.error('Error updating card variant:', error);
+      toast.error('Failed to update card');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Export the loaded collection to a downloadable CSV file.
+  const handleExportCsv = () => {
+    const rows: CollectionCsvRow[] = collection.map(({ card, quantity, isFoil, condition }) => ({
+      name: card.name,
+      card_id: card.id,
+      quantity,
+      is_foil: isFoil,
+      condition,
+      price_usd: priceForVariant(card, isFoil),
+    }));
+
+    const csv = toCsv(rows);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'collection.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Import cards from a CSV file selected by the user.
+  const handleImportCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = ''; // allow re-selecting the same file later
+    if (!file || !user) return;
+
+    try {
+      setIsImporting(true);
+      const text = await file.text();
+      const rows = parseCsv(text);
+
+      if (rows.length === 0) {
+        toast.error('No valid rows found in CSV');
+        return;
+      }
+
+      await addMultipleCardsToCollection(
+        user.id,
+        rows.map(row => ({ cardId: row.card_id, quantity: row.quantity, priceUsd: row.price_usd })),
+      );
+
+      const totalAdded = rows.reduce((sum, row) => sum + row.quantity, 0);
+      toast.success(`Imported ${totalAdded} card(s)`);
+
+      await loadCollection(searchTermRef.current);
+      setTotalCollectionValue(await getCollectionTotalValue(user.id));
+      setValueHistory(await getCollectionValueHistory(user.id));
+    } catch (error) {
+      console.error('Error importing collection CSV:', error);
+      toast.error('Failed to import CSV');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   return (
     <div className="relative bg-gray-900 text-white p-3 sm:p-6 md:min-h-screen">
       <div className="max-w-7xl mx-auto">
@@ -355,7 +511,7 @@ export default function Collection() {
         <div>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
             <h2 className="text-xl font-semibold">
-              {searchQuery ? `Found ${filteredCollection.length} card(s)` : `My Cards (${collection.length} unique, ${collection.reduce((acc, c) => acc + c.quantity, 0)} total)`}
+              {searchQuery ? `Found ${totalCount} card(s)` : `My Cards (${collection.length} unique, ${collection.reduce((acc, c) => acc + c.quantity, 0)} total)`}
             </h2>
             {/* Collection Value Summary */}
             <div className="flex items-center gap-2">
@@ -367,8 +523,8 @@ export default function Collection() {
                   {isLoadingTotalValue ? (
                     <Loader2 className="animate-spin" size={20} />
                   ) : searchQuery ? (
-                    // For search results, calculate from filtered collection
-                    `$${filteredCollection.reduce((total, { card, quantity }) => {
+                    // For search results, best-effort sum over currently-loaded results
+                    `$${collection.reduce((total, { card, quantity }) => {
                       const price = card.prices?.usd ? parseFloat(card.prices.usd) : 0;
                       return total + (price * quantity);
                     }, 0).toFixed(2)}`
@@ -386,26 +542,58 @@ export default function Collection() {
               >
                 <RefreshCw size={18} className={isRefreshingPrices ? 'animate-spin' : ''} />
               </button>
+              <button
+                onClick={handleExportCsv}
+                disabled={collection.length === 0}
+                title="Export collection to CSV"
+                className="p-2 bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
+              >
+                <Download size={18} />
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isImporting}
+                title="Import collection from CSV"
+                className="p-2 bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
+              >
+                {isImporting ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                onChange={handleImportCsv}
+                className="hidden"
+              />
             </div>
           </div>
+
+          {valueHistory.length >= 2 && !searchQuery && (
+            <div className="mb-4 bg-gray-800 border border-gray-700 rounded-lg p-3">
+              <CollectionValueChart history={valueHistory} />
+            </div>
+          )}
 
           {isLoadingCollection ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="animate-spin text-blue-500" size={48} />
             </div>
           ) : collection.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <p className="text-lg mb-2">Your collection is empty</p>
-              <p className="text-sm">Add cards from the Deck Manager to build your collection</p>
-            </div>
-          ) : filteredCollection.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <p className="text-lg mb-2">No cards found</p>
-              <p className="text-sm">Try a different search term</p>
-            </div>
+            searchQuery.trim() ? (
+              <div className="text-center py-12 text-gray-400">
+                <p className="text-lg mb-2">No cards found</p>
+                <p className="text-sm">Try a different search term</p>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-400">
+                <p className="text-lg mb-2">Your collection is empty</p>
+                <p className="text-sm">Add cards from the Deck Manager to build your collection</p>
+              </div>
+            )
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-1.5 sm:gap-2">
-              {filteredCollection.map(({ card, quantity }) => {
+              {collection.map((item) => {
+                const { card, quantity, isFoil } = item;
                 const currentFaceIndex = getCurrentFaceIndex(card.id);
                 const isMultiFaced = isDoubleFaced(card);
                 const displayName = isMultiFaced && card.card_faces
@@ -418,7 +606,7 @@ export default function Collection() {
                     className="relative group cursor-pointer"
                     onMouseEnter={() => setHoveredCard(card)}
                     onMouseLeave={() => setHoveredCard(null)}
-                    onClick={() => setSelectedCard({ card, quantity })}
+                    onClick={() => setSelectedCard(item)}
                   >
                     {/* Small card thumbnail */}
                     <div className="relative rounded-lg overflow-hidden shadow-lg transition-all group-hover:ring-2 group-hover:ring-blue-500">
@@ -427,10 +615,17 @@ export default function Collection() {
                         alt={displayName}
                         className="w-full h-auto"
                       />
+                      <WishlistButton cardId={card.id} className="absolute top-1 left-1" size={16} />
                       {/* Quantity badge */}
                       <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs sm:text-sm font-bold px-2 py-1 rounded-full shadow-lg">
                         x{quantity}
                       </div>
+                      {/* Foil badge */}
+                      {isFoil && (
+                        <div className="absolute top-8 right-1 bg-gradient-to-r from-fuchsia-500 to-amber-400 text-white text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded shadow-lg">
+                          FOIL
+                        </div>
+                      )}
                       {/* Price badge */}
                       {card.prices?.usd && (
                         <div className="absolute bottom-1 left-1 bg-green-600 text-white text-[10px] sm:text-xs font-bold px-1.5 py-0.5 rounded shadow-lg">
@@ -463,21 +658,21 @@ export default function Collection() {
           )}
 
           {/* Infinite scroll loading indicator */}
-          {!searchQuery && isLoadingMore && (
+          {isLoadingMore && (
             <div className="flex justify-center py-8">
               <Loader2 className="animate-spin text-blue-500" size={32} />
             </div>
           )}
 
           {/* Observer target for infinite scroll */}
-          {!searchQuery && hasMore && !isLoadingMore && (
+          {hasMore && !isLoadingMore && (
             <div ref={observerTarget} className="h-20" />
           )}
 
           {/* End of collection indicator */}
-          {!searchQuery && !hasMore && collection.length > 0 && (
+          {!hasMore && collection.length > 0 && (
             <div className="text-center py-8 text-gray-500 text-sm">
-              End of collection • {totalCount} total cards
+              {searchQuery ? `End of results • ${totalCount} matching card(s)` : `End of collection • ${totalCount} total cards`}
             </div>
           )}
         </div>
@@ -608,6 +803,52 @@ export default function Collection() {
                       </div>
                     </div>
                   )}
+
+                  {/* Foil & Condition */}
+                  <div className="border-t border-gray-700 pt-3 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-white">Foil</div>
+                        <div className="text-xs text-gray-400">
+                          {selectedCard.isFoil ? 'This copy is foil' : 'This copy is non-foil'}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={selectedCard.isFoil}
+                        disabled={isUpdating}
+                        onClick={() => updateCardVariant(selectedCard.card, !selectedCard.isFoil, selectedCard.condition)}
+                        className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+                          selectedCard.isFoil ? 'bg-fuchsia-600' : 'bg-gray-600'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                            selectedCard.isFoil ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    <div>
+                      <label htmlFor="collection-condition" className="block text-sm font-semibold text-white mb-1">
+                        Condition
+                      </label>
+                      <select
+                        id="collection-condition"
+                        value={selectedCard.condition}
+                        disabled={isUpdating}
+                        onChange={(e) => updateCardVariant(selectedCard.card, selectedCard.isFoil, e.target.value)}
+                        className="w-full min-h-[44px] px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                      >
+                        <option value="">—</option>
+                        {CARD_CONDITIONS.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
 
                   {/* Quantity Management */}
                   <div className="border-t border-gray-700 pt-3">

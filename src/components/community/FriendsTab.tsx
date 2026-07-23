@@ -42,12 +42,10 @@ const EMPTY_FRIENDS: Friend[] = [];
 interface FriendsTabProps {
   /** View a friend's collection (owned by the Browse view in Community). */
   onViewCollection: (user: ViewableUser) => void;
-  /** Report the current friends list up so Community can show the tab badge + Browse shortcut. */
-  onFriendsChange?: (friends: Friend[]) => void;
 }
 
 /** Friends tab: list, requests, and add. Self-contained. */
-export default function FriendsTab({ onViewCollection, onFriendsChange }: FriendsTabProps) {
+export default function FriendsTab({ onViewCollection }: FriendsTabProps) {
   const { user } = useAuth();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -86,11 +84,6 @@ export default function FriendsTab({ onViewCollection, onFriendsChange }: Friend
   const friends = friendsData?.friends ?? EMPTY_FRIENDS;
   const pendingRequests = friendsData?.pendingRequests ?? EMPTY_FRIENDS;
   const sentRequests = friendsData?.sentRequests ?? EMPTY_FRIENDS;
-
-  // Report friends list up to Community for the tab badge + Browse shortcut.
-  useEffect(() => {
-    onFriendsChange?.(friends);
-  }, [friends, onFriendsChange]);
 
   // Subscribe to friendship changes.
   useEffect(() => {
