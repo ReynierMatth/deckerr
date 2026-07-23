@@ -119,6 +119,39 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const removeTag = (tag: string) =>
     setTags(prev => prev.filter(t => t !== tag));
 
+  // Swap a deck entry to another printing of the same card. Local state only —
+  // the deck save flow rewrites deck_cards on Save. Keeps quantity and
+  // is_commander; if the target printing is already in the deck, merge
+  // quantities so the list never holds two entries for the same card id.
+  const changeCardPrinting = (oldCardId: string, printing: Card) => {
+    if (printing.id === oldCardId) return;
+
+    setSelectedCards(prev => {
+      const oldEntry = prev.find(c => c.card.id === oldCardId);
+      if (!oldEntry) return prev;
+
+      const target = prev.find(c => c.card.id === printing.id);
+      if (target) {
+        return prev
+          .filter(c => c.card.id !== oldCardId)
+          .map(c =>
+            c.card.id === printing.id
+              ? {
+                  ...c,
+                  quantity: c.quantity + oldEntry.quantity,
+                  is_commander: c.is_commander || oldEntry.is_commander,
+                }
+              : c
+          );
+      }
+
+      return prev.map(c => (c.card.id === oldCardId ? { ...c, card: printing } : c));
+    });
+
+    if (commander?.id === oldCardId) setCommander(printing);
+    setSelectedCard(prev => (prev && prev.id === oldCardId ? printing : prev));
+  };
+
   const updateCardQuantity = (cardId: string, quantity: number) => {
     setSelectedCards(prev => {
       return prev.map(c => {
@@ -391,6 +424,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
           toggleCardFace={toggleCardFace}
           getLargeImageUri={getCardLargeImageUri}
           onClose={() => setSelectedCard(null)}
+          onChangePrinting={(printing) => changeCardPrinting(selectedCard.id, printing)}
           onIncrement={() => addCardToDeck(selectedCard)}
           onDecrement={() => {
             const cardInDeck = selectedCards.find(c => c.card.id === selectedCard.id);

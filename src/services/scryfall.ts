@@ -48,9 +48,10 @@ interface ScryfallErrorBody {
   details?: string;
 }
 
-async function scryfallFetch<T>(path: string, init?: RequestInit): Promise<T> {
+// Fetch an absolute Scryfall URL (pagination `next_page` links are absolute).
+async function scryfallFetchUrl<T>(url: string, init?: RequestInit): Promise<T> {
   await throttle();
-  const response = await fetch(`${SCRYFALL_API}${path}`, {
+  const response = await fetch(url, {
     ...init,
     headers: {
       Accept: 'application/json',
@@ -71,6 +72,10 @@ async function scryfallFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+async function scryfallFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  return scryfallFetchUrl<T>(`${SCRYFALL_API}${path}`, init);
+}
+
 // --- in-memory card cache (card data is immutable for a given id) ---
 const cardCache = new Map<string, Card>();
 
@@ -80,6 +85,8 @@ const cacheCard = (card: Card | undefined | null): void => {
 
 interface ScryfallList<T> {
   data: T[];
+  has_more?: boolean;
+  next_page?: string;
 }
 
 /**
@@ -224,4 +231,45 @@ export const getCardsByIds = async (cardIds: string[], signal?: AbortSignal): Pr
   return cardIds
     .map((id) => cardCache.get(id))
     .filter((card): card is Card => Boolean(card));
+};
+
+// Printings are shared per card *name*, so cache them by lower-cased name
+// (like card-by-id lookups, a card's printing list is effectively immutable
+// within a session).
+const MAX_PRINTINGS = 120;
+const printingsCache = new Map<string, Card[]>();
+
+/**
+ * Fetch every printing/edition of a card (release order), following
+ * pagination up to MAX_PRINTINGS. Uses the card's own `prints_search_uri`
+ * when present, otherwise an exact-name prints search.
+ */
+export const getCardPrintings = async (card: Card, signal?: AbortSignal): Promise<Card[]> => {
+  const cacheKey = card.name.toLowerCase();
+  const cached = printingsCache.get(cacheKey);
+  if (cached) return cached;
+
+  const firstPage =
+    card.prints_search_uri ??
+    `${SCRYFALL_API}/cards/search?q=${encodeURIComponent(`!"${card.name}"`)}&unique=prints&order=released`;
+
+  const printings: Card[] = [];
+  let nextUrl: string | undefined = firstPage;
+  try {
+    while (nextUrl && printings.length < MAX_PRINTINGS) {
+      const page: ScryfallList<Card> = await scryfallFetchUrl<ScryfallList<Card>>(nextUrl, { signal });
+      page.data?.forEach(cacheCard);
+      printings.push(...(page.data ?? []));
+      nextUrl = page.has_more ? page.next_page : undefined;
+    }
+  } catch (error) {
+    // 404 = no result set (e.g. odd names); treat as "no other printings".
+    if (!(error instanceof ScryfallHttpError && error.status === 404)) {
+      throw error;
+    }
+  }
+
+  const result = printings.slice(0, MAX_PRINTINGS);
+  printingsCache.set(cacheKey, result);
+  return result;
 };

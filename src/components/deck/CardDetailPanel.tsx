@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Bell, CheckCircle, Minus, Plus, RefreshCw, X } from 'lucide-react';
+import { Bell, CheckCircle, Layers, Minus, Plus, RefreshCw, X } from 'lucide-react';
 import { Card } from '../../types';
 import { isDoubleFaced } from '../../utils/cardFaces';
 import { addPriceAlert } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import PrintingPickerModal from '../card/PrintingPickerModal';
 import WishlistButton from '../WishlistButton';
 
 type AlertDirection = 'above' | 'below';
@@ -20,6 +21,7 @@ interface CardDetailPanelProps {
   onClose: () => void;
   onIncrement: () => void;
   onDecrement: () => void;
+  onChangePrinting: (printing: Card) => void;
 }
 
 /**
@@ -38,10 +40,12 @@ export default function CardDetailPanel({
   onClose,
   onIncrement,
   onDecrement,
+  onChangePrinting,
 }: CardDetailPanelProps) {
   const { user } = useAuth();
   const { success, error: toastError } = useToast();
 
+  const [showPrintingPicker, setShowPrintingPicker] = useState(false);
   const [alertDirection, setAlertDirection] = useState<AlertDirection>('below');
   const [alertPrice, setAlertPrice] = useState('');
   const [savingAlert, setSavingAlert] = useState(false);
@@ -81,14 +85,17 @@ export default function CardDetailPanel({
 
       {/* Sliding Panel */}
       <div className="fixed top-0 right-0 h-full w-full md:w-96 bg-gray-800 shadow-2xl z-[120] overflow-y-auto animate-slide-in-right">
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          className="fixed top-4 right-4 bg-gray-700 hover:bg-gray-600 text-white p-2 md:p-1.5 rounded-full transition-colors z-[130] shadow-lg"
-          aria-label="Close"
-        >
-          <X size={24} className="md:w-5 md:h-5" />
-        </button>
+        {/* Close button (hidden while the printing picker is open so it can't
+            float above it) */}
+        {!showPrintingPicker && (
+          <button
+            onClick={onClose}
+            className="fixed top-4 right-4 bg-gray-700 hover:bg-gray-600 text-white p-2 md:p-1.5 rounded-full transition-colors z-[130] shadow-lg"
+            aria-label="Close"
+          >
+            <X size={24} className="md:w-5 md:h-5" />
+          </button>
+        )}
 
         <div className="p-4 sm:p-6">
           {/* Card Image */}
@@ -135,6 +142,25 @@ export default function CardDetailPanel({
                 </div>
               </div>
             )}
+
+            {/* Printing / edition */}
+            <div className="border-t border-gray-700 pt-3">
+              {card.set_name && (
+                <div className="text-sm text-gray-400 mb-2">
+                  {card.set_name}
+                  {card.set && <span className="uppercase"> ({card.set})</span>}
+                  {card.collector_number && <span> #{card.collector_number}</span>}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowPrintingPicker(true)}
+                className="w-full min-h-[44px] px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+              >
+                <Layers size={18} />
+                Change printing
+              </button>
+            </div>
 
             {/* Price Alert */}
             <div className="border-t border-gray-700 pt-3">
@@ -233,6 +259,14 @@ export default function CardDetailPanel({
           </div>
         </div>
       </div>
+
+      {/* Printing/edition picker (drawer on mobile) */}
+      <PrintingPickerModal
+        card={card}
+        isOpen={showPrintingPicker}
+        onClose={() => setShowPrintingPicker(false)}
+        onSelect={onChangePrinting}
+      />
     </>
   );
 }
