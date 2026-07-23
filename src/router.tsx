@@ -126,6 +126,11 @@ const communityRoute = createRoute({
   path: '/community',
   component: lazyRouteComponent(() => import('./components/Community')),
 });
+const discoverRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/discover',
+  component: lazyRouteComponent(() => import('./components/Discover')),
+});
 const searchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/search',
@@ -158,6 +163,7 @@ const routeTree = rootRoute.addChildren([
   collectionRoute,
   wishlistRoute,
   communityRoute,
+  discoverRoute,
   searchRoute,
   lifeCounterRoute,
   alertsRoute,
