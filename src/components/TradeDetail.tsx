@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { X, Check, ArrowLeftRight, DollarSign, Loader2, Edit, RefreshCcw, History, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -26,6 +27,14 @@ interface CollectionItem {
   quantity: number;
 }
 
+interface TradeCards {
+  myItems: TradeCardItem[];
+  theirItems: TradeCardItem[];
+}
+
+const EMPTY_HISTORY: TradeHistoryEntry[] = [];
+const EMPTY_TRADE_ITEMS: TradeCardItem[] = [];
+
 function calculateTotalPrice(items: TradeCardItem[]): number {
   return items.reduce((total, { card, quantity }) => {
     const price = card.prices?.usd ? parseFloat(card.prices.usd) : 0;
@@ -42,12 +51,8 @@ export default function TradeDetail({
 }: TradeDetailProps) {
   const { user } = useAuth();
   const toast = useToast();
-  const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const [senderCards, setSenderCards] = useState<TradeCardItem[]>([]);
-  const [receiverCards, setReceiverCards] = useState<TradeCardItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
-  const [history, setHistory] = useState<TradeHistoryEntry[]>([]);
   const [showEditMode, setShowEditMode] = useState(false);
   const [editReceiverCollection, setEditReceiverCollection] = useState<CollectionItem[]>([]);
 
@@ -56,30 +61,31 @@ export default function TradeDetail({
   const myUserId = user?.id || '';
   const otherUserId = isUser1 ? trade.user2_id : trade.user1_id;
 
-  useEffect(() => {
-    loadTradeCards();
-    loadTradeHistory();
-  }, [trade]);
-
-  const loadTradeCards = async () => {
-    setLoading(true);
-    try {
+  // Card details for both sides of the trade. Version is part of the key so an
+  // edited trade (new items) refetches; myUserId keeps the you/them split right.
+  const {
+    data: tradeCards,
+    isLoading: loading,
+    isError: tradeCardsFailed,
+  } = useQuery({
+    queryKey: ['trade', trade.id, 'cards', trade.version, myUserId],
+    queryFn: async (): Promise<TradeCards> => {
       const allCardIds = trade.items?.map(item => item.card_id) || [];
       if (allCardIds.length === 0) {
-        setSenderCards([]);
-        setReceiverCards([]);
-        return;
+        return { myItems: [], theirItems: [] };
       }
 
       const cards = await getCardsByIds(allCardIds);
-      const cardMap = new Map<string, Card>();
-      cards.forEach(card => cardMap.set(card.id, card));
+      const cardsById: Record<string, Card> = {};
+      cards.forEach(card => {
+        cardsById[card.id] = card;
+      });
 
       const myItems: TradeCardItem[] = [];
       const theirItems: TradeCardItem[] = [];
 
       trade.items?.forEach(item => {
-        const card = cardMap.get(item.card_id);
+        const card = cardsById[item.card_id];
         if (!card) return;
 
         if (item.owner_id === myUserId) {
@@ -89,24 +95,26 @@ export default function TradeDetail({
         }
       });
 
-      setSenderCards(myItems);
-      setReceiverCards(theirItems);
-    } catch (error) {
-      console.error('Error loading trade cards:', error);
-      toast.error('Failed to load trade details');
-    } finally {
-      setLoading(false);
-    }
-  };
+      return { myItems, theirItems };
+    },
+  });
 
-  const loadTradeHistory = async () => {
-    try {
-      const historyData = await getTradeVersionHistory(trade.id);
-      setHistory(historyData);
-    } catch (error) {
-      console.error('Error loading trade history:', error);
+  const senderCards = tradeCards?.myItems ?? EMPTY_TRADE_ITEMS;
+  const receiverCards = tradeCards?.theirItems ?? EMPTY_TRADE_ITEMS;
+
+  // Surface the load failure as a toast, exactly once per failure.
+  const { error: showErrorToast } = toast;
+  useEffect(() => {
+    if (tradeCardsFailed) {
+      showErrorToast('Failed to load trade details');
     }
-  };
+  }, [tradeCardsFailed, showErrorToast]);
+
+  const { data: historyData } = useQuery({
+    queryKey: ['tradeHistory', trade.id],
+    queryFn: () => getTradeVersionHistory(trade.id),
+  });
+  const history = historyData ?? EMPTY_HISTORY;
 
   const handleAccept = async () => {
     setProcessing(true);
