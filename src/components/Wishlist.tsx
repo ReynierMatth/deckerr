@@ -6,6 +6,7 @@ import { getWishlist, getCardsByIds, removeFromWishlist, searchCards, addToWishl
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { getCardImageUri } from '../utils/cardFaces';
+import CardTile from './card/CardTile';
 
 export default function Wishlist() {
   const { user } = useAuth();
@@ -119,27 +120,24 @@ export default function Wishlist() {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {cards.map((card) => {
-              const imageUri = getCardImageUri(card);
-              return (
-                <div
-                  key={card.id}
-                  className="relative bg-gray-800 rounded-lg overflow-hidden shadow-lg"
-                >
-                  {imageUri ? (
-                    <img src={imageUri} alt={card.name} className="w-full h-auto" />
-                  ) : (
-                    <div className="aspect-[5/7] flex items-center justify-center p-2 text-center text-sm text-gray-300">
-                      {card.name}
-                    </div>
-                  )}
-
-                  {card.prices?.usd && (
+            {cards.map((card) => (
+              <CardTile
+                key={card.id}
+                card={card}
+                className="relative bg-gray-800 rounded-lg overflow-hidden shadow-lg"
+                fallback={
+                  <div className="aspect-[5/7] flex items-center justify-center p-2 text-center text-sm text-gray-300">
+                    {card.name}
+                  </div>
+                }
+                bottomLeft={
+                  card.prices?.usd && (
                     <div className="absolute bottom-1 left-1 bg-green-600 text-white text-[10px] sm:text-xs font-bold px-1.5 py-0.5 rounded shadow-lg">
                       ${card.prices.usd}
                     </div>
-                  )}
-
+                  )
+                }
+                topRight={
                   <button
                     onClick={() => handleRemove(card.id)}
                     title="Remove from wishlist"
@@ -148,9 +146,9 @@ export default function Wishlist() {
                   >
                     <Trash2 size={16} />
                   </button>
-                </div>
-              );
-            })}
+                }
+              />
+            ))}
           </div>
         )}
       </div>

@@ -6,6 +6,7 @@ import { Trade, TradeHistoryEntry, getTradeVersionHistory } from '../services/tr
 import { getUserCollection, getCardsByIds } from '../services/api';
 import { Card } from '../types';
 import TradeCreator from './TradeCreator';
+import CardTile from './card/CardTile';
 
 interface TradeDetailProps {
   trade: Trade;
@@ -251,23 +252,26 @@ export default function TradeDetail({
                   ) : (
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                       {yourCards.map((item, idx) => (
-                        <div key={idx} className="relative rounded-lg overflow-hidden">
-                          <img
-                            src={item.card.image_uris?.small || item.card.image_uris?.normal}
-                            alt={item.card.name}
-                            className="w-full h-auto"
-                          />
-                          {item.quantity > 1 && (
-                            <div className="absolute top-1 right-1 bg-green-600 text-white text-xs px-1.5 py-0.5 rounded font-semibold">
-                              x{item.quantity}
-                            </div>
-                          )}
-                          {item.card.prices?.usd && (
-                            <div className="absolute bottom-1 left-1 bg-gray-900/90 text-white text-[10px] px-1 py-0.5 rounded">
-                              ${item.card.prices.usd}
-                            </div>
-                          )}
-                        </div>
+                        <CardTile
+                          key={idx}
+                          card={item.card}
+                          imageSize="small"
+                          className="relative rounded-lg overflow-hidden"
+                          topRight={
+                            item.quantity > 1 && (
+                              <div className="absolute top-1 right-1 bg-green-600 text-white text-xs px-1.5 py-0.5 rounded font-semibold">
+                                x{item.quantity}
+                              </div>
+                            )
+                          }
+                          bottomLeft={
+                            item.card.prices?.usd && (
+                              <div className="absolute bottom-1 left-1 bg-gray-900/90 text-white text-[10px] px-1 py-0.5 rounded">
+                                ${item.card.prices.usd}
+                              </div>
+                            )
+                          }
+                        />
                       ))}
                     </div>
                   )}
@@ -290,23 +294,26 @@ export default function TradeDetail({
                   ) : (
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                       {theirCards.map((item, idx) => (
-                        <div key={idx} className="relative rounded-lg overflow-hidden">
-                          <img
-                            src={item.card.image_uris?.small || item.card.image_uris?.normal}
-                            alt={item.card.name}
-                            className="w-full h-auto"
-                          />
-                          {item.quantity > 1 && (
-                            <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded font-semibold">
-                              x{item.quantity}
-                            </div>
-                          )}
-                          {item.card.prices?.usd && (
-                            <div className="absolute bottom-1 left-1 bg-gray-900/90 text-white text-[10px] px-1 py-0.5 rounded">
-                              ${item.card.prices.usd}
-                            </div>
-                          )}
-                        </div>
+                        <CardTile
+                          key={idx}
+                          card={item.card}
+                          imageSize="small"
+                          className="relative rounded-lg overflow-hidden"
+                          topRight={
+                            item.quantity > 1 && (
+                              <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded font-semibold">
+                                x{item.quantity}
+                              </div>
+                            )
+                          }
+                          bottomLeft={
+                            item.card.prices?.usd && (
+                              <div className="absolute bottom-1 left-1 bg-gray-900/90 text-white text-[10px] px-1 py-0.5 rounded">
+                                ${item.card.prices.usd}
+                              </div>
+                            )
+                          }
+                        />
                       ))}
                     </div>
                   )}

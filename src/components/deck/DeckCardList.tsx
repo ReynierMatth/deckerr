@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Plus, Trash2, Loader2, AlertCircle, X, Share2, Copy, Check, PackagePlus, CheckCircle } from 'lucide-react';
 import { Card } from '../../types';
 import { ManaSymbol } from '../ManaCost';
-import { getCardArtCrop } from '../../utils/cardFaces';
 import WishlistButton from '../WishlistButton';
+import CardRow from '../card/CardRow';
 
 interface DeckCardEntry {
   card: Card;
@@ -306,9 +306,11 @@ export default function DeckCardList({
             const inCollection = userCollection.get(card.id) || 0;
 
             return (
-              <div
+              <CardRow
                 key={card.id}
-                className={`flex bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-750 transition-colors cursor-pointer ${
+                card={card}
+                name={card.name}
+                className={`hover:bg-gray-750 transition-colors cursor-pointer ${
                   !isValidForCommander ? 'ring-1 ring-yellow-500/50' : ''
                 }`}
                 onMouseEnter={() => {
@@ -320,65 +322,52 @@ export default function DeckCardList({
                   setHoverSource(null);
                 }}
                 onClick={() => setSelectedCard(card)}
-              >
-                {/* Card art crop */}
-                <div className="relative w-16 h-16 flex-shrink-0">
-                  {getCardArtCrop(card) ? (
-                    <img src={getCardArtCrop(card)} alt={card.name} className="w-full h-full object-cover rounded-l-lg" />
-                  ) : (
-                    <div className="w-full h-full bg-gray-700 rounded-l-lg" />
-                  )}
-                </div>
-
-                {/* Info */}
-                <div className="flex-1 p-2 flex flex-col justify-center min-w-0">
-                  <h4 className="font-bold text-sm truncate">{card.name}</h4>
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
-                    {card.prices?.usd && <span>${card.prices.usd}</span>}
-                    {inCollection > 0 && (
-                      <span className="text-green-400 flex items-center gap-0.5">
-                        <CheckCircle size={10} />
-                        x{inCollection}
-                      </span>
-                    )}
-                  </div>
-                  {!isValidForCommander && (
-                    <div className="text-xs text-yellow-400 flex items-center gap-1 mt-0.5">
+                badges={
+                  inCollection > 0 && (
+                    <span className="text-green-400 flex items-center gap-0.5">
+                      <CheckCircle size={10} />
+                      x{inCollection}
+                    </span>
+                  )
+                }
+                warning={
+                  !isValidForCommander && (
+                    <>
                       <AlertCircle size={10} />
                       <span>Not in commander colors</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Controls: quantity + remove-from-deck + wishlist + add-to-collection */}
-                <div className="flex items-center gap-1.5 p-2" onClick={(e) => e.stopPropagation()}>
-                  <input
-                    type="number"
-                    value={quantity}
-                    onChange={e => updateCardQuantity(card.id, parseInt(e.target.value))}
-                    min="1"
-                    className="w-12 px-1 py-2 bg-gray-700 border border-gray-600 rounded-lg text-center text-sm"
-                  />
-                  <button
-                    onClick={() => removeCardFromDeck(card.id)}
-                    title="Remove from deck"
-                    aria-label="Remove from deck"
-                    className="p-2.5 bg-gray-700 text-red-400 active:bg-gray-600 rounded-lg"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                  <WishlistButton cardId={card.id} variant="button" size={18} />
-                  <button
-                    onClick={() => handleAddCardToCollection(card.id, 1)}
-                    disabled={addingCardId === card.id}
-                    title="Add to collection"
-                    aria-label="Add to collection"
-                    className="p-2.5 bg-green-600 active:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg"
-                  >
-                    {addingCardId === card.id ? <Loader2 className="animate-spin" size={18} /> : <PackagePlus size={18} />}
-                  </button>
-                </div>
-              </div>
+                    </>
+                  )
+                }
+                actions={
+                  <>
+                    <input
+                      type="number"
+                      value={quantity}
+                      onChange={e => updateCardQuantity(card.id, parseInt(e.target.value))}
+                      min="1"
+                      className="w-12 px-1 py-2 bg-gray-700 border border-gray-600 rounded-lg text-center text-sm"
+                    />
+                    <button
+                      onClick={() => removeCardFromDeck(card.id)}
+                      title="Remove from deck"
+                      aria-label="Remove from deck"
+                      className="p-2.5 bg-gray-700 text-red-400 active:bg-gray-600 rounded-lg"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                    <WishlistButton cardId={card.id} variant="button" size={18} />
+                    <button
+                      onClick={() => handleAddCardToCollection(card.id, 1)}
+                      disabled={addingCardId === card.id}
+                      title="Add to collection"
+                      aria-label="Add to collection"
+                      className="p-2.5 bg-green-600 active:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg"
+                    >
+                      {addingCardId === card.id ? <Loader2 className="animate-spin" size={18} /> : <PackagePlus size={18} />}
+                    </button>
+                  </>
+                }
+              />
             );
           })}
         </div>
