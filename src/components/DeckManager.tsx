@@ -597,6 +597,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
             removeCardFromDeck={removeCardFromDeck}
             handleAddCardToCollection={handleAddCardToCollection}
             addingCardId={addingCardId}
+            userCollection={userCollection}
             setHoveredCard={setHoveredCard}
             setHoverSource={setHoverSource}
             setSelectedCard={setSelectedCard}

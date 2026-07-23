@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Loader2, AlertCircle, X, Share2, Copy, Check, PackagePlus } from 'lucide-react';
+import { Plus, Trash2, Loader2, AlertCircle, X, Share2, Copy, Check, PackagePlus, CheckCircle } from 'lucide-react';
 import { Card } from '../../types';
 import { ManaSymbol } from '../ManaCost';
 import { getCardArtCrop } from '../../utils/cardFaces';
@@ -39,6 +39,7 @@ interface DeckCardListProps {
   removeCardFromDeck: (cardId: string) => void;
   handleAddCardToCollection: (cardId: string, quantity: number) => void;
   addingCardId: string | null;
+  userCollection: Map<string, number>;
   setHoveredCard: React.Dispatch<React.SetStateAction<Card | null>>;
   setHoverSource: React.Dispatch<React.SetStateAction<'search' | 'deck' | null>>;
   setSelectedCard: React.Dispatch<React.SetStateAction<Card | null>>;
@@ -77,6 +78,7 @@ export default function DeckCardList({
   removeCardFromDeck,
   handleAddCardToCollection,
   addingCardId,
+  userCollection,
   setHoveredCard,
   setHoverSource,
   setSelectedCard,
@@ -301,6 +303,7 @@ export default function DeckCardList({
 
           {selectedCards.map(({ card, quantity }) => {
             const isValidForCommander = deckFormat !== 'commander' || !commander || isCardValidForCommander(card, commanderColors);
+            const inCollection = userCollection.get(card.id) || 0;
 
             return (
               <div
@@ -318,14 +321,13 @@ export default function DeckCardList({
                 }}
                 onClick={() => setSelectedCard(card)}
               >
-                {/* Card art crop + wishlist */}
-                <div className="relative w-16 h-16 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                {/* Card art crop */}
+                <div className="relative w-16 h-16 flex-shrink-0">
                   {getCardArtCrop(card) ? (
                     <img src={getCardArtCrop(card)} alt={card.name} className="w-full h-full object-cover rounded-l-lg" />
                   ) : (
                     <div className="w-full h-full bg-gray-700 rounded-l-lg" />
                   )}
-                  <WishlistButton cardId={card.id} className="absolute top-0.5 left-0.5" size={13} />
                 </div>
 
                 {/* Info */}
@@ -333,6 +335,12 @@ export default function DeckCardList({
                   <h4 className="font-bold text-sm truncate">{card.name}</h4>
                   <div className="flex items-center gap-2 text-xs text-gray-400">
                     {card.prices?.usd && <span>${card.prices.usd}</span>}
+                    {inCollection > 0 && (
+                      <span className="text-green-400 flex items-center gap-0.5">
+                        <CheckCircle size={10} />
+                        x{inCollection}
+                      </span>
+                    )}
                   </div>
                   {!isValidForCommander && (
                     <div className="text-xs text-yellow-400 flex items-center gap-1 mt-0.5">
@@ -342,7 +350,7 @@ export default function DeckCardList({
                   )}
                 </div>
 
-                {/* Controls: quantity + remove-from-deck + add-to-collection */}
+                {/* Controls: quantity + remove-from-deck + wishlist + add-to-collection */}
                 <div className="flex items-center gap-1.5 p-2" onClick={(e) => e.stopPropagation()}>
                   <input
                     type="number"
@@ -359,6 +367,7 @@ export default function DeckCardList({
                   >
                     <Trash2 size={18} />
                   </button>
+                  <WishlistButton cardId={card.id} variant="button" size={18} />
                   <button
                     onClick={() => handleAddCardToCollection(card.id, 1)}
                     disabled={addingCardId === card.id}
