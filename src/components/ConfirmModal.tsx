@@ -1,3 +1,4 @@
+import { useId, useRef } from 'react';
 import { AlertCircle, CheckCircle, Trash2, AlertTriangle } from 'lucide-react';
 import Modal from './Modal';
 
@@ -24,6 +25,9 @@ export default function ConfirmModal({
   variant = 'danger',
   isLoading = false,
 }: ConfirmModalProps) {
+  const titleId = useId();
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+
   const handleConfirm = () => {
     onConfirm();
     if (!isLoading) {
@@ -62,7 +66,14 @@ export default function ConfirmModal({
   const Icon = config.icon;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="sm" showCloseButton={false}>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="sm"
+      showCloseButton={false}
+      labelledBy={titleId}
+      initialFocusRef={cancelButtonRef}
+    >
       <div className="p-6">
         {/* Icon */}
         <div className="flex items-center justify-center mb-4">
@@ -72,7 +83,7 @@ export default function ConfirmModal({
         </div>
 
         {/* Title */}
-        <h2 className="text-xl font-bold text-white text-center mb-2">
+        <h2 id={titleId} className="text-xl font-bold text-white text-center mb-2">
           {title}
         </h2>
 
@@ -84,16 +95,17 @@ export default function ConfirmModal({
         {/* Buttons */}
         <div className="flex gap-3">
           <button
+            ref={cancelButtonRef}
             onClick={onClose}
             disabled={isLoading}
-            className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+            className="flex-1 min-h-[44px] px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
           >
             {cancelText}
           </button>
           <button
             onClick={handleConfirm}
             disabled={isLoading}
-            className={`flex-1 px-4 py-2 ${config.buttonColor} disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors`}
+            className={`flex-1 min-h-[44px] px-4 py-2 ${config.buttonColor} disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors`}
           >
             {isLoading ? 'Loading...' : confirmText}
           </button>

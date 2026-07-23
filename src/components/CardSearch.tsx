@@ -675,9 +675,10 @@ const CardSearch = () => {
                             e.stopPropagation();
                             toggleCardFace(card.id, card.card_faces!.length);
                           }}
-                          className="absolute bottom-0.5 right-0.5 bg-purple-600 text-white p-0.5 rounded-full"
+                          className="absolute bottom-0.5 right-0.5 bg-purple-600 text-white p-2 rounded-full"
+                          aria-label="Flip card"
                         >
-                          <RefreshCw size={10} />
+                          <RefreshCw size={12} />
                         </button>
                       )}
                     </div>
@@ -760,6 +761,7 @@ const CardSearch = () => {
                           }}
                           className="absolute bottom-2 right-2 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full shadow-lg transition-all"
                           title="Flip card"
+                          aria-label="Flip card"
                         >
                           <RefreshCw size={16} />
                         </button>

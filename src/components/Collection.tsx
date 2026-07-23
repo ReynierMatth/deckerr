@@ -641,8 +641,9 @@ export default function Collection() {
                             e.stopPropagation();
                             toggleCardFace(card.id, card.card_faces!.length);
                           }}
-                          className="absolute bottom-1 right-1 bg-purple-600 hover:bg-purple-700 text-white p-1 rounded-full shadow-lg transition-all"
+                          className="absolute bottom-1 right-1 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full shadow-lg transition-all"
                           title="Flip card"
+                          aria-label="Flip card"
                         >
                           <RefreshCw size={12} />
                         </button>

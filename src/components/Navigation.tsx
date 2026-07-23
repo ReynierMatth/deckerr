@@ -170,7 +170,11 @@ export default function Navigation() {
           <div className="absolute bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 rounded-t-2xl p-4 pb-8 safe-area-bottom animate-slide-in-up">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-semibold text-gray-300">More</span>
-              <button onClick={() => setShowMore(false)} className="p-1 text-gray-400 hover:text-white">
+              <button
+                onClick={() => setShowMore(false)}
+                aria-label="Close menu"
+                className="p-2.5 -m-1.5 text-gray-400 hover:text-white"
+              >
                 <X size={20} />
               </button>
             </div>
