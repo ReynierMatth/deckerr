@@ -7,6 +7,11 @@ interface WishlistButtonProps {
   cardId: string;
   size?: number;
   className?: string;
+  /**
+   * 'overlay' (default): translucent pill meant to sit on top of card art.
+   * 'button': solid square action button matching the search-result controls.
+   */
+  variant?: 'overlay' | 'button';
 }
 
 /**
@@ -14,7 +19,7 @@ interface WishlistButtonProps {
  * is shown (`cardId` is all it needs). Stays in sync everywhere via the shared
  * ['wishlist', userId] query. Owning a card does NOT prevent wishlisting it.
  */
-export default function WishlistButton({ cardId, size = 18, className = '' }: WishlistButtonProps) {
+export default function WishlistButton({ cardId, size = 18, className = '', variant = 'overlay' }: WishlistButtonProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { data: wishlist } = useQuery({
@@ -38,6 +43,23 @@ export default function WishlistButton({ cardId, size = 18, className = '' }: Wi
       /* transient failure — the heart simply won't toggle */
     }
   };
+
+  if (variant === 'button') {
+    return (
+      <button
+        type="button"
+        onClick={toggle}
+        aria-pressed={inWishlist}
+        title={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+        aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+        className={`p-2.5 rounded-lg transition-colors ${
+          inWishlist ? 'bg-rose-500/20 text-rose-400' : 'bg-gray-700 text-gray-300 active:bg-gray-600'
+        } ${className}`}
+      >
+        <Heart size={size} fill={inWishlist ? 'currentColor' : 'none'} />
+      </button>
+    );
+  }
 
   return (
     <button
