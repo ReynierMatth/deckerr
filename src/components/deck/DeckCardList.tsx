@@ -126,7 +126,10 @@ export default function DeckCardList({
         >
           <option value="standard">Standard</option>
           <option value="modern">Modern</option>
+          <option value="pioneer">Pioneer</option>
           <option value="commander">Commander</option>
+          <option value="brawl">Brawl</option>
+          <option value="oathbreaker">Oathbreaker</option>
           <option value="legacy">Legacy</option>
           <option value="vintage">Vintage</option>
           <option value="pauper">Pauper</option>

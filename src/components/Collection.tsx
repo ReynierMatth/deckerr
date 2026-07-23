@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '../types';
-import { getCollectionTotalValue, refreshCollectionPrices, getCollectionValueHistory, runPriceAlertCheck, addMultipleCardsToCollection } from '../services/api';
-import { toCsv, parseCsv, CollectionCsvRow } from '../utils/collectionCsv';
+import { getCollectionTotalValue, refreshCollectionPrices, getCollectionValueHistory, runPriceAlertCheck, addMultipleCardsToCollection, getCardsBySetNumber, resolveCardsByNames, setNumberKey } from '../services/api';
+import { toCsv, parseCsv, isManaBoxCsv, parseManaBoxCsv, CollectionCsvRow, ManaBoxCsvRow } from '../utils/collectionCsv';
 import CollectionValueChart from './CollectionValueChart';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -365,7 +365,80 @@ export default function Collection() {
     URL.revokeObjectURL(url);
   };
 
-  // Import cards from a CSV file selected by the user.
+  // Import a ManaBox-style CSV: resolve each row to an exact Scryfall printing
+  // via set + collector number (batched), falling back to name-based fuzzy
+  // resolution for rows missing that info (or that Scryfall couldn't match).
+  const importManaBoxRows = async (userId: string, rows: ManaBoxCsvRow[]): Promise<boolean> => {
+    if (rows.length === 0) {
+      toast.error('No valid rows found in CSV');
+      return false;
+    }
+
+    const withPrinting = rows.filter(row => row.set && row.collector_number);
+    const byPrinting = withPrinting.length
+      ? await getCardsBySetNumber(
+          withPrinting.map(row => ({ set: row.set, collector_number: row.collector_number })),
+        )
+      : new Map<string, Card>();
+
+    const resolved: { row: ManaBoxCsvRow; card: Card }[] = [];
+    const unresolved: ManaBoxCsvRow[] = [];
+    for (const row of rows) {
+      const card =
+        row.set && row.collector_number
+          ? byPrinting.get(setNumberKey(row.set, row.collector_number))
+          : undefined;
+      if (card) resolved.push({ row, card });
+      else unresolved.push(row);
+    }
+
+    if (unresolved.length > 0) {
+      const byName = await resolveCardsByNames(unresolved.map(row => row.name));
+      for (const row of unresolved) {
+        const card = byName.get(row.name.trim().toLowerCase());
+        if (card) resolved.push({ row, card });
+      }
+    }
+
+    if (resolved.length === 0) {
+      toast.error('Could not match any cards from the CSV');
+      return false;
+    }
+
+    await addMultipleCardsToCollection(
+      userId,
+      resolved.map(({ row, card }) => ({
+        cardId: card.id,
+        quantity: row.quantity,
+        priceUsd: priceForVariant(card, row.is_foil),
+        cardName: card.name,
+      })),
+    );
+
+    const totalAdded = resolved.reduce((sum, { row }) => sum + row.quantity, 0);
+    const skipped = rows.length - resolved.length;
+    toast.success(`Imported ${totalAdded} card(s)${skipped > 0 ? ` — ${skipped} row(s) not matched` : ''}`);
+    return true;
+  };
+
+  // Import a Deckerr-native CSV (rows already carry Scryfall card ids).
+  const importNativeRows = async (userId: string, rows: CollectionCsvRow[]): Promise<boolean> => {
+    if (rows.length === 0) {
+      toast.error('No valid rows found in CSV');
+      return false;
+    }
+
+    await addMultipleCardsToCollection(
+      userId,
+      rows.map(row => ({ cardId: row.card_id, quantity: row.quantity, priceUsd: row.price_usd })),
+    );
+
+    const totalAdded = rows.reduce((sum, row) => sum + row.quantity, 0);
+    toast.success(`Imported ${totalAdded} card(s)`);
+    return true;
+  };
+
+  // Import cards from a CSV file selected by the user (Deckerr or ManaBox export).
   const handleImportCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = ''; // allow re-selecting the same file later
@@ -374,22 +447,12 @@ export default function Collection() {
     try {
       setIsImporting(true);
       const text = await file.text();
-      const rows = parseCsv(text);
 
-      if (rows.length === 0) {
-        toast.error('No valid rows found in CSV');
-        return;
-      }
+      const imported = isManaBoxCsv(text)
+        ? await importManaBoxRows(user.id, parseManaBoxCsv(text))
+        : await importNativeRows(user.id, parseCsv(text));
 
-      await addMultipleCardsToCollection(
-        user.id,
-        rows.map(row => ({ cardId: row.card_id, quantity: row.quantity, priceUsd: row.price_usd })),
-      );
-
-      const totalAdded = rows.reduce((sum, row) => sum + row.quantity, 0);
-      toast.success(`Imported ${totalAdded} card(s)`);
-
-      invalidateCollectionCaches();
+      if (imported) invalidateCollectionCaches();
     } catch (error) {
       console.error('Error importing collection CSV:', error);
       toast.error('Failed to import CSV');

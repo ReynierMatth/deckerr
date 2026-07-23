@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildDeckExport } from './deckExport';
+import { buildDeckExport, DECK_CSV_HEADER } from './deckExport';
 import { Card } from '../types';
 
 const card = (over: Partial<Card>): Card => ({ id: over.name ?? 'x', name: over.name ?? 'x', ...over });
@@ -33,5 +33,73 @@ describe('buildDeckExport', () => {
       { card: card({ name: 'Gone' }), quantity: 0 },
     ]);
     expect(out).toBe('1 Atraxa\n5 Forest');
+  });
+});
+
+describe('buildDeckExport — csv', () => {
+  it('emits the header row and one row per entry', () => {
+    const out = buildDeckExport(
+      [{ card: card({ name: 'Lightning Bolt', set: 'm10', collector_number: '146' }), quantity: 4 }],
+      'csv',
+    );
+    expect(out).toBe(`${DECK_CSV_HEADER}\n4,Lightning Bolt,m10,146,false`);
+  });
+
+  it('marks commanders and lists them first', () => {
+    const out = buildDeckExport(
+      [
+        { card: card({ name: 'Forest' }), quantity: 5 },
+        { card: card({ name: 'Atraxa', set: 'one', collector_number: '196' }), quantity: 1, is_commander: true },
+      ],
+      'csv',
+    );
+    expect(out).toBe(`${DECK_CSV_HEADER}\n1,Atraxa,one,196,true\n5,Forest,,,false`);
+  });
+
+  it('quotes names containing commas', () => {
+    const out = buildDeckExport([{ card: card({ name: 'Who, What, When' }), quantity: 1 }], 'csv');
+    expect(out).toBe(`${DECK_CSV_HEADER}\n1,"Who, What, When",,,false`);
+  });
+
+  it('leaves set/collector empty when unknown', () => {
+    const out = buildDeckExport([{ card: card({ name: 'Sol Ring' }), quantity: 1 }], 'csv');
+    expect(out).toBe(`${DECK_CSV_HEADER}\n1,Sol Ring,,,false`);
+  });
+});
+
+describe('buildDeckExport — mtgo (.dek)', () => {
+  it('produces a minimal valid .dek XML document', () => {
+    const out = buildDeckExport([{ card: card({ name: 'Lightning Bolt' }), quantity: 4 }], 'mtgo');
+    expect(out).toBe(
+      [
+        '<?xml version="1.0" encoding="utf-8"?>',
+        '<Deck xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">',
+        '  <NetDeckID>0</NetDeckID>',
+        '  <PreconstructedDeckID>0</PreconstructedDeckID>',
+        '  <Cards Quantity="4" Sideboard="false" Name="Lightning Bolt" />',
+        '</Deck>',
+      ].join('\n'),
+    );
+  });
+
+  it('escapes XML special characters in card names', () => {
+    const out = buildDeckExport([{ card: card({ name: 'Sword of "War" & <Peace>' }), quantity: 1 }], 'mtgo');
+    expect(out).toContain('Name="Sword of &quot;War&quot; &amp; &lt;Peace&gt;"');
+  });
+
+  it('lists commanders first and skips zero-quantity entries', () => {
+    const out = buildDeckExport(
+      [
+        { card: card({ name: 'Forest' }), quantity: 5 },
+        { card: card({ name: 'Atraxa' }), quantity: 1, is_commander: true },
+        { card: card({ name: 'Gone' }), quantity: 0 },
+      ],
+      'mtgo',
+    );
+    const atraxa = out.indexOf('Name="Atraxa"');
+    const forest = out.indexOf('Name="Forest"');
+    expect(atraxa).toBeGreaterThan(-1);
+    expect(forest).toBeGreaterThan(atraxa);
+    expect(out).not.toContain('Gone');
   });
 });

@@ -87,6 +87,129 @@ function parseBoolean(value: string): boolean {
   return v === 'true' || v === '1' || v === 'yes' || v === 'y' || v === 'foil';
 }
 
+// ---- ManaBox import support ----
+
+/** A row parsed from a ManaBox-style export (no Scryfall id — printing info instead). */
+export interface ManaBoxCsvRow {
+  name: string;
+  /** Set code, lower-cased ('' when the export lacks it). */
+  set: string;
+  /** Collector number within the set ('' when the export lacks it). */
+  collector_number: string;
+  quantity: number;
+  is_foil: boolean;
+  /** One of CARD_CONDITIONS, or '' when unknown. */
+  condition: string;
+}
+
+// Accepted (lower-cased) header names per logical column. ManaBox exports vary
+// slightly between versions, so each column tolerates a few spellings.
+const MANABOX_COLUMNS = {
+  name: ['name', 'card name'],
+  quantity: ['quantity', 'qty'],
+  set: ['set code', 'set'],
+  collector_number: ['collector number', 'collector_number', 'card number'],
+  foil: ['foil'],
+  condition: ['condition'],
+} as const;
+
+type ManaBoxColumn = keyof typeof MANABOX_COLUMNS;
+
+function manaBoxHeaderIndexes(headerFields: string[]): Partial<Record<ManaBoxColumn, number>> {
+  const normalized = headerFields.map((f) => f.trim().toLowerCase());
+  const indexes: Partial<Record<ManaBoxColumn, number>> = {};
+  for (const column of Object.keys(MANABOX_COLUMNS) as ManaBoxColumn[]) {
+    const idx = normalized.findIndex((field) =>
+      (MANABOX_COLUMNS[column] as readonly string[]).includes(field),
+    );
+    if (idx !== -1) indexes[column] = idx;
+  }
+  return indexes;
+}
+
+function firstNonBlankLine(text: string): string {
+  return text.split(/\r\n|\r|\n/).find((line) => line.trim()) ?? '';
+}
+
+/**
+ * Detect a ManaBox-style export by its header: it must name a card column
+ * (Name / Card name) and a Quantity column, and must NOT be the Deckerr-native
+ * format (which is identified by its card_id column). Case-insensitive.
+ */
+export function isManaBoxCsv(text: string): boolean {
+  const header = firstNonBlankLine(text);
+  if (!header) return false;
+  const fields = splitCsvLine(header).map((f) => f.trim().toLowerCase());
+  if (fields.includes('card_id')) return false; // Deckerr-native export
+  const indexes = manaBoxHeaderIndexes(fields);
+  return indexes.name !== undefined && indexes.quantity !== undefined;
+}
+
+// ManaBox condition values -> Deckerr's CARD_CONDITIONS.
+const MANABOX_CONDITIONS: Record<string, CardCondition> = {
+  mint: 'NM',
+  near_mint: 'NM',
+  excellent: 'LP',
+  light_played: 'LP',
+  lightly_played: 'LP',
+  good: 'MP',
+  played: 'MP',
+  moderately_played: 'MP',
+  heavily_played: 'HP',
+  poor: 'DMG',
+  damaged: 'DMG',
+};
+
+function normalizeManaBoxCondition(value: string): string {
+  const key = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return MANABOX_CONDITIONS[key] ?? normalizeCondition(value);
+}
+
+/**
+ * Parse a ManaBox-style CSV into rows. Columns are located by header name
+ * (case-insensitive); Name and Quantity are required, everything else is
+ * optional. Blank and malformed lines are skipped. Returns [] when the text
+ * is not a ManaBox-style export.
+ */
+export function parseManaBoxCsv(text: string): ManaBoxCsvRow[] {
+  if (!isManaBoxCsv(text)) return [];
+
+  const lines = text.split(/\r\n|\r|\n/);
+  const headerIdx = lines.findIndex((line) => line.trim());
+  const indexes = manaBoxHeaderIndexes(splitCsvLine(lines[headerIdx]));
+  const nameIdx = indexes.name;
+  const quantityIdx = indexes.quantity;
+  if (nameIdx === undefined || quantityIdx === undefined) return [];
+
+  const field = (fields: string[], idx: number | undefined): string =>
+    idx === undefined ? '' : (fields[idx] ?? '').trim();
+
+  const rows: ManaBoxCsvRow[] = [];
+  for (const raw of lines.slice(headerIdx + 1)) {
+    if (!raw.trim()) continue;
+
+    const fields = splitCsvLine(raw);
+    const name = field(fields, nameIdx);
+    if (!name) continue;
+
+    const quantity = Math.floor(Number(field(fields, quantityIdx)));
+    if (!Number.isFinite(quantity) || quantity <= 0) continue;
+
+    const foilValue = field(fields, indexes.foil).toLowerCase();
+    rows.push({
+      name,
+      set: field(fields, indexes.set).toLowerCase(),
+      collector_number: field(fields, indexes.collector_number),
+      quantity,
+      // ManaBox writes normal/foil/etched; etched foils count as foils.
+      is_foil: foilValue === 'etched' || parseBoolean(foilValue),
+      condition: normalizeManaBoxCondition(field(fields, indexes.condition)),
+    });
+  }
+
+  return rows;
+}
+
 /**
  * Parse CSV text into collection rows. Tolerant by design:
  * - the header row (or any row whose card_id column reads "card_id") is ignored,
