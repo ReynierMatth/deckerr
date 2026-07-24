@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Camera, Minus, Plus, Sparkles, ScanLine, ShoppingBasket, Trash2, Check, PackagePlus } from 'lucide-react';
+import { Camera, Minus, Plus, Sparkles, ScanLine, ShoppingBasket, Trash2, Check, PackagePlus, ChevronDown } from 'lucide-react';
 import type { Worker as TesseractWorker } from 'tesseract.js';
 import { Card } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,6 +9,7 @@ import { addCardToCollection } from '../services/api';
 import { getCardByFuzzyName } from '../services/scryfall';
 import { getCardArtCrop } from '../utils/cardFaces';
 import Modal from './Modal';
+import PrintingPickerModal from './card/PrintingPickerModal';
 
 type CameraState = 'starting' | 'ready' | 'denied' | 'unavailable';
 
@@ -20,14 +21,14 @@ interface ScannedEntry {
   added: boolean;
 }
 
-// Upscale factor for the OCR crop (small title strips read better enlarged).
-const OCR_UPSCALE = 2;
 // Simple linear contrast boost applied after grayscale conversion.
-const OCR_CONTRAST = 1.6;
+const OCR_CONTRAST = 1.4;
+// Downscale the captured frame to at most this width before OCR (perf).
+const MAX_OCR_WIDTH = 1000;
 // Delay between automatic scan passes (the OCR pass itself adds to this).
 const SCAN_INTERVAL = 1200;
-// Minimum tesseract confidence (0-100) before spending a Scryfall lookup.
-const MIN_CONFIDENCE = 55;
+// How many candidate text lines to try resolving against Scryfall per pass.
+const MAX_CANDIDATES = 4;
 
 /**
  * Per-copy price for a printing, matching how the collection values entries:
@@ -40,24 +41,27 @@ const priceForVariant = (card: Card, isFoil: boolean): number => {
 };
 
 /**
- * Reduce raw OCR output to the most plausible card-name line: strip
- * non-letter noise, collapse whitespace, and keep the longest line that
- * still contains a run of letters (title strips often pick up mana-cost
- * symbols and border artifacts as stray characters).
+ * Reduce raw OCR output (from the whole frame) to candidate card-name lines,
+ * top-to-bottom: strip non-letter noise, collapse whitespace, keep lines with
+ * a real run of letters, and dedupe. A card's name is its topmost text, so the
+ * earliest plausible lines are the best guesses; the caller tries them in
+ * order against Scryfall until one resolves.
  */
-const cleanOcrText = (raw: string): string => {
-  const lines = raw
-    .split('\n')
-    .map((line) =>
-      line
-        .replace(/[^A-Za-zÀ-ÿ'\- ]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim(),
-    )
-    .filter((line) => /[A-Za-zÀ-ÿ]{3}/.test(line));
-
-  if (lines.length === 0) return '';
-  return lines.reduce((best, line) => (line.length > best.length ? line : best), '');
+const ocrNameCandidates = (raw: string): string[] => {
+  const seen = new Set<string>();
+  const candidates: string[] = [];
+  for (const rawLine of raw.split('\n')) {
+    const line = rawLine
+      .replace(/[^A-Za-zÀ-ÿ'\- ]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (line.length < 3 || !/[A-Za-zÀ-ÿ]{3}/.test(line)) continue;
+    const key = line.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push(line);
+  }
+  return candidates;
 };
 
 /**
@@ -74,12 +78,13 @@ export default function Scanner() {
   const queryClient = useQueryClient();
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const stripRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   // Created lazily on the first scan pass, then reused for every scan.
   const workerPromiseRef = useRef<Promise<TesseractWorker> | null>(null);
-  // Last name sent to Scryfall, to avoid re-querying an identical failed read.
+  // Last name we acted on, so a card lingering in frame isn't re-added.
   const lastNameRef = useRef('');
+  // Candidate lines Scryfall didn't recognise, skipped on later passes.
+  const failedNamesRef = useRef<Set<string>>(new Set());
   // Latest toast fns via a ref: the context value isn't memoized, so reading
   // it in a ref keeps the auto-scan callback stable across renders.
   const toastRef = useRef(toast);
@@ -89,6 +94,8 @@ export default function Scanner() {
   const [scanning, setScanning] = useState(false);
   const [addingId, setAddingId] = useState<string | null>(null);
   const [showBasket, setShowBasket] = useState(false);
+  // Basket entry whose printing picker is open (by card id), or null.
+  const [pickerEntryId, setPickerEntryId] = useState<string | null>(null);
   // Cards found during this scanning session (resets on unmount).
   const [scanned, setScanned] = useState<ScannedEntry[]>([]);
 
@@ -151,48 +158,27 @@ export default function Scanner() {
   }, []);
 
   /**
-   * Grab the current video frame region under the on-screen title strip.
-   *
-   * The video is rendered with object-cover, so the displayed image is the
-   * source frame scaled by max(dispW/vidW, dispH/vidH) and centered (the
-   * overflow is cropped equally on both sides). Inverting that transform
-   * maps the strip's screen rect back to source-pixel coordinates, which
-   * are drawn upscaled onto an offscreen canvas and contrast-boosted.
+   * Grab the whole current video frame (downscaled for OCR speed) as a
+   * grayscale, contrast-boosted canvas. OCR'ing the full frame means the card
+   * is read wherever it sits in view — no need to line the name up in a strip.
    */
-  const captureTitleStrip = useCallback((): HTMLCanvasElement | null => {
+  const captureFrame = useCallback((): HTMLCanvasElement | null => {
     const video = videoRef.current;
-    const strip = stripRef.current;
-    if (!video || !strip || video.videoWidth === 0 || video.videoHeight === 0) return null;
+    if (!video || video.videoWidth === 0 || video.videoHeight === 0) return null;
 
-    const videoRect = video.getBoundingClientRect();
-    const stripRect = strip.getBoundingClientRect();
-    if (videoRect.width === 0 || videoRect.height === 0) return null;
-
-    const scale = Math.max(
-      videoRect.width / video.videoWidth,
-      videoRect.height / video.videoHeight,
-    );
-    const offsetX = (videoRect.width - video.videoWidth * scale) / 2;
-    const offsetY = (videoRect.height - video.videoHeight * scale) / 2;
-
-    const sx = Math.max(0, (stripRect.left - videoRect.left - offsetX) / scale);
-    const sy = Math.max(0, (stripRect.top - videoRect.top - offsetY) / scale);
-    const sw = Math.min(stripRect.width / scale, video.videoWidth - sx);
-    const sh = Math.min(stripRect.height / scale, video.videoHeight - sy);
-    if (sw <= 0 || sh <= 0) return null;
-
+    const scale = Math.min(1, MAX_OCR_WIDTH / video.videoWidth);
     const canvas = document.createElement('canvas');
-    canvas.width = Math.round(sw * OCR_UPSCALE);
-    canvas.height = Math.round(sh * OCR_UPSCALE);
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Grayscale + linear contrast boost: dark ink on a light title bar OCRs
-    // far better than the raw color frame.
+    // Grayscale + linear contrast boost: dark ink OCRs far better than the raw
+    // colour frame.
     const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = image.data;
     for (let i = 0; i < data.length; i += 4) {
@@ -215,7 +201,7 @@ export default function Scanner() {
    */
   const scanOnce = useCallback(
     async (isCancelled: () => boolean): Promise<void> => {
-      const canvas = captureTitleStrip();
+      const canvas = captureFrame();
       if (!canvas) return;
 
       const worker = await getWorker();
@@ -223,29 +209,39 @@ export default function Scanner() {
 
       const { data } = await worker.recognize(canvas);
       if (isCancelled()) return;
-      if ((data.confidence ?? 0) < MIN_CONFIDENCE) return;
 
-      const name = cleanOcrText(data.text ?? '');
-      // Skip empty reads and identical consecutive reads (an unchanged frame
-      // that already failed to resolve would just spend Scryfall lookups).
-      if (name.length < 3 || name === lastNameRef.current) return;
-      lastNameRef.current = name;
+      // Try the top candidate lines against Scryfall (the card name is the
+      // topmost text) until one resolves. Skip lines already known to fail
+      // and the last name we acted on (a card lingering in frame).
+      const candidates = ocrNameCandidates(data.text ?? '')
+        .filter((line) => !failedNamesRef.current.has(line.toLowerCase()))
+        .slice(0, MAX_CANDIDATES);
 
-      const card = await getCardByFuzzyName(name);
-      if (isCancelled() || !card) return;
+      for (const name of candidates) {
+        if (isCancelled()) return;
+        if (name === lastNameRef.current) continue;
 
-      setScanned((prev) => {
-        const existing = prev.find((e) => e.card.id === card.id && !e.added);
-        if (existing) {
-          return prev.map((e) =>
-            e === existing ? { ...e, quantity: e.quantity + 1 } : e,
-          );
+        const card = await getCardByFuzzyName(name);
+        if (isCancelled()) return;
+
+        if (!card) {
+          failedNamesRef.current.add(name.toLowerCase());
+          continue;
         }
-        return [{ card, quantity: 1, isFoil: false, added: false }, ...prev];
-      });
-      toastRef.current.success(`Found ${card.name}`);
+
+        lastNameRef.current = name;
+        setScanned((prev) => {
+          const existing = prev.find((e) => e.card.id === card.id && !e.added);
+          if (existing) {
+            return prev.map((e) => (e === existing ? { ...e, quantity: e.quantity + 1 } : e));
+          }
+          return [{ card, quantity: 1, isFoil: false, added: false }, ...prev];
+        });
+        toastRef.current.success(`Found ${card.name}`);
+        return;
+      }
     },
-    [captureTitleStrip, getWorker],
+    [captureFrame, getWorker],
   );
 
   // Automatic detection loop: runs continuously while the camera is ready.
@@ -288,6 +284,13 @@ export default function Scanner() {
 
   const removeEntry = (cardId: string) => {
     setScanned((prev) => prev.filter((e) => !(e.card.id === cardId && !e.added)));
+  };
+
+  // Swap a not-yet-added entry to a different printing (fixes a wrong edition
+  // auto-picked from the name alone), keeping its quantity and foil flag.
+  const changeEntryPrinting = (cardId: string, printing: Card) => {
+    setScanned((prev) => prev.map((e) => (e.card.id === cardId && !e.added ? { ...e, card: printing } : e)));
+    setPickerEntryId(null);
   };
 
   const invalidateCollection = () => {
@@ -339,6 +342,7 @@ export default function Scanner() {
     (sum, e) => sum + priceForVariant(e.card, e.isFoil) * e.quantity,
     0,
   );
+  const pickerEntry = pickerEntryId ? scanned.find((e) => e.card.id === pickerEntryId) : undefined;
 
   return (
     <div className="fixed inset-x-0 top-14 md:top-16 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 z-40 bg-black text-white overflow-hidden">
@@ -379,20 +383,12 @@ export default function Scanner() {
 
       {cameraState === 'ready' && (
         <>
-          {/* Card-shaped guide frame with the OCR title strip highlighted */}
+          {/* Card-shaped guide frame — just an aiming aid; the whole frame is OCR'd */}
           <div className="absolute inset-x-0 top-0 bottom-32 flex items-center justify-center pointer-events-none">
             <div
-              className="relative aspect-[5/7] border-2 border-white/60 rounded-xl shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]"
-              style={{ width: 'min(72vw, 300px)' }}
-            >
-              <div
-                ref={stripRef}
-                className="absolute left-[4%] right-[4%] top-[4%] h-[9%] border-2 border-blue-400 rounded-md bg-blue-400/10"
-              />
-              <p className="absolute left-0 right-0 top-[15%] text-center text-xs text-blue-200 drop-shadow px-2">
-                Align the card name here
-              </p>
-            </div>
+              className="aspect-[5/7] border-2 border-white/40 rounded-xl"
+              style={{ width: 'min(78vw, 340px)' }}
+            />
           </div>
 
           {/* Bottom bar: scan status + basket button */}
@@ -453,8 +449,18 @@ export default function Scanner() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-sm truncate">{entry.card.name}</p>
-                        {entry.card.set_name && (
-                          <p className="text-xs text-gray-400 truncate">{entry.card.set_name}</p>
+                        {entry.added ? (
+                          entry.card.set_name && (
+                            <p className="text-xs text-gray-400 truncate">{entry.card.set_name}</p>
+                          )
+                        ) : (
+                          <button
+                            onClick={() => setPickerEntryId(entry.card.id)}
+                            className="flex items-center gap-1 text-xs text-blue-400 hover:underline max-w-full"
+                          >
+                            <span className="truncate">{entry.card.set_name ?? 'Choose edition'}</span>
+                            <ChevronDown size={12} className="flex-shrink-0" />
+                          </button>
                         )}
                         <p className="text-xs text-gray-400 mt-0.5">
                           ${unitPrice.toFixed(2)}
@@ -547,6 +553,16 @@ export default function Scanner() {
           )}
         </div>
       </Modal>
+
+      {/* Printing picker for a basket entry (fix a wrong auto-detected edition) */}
+      {pickerEntry && (
+        <PrintingPickerModal
+          card={pickerEntry.card}
+          isOpen={pickerEntryId !== null}
+          onClose={() => setPickerEntryId(null)}
+          onSelect={(printing) => changeEntryPrinting(pickerEntry.card.id, printing)}
+        />
+      )}
     </div>
   );
 }
