@@ -492,7 +492,7 @@ export default function Scanner() {
   const pickerEntry = pickerEntryId ? scanned.find((e) => e.card.id === pickerEntryId) : undefined;
 
   return (
-    <div className="fixed inset-x-0 top-14 md:top-16 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 z-40 bg-black text-white overflow-hidden">
+    <div className="fixed inset-x-0 top-[var(--topbar-h)] md:top-16 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 z-40 bg-black text-white overflow-hidden">
       <video
         ref={videoRef}
         playsInline

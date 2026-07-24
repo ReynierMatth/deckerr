@@ -330,3 +330,14 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* iOS safe area (top). With apple-mobile-web-app-status-bar-style=black-translucent
+   the web view extends under the status bar, so the fixed top bar needs this
+   inset or its content hides behind the notch/status bar. */
+:root {
+  /* Mobile top-bar height incl. the iOS top safe area (0 off-notch/in-browser). */
+  --topbar-h: calc(3.5rem + env(safe-area-inset-top));
+}
+.safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}
