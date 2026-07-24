@@ -128,7 +128,7 @@ export default function NotificationBell() {
 
       {open && (
         <div
-          className="fixed left-0 right-0 top-14 mx-2 md:absolute md:left-auto md:right-0 md:top-full md:mx-0 md:mt-2 md:w-80 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-[120] glass-effect overflow-hidden"
+          className="fixed left-0 right-0 top-[var(--topbar-h)] mx-2 md:absolute md:left-auto md:right-0 md:top-full md:mx-0 md:mt-2 md:w-80 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-[120] glass-effect overflow-hidden"
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
             <span className="text-sm font-semibold text-white">Notifications</span>
