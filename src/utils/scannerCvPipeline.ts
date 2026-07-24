@@ -125,7 +125,11 @@ function loadEmbedder(): Promise<ImageFeatureExtractionPipeline> {
       // Fetch the model straight from the HF CDN — don't probe our own origin
       // for a local copy first (it would 404).
       env.allowLocalModels = false;
-      return pipeline('image-feature-extraction', 'Xenova/dinov2-small');
+      console.info('[scan-cv] loading DINOv2 (transformers.js WASM)…');
+      return pipeline('image-feature-extraction', 'Xenova/dinov2-small').then((p) => {
+        console.info('[scan-cv] embedder ready');
+        return p;
+      });
     });
   }
   return embedderPromise;
@@ -298,13 +302,17 @@ export async function runScan(video: HTMLVideoElement): Promise<ScanOutcome> {
   }
   const detectMs = performance.now() - detectStart;
 
+  console.info(`[scan-cv] detect+rectify: ${Math.round(detectMs)}ms`);
+
   // 2. Embed the art crop with DINOv2 (mean-pooled, L2-normalized).
   const embedStart = performance.now();
   const { RawImage } = await import('@xenova/transformers');
   const image = new RawImage(artData.data, artData.width, artData.height, 4);
+  console.info('[scan-cv] embedding… (first run on WASM can be very slow; WebGPU is much faster)');
   const output = await embedder(image);
   const query = poolEmbedding(output.data as Float32Array, output.dims);
   const embedMs = performance.now() - embedStart;
+  console.info(`[scan-cv] embed: ${Math.round(embedMs)}ms`);
 
   // 3. Cosine-match against the prebuilt index.
   const matchStart = performance.now();
