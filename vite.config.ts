@@ -66,7 +66,10 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+        // Includes card-hashes.json so the scanner's hash index is available
+        // offline. Raise the size cap since the full index can exceed 2 MB.
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,json}'],
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         // Runtime config is written per-container; never precache it or the SW
         // would serve the empty build-time placeholder instead of live values.
         globIgnores: ['**/config.js'],
