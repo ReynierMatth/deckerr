@@ -30,6 +30,7 @@ const fetchDeck = async (deckId: string): Promise<Deck> => {
     card: scryfallCards.find((c) => c.id === entity.card_id) as Card,
     quantity: entity.quantity,
     is_commander: entity.is_commander,
+    is_sideboard: Boolean(entity.is_sideboard),
   }));
 
   return {

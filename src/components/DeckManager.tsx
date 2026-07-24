@@ -38,9 +38,10 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     card: Card;
     quantity: number;
     is_commander: boolean;
+    is_sideboard: boolean;
   }[]>(initialDeck?.cards || []);
   const [deckName, setDeckName] = useState(initialDeck?.name || '');
-  const [deckFormat, setDeckFormat] = useState(initialDeck?.format || 'standard');
+  const [deckFormat, setDeckFormat] = useState(initialDeck?.format || 'commander');
   const [tags, setTags] = useState<string[]>(initialDeck?.tags ?? []);
   const [commander, setCommander] = useState<Card | null>(
       initialDeck?.cards.find(card =>
@@ -99,21 +100,54 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     }
   };
 
+  // Entries are keyed by (card.id, is_sideboard): a card can be in both boards
+  // at once, so every find/update/remove matches on both.
   const addCardToDeck = (card: Card) => {
     setSelectedCards(prev => {
-      const existing = prev.find(c => c.card.id === card.id);
+      const existing = prev.find(c => c.card.id === card.id && !c.is_sideboard);
       if (existing) {
         // No hard cap: format copy limits are surfaced as warnings, not blockers.
         return prev.map(c =>
-          c.card.id === card.id ? { ...c, quantity: c.quantity + 1 } : c
+          c.card.id === card.id && !c.is_sideboard ? { ...c, quantity: c.quantity + 1 } : c
         );
       }
-      return [...prev, { card, quantity: 1, is_commander: false }];
+      return [...prev, { card, quantity: 1, is_commander: false, is_sideboard: false }];
     });
   };
 
-  const removeCardFromDeck = (cardId: string) =>
-    setSelectedCards(prev => prev.filter(c => c.card.id !== cardId));
+  const removeCardFromDeck = (cardId: string, isSideboard: boolean) =>
+    setSelectedCards(prev =>
+      prev.filter(c => !(c.card.id === cardId && c.is_sideboard === isSideboard))
+    );
+
+  // Flip a card between mainboard and sideboard. If the target board already
+  // holds that card id, merge quantities and drop the source entry.
+  const moveCardBoard = (cardId: string, fromSideboard: boolean) => {
+    setSelectedCards(prev => {
+      const source = prev.find(c => c.card.id === cardId && c.is_sideboard === fromSideboard);
+      if (!source) return prev;
+      const target = prev.find(c => c.card.id === cardId && c.is_sideboard === !fromSideboard);
+
+      if (target) {
+        return prev
+          .filter(c => !(c.card.id === cardId && c.is_sideboard === fromSideboard))
+          .map(c =>
+            c.card.id === cardId && c.is_sideboard === !fromSideboard
+              ? { ...c, quantity: c.quantity + source.quantity }
+              : c
+          );
+      }
+
+      // Moving a card into the sideboard clears its commander flag (commanders
+      // live on the mainboard only).
+      return prev.map(c =>
+        c.card.id === cardId && c.is_sideboard === fromSideboard
+          ? { ...c, is_sideboard: !fromSideboard, is_commander: !fromSideboard ? false : c.is_commander }
+          : c
+      );
+    });
+    if (fromSideboard === false && commander?.id === cardId) setCommander(null);
+  };
 
   const addTag = (tag: string) => {
     const trimmed = tag.trim();
@@ -128,19 +162,19 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   // the deck save flow rewrites deck_cards on Save. Keeps quantity and
   // is_commander; if the target printing is already in the deck, merge
   // quantities so the list never holds two entries for the same card id.
-  const changeCardPrinting = (oldCardId: string, printing: Card) => {
+  const changeCardPrinting = (oldCardId: string, printing: Card, isSideboard: boolean) => {
     if (printing.id === oldCardId) return;
 
     setSelectedCards(prev => {
-      const oldEntry = prev.find(c => c.card.id === oldCardId);
+      const oldEntry = prev.find(c => c.card.id === oldCardId && c.is_sideboard === isSideboard);
       if (!oldEntry) return prev;
 
-      const target = prev.find(c => c.card.id === printing.id);
+      const target = prev.find(c => c.card.id === printing.id && c.is_sideboard === isSideboard);
       if (target) {
         return prev
-          .filter(c => c.card.id !== oldCardId)
+          .filter(c => !(c.card.id === oldCardId && c.is_sideboard === isSideboard))
           .map(c =>
-            c.card.id === printing.id
+            c.card.id === printing.id && c.is_sideboard === isSideboard
               ? {
                   ...c,
                   quantity: c.quantity + oldEntry.quantity,
@@ -150,23 +184,29 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
           );
       }
 
-      return prev.map(c => (c.card.id === oldCardId ? { ...c, card: printing } : c));
+      return prev.map(c =>
+        c.card.id === oldCardId && c.is_sideboard === isSideboard ? { ...c, card: printing } : c
+      );
     });
 
-    if (commander?.id === oldCardId) setCommander(printing);
+    if (!isSideboard && commander?.id === oldCardId) setCommander(printing);
     setSelectedCard(prev => (prev && prev.id === oldCardId ? printing : prev));
   };
 
-  const updateCardQuantity = (cardId: string, quantity: number) => {
+  const updateCardQuantity = (cardId: string, quantity: number, isSideboard: boolean) => {
     setSelectedCards(prev => {
       return prev.map(c => {
-        if (c.card.id === cardId) {
+        if (c.card.id === cardId && c.is_sideboard === isSideboard) {
           return { ...c, quantity: quantity };
         }
         return c;
       });
     });
   };
+
+  // Mainboard vs sideboard views: stats, sample hand, land suggestions and
+  // validation are all about the main deck; the sideboard carries no rules.
+  const mainboardCards = selectedCards.filter(c => !c.is_sideboard);
 
   const currentDeck: Deck = {
     id: initialDeck?.id || '',
@@ -183,11 +223,11 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   // Commander color identity validation (for land suggestions)
   const commanderColors = deckFormat === 'commander' ? getCommanderColors(commander) : [];
 
-  const deckSize = selectedCards.reduce((acc, curr) => acc + curr.quantity, 0);
+  const deckSize = mainboardCards.reduce((acc, curr) => acc + curr.quantity, 0);
   const {
     landCount: suggestedLandCountValue,
     landDistribution: suggestedLands,
-  } = suggestLandCountAndDistribution(selectedCards, deckFormat, commanderColors);
+  } = suggestLandCountAndDistribution(mainboardCards, deckFormat, commanderColors);
 
   const totalPrice = selectedCards.reduce((acc, { card, quantity }) => {
     const isBasicLand =
@@ -244,17 +284,25 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       reader.onload = async e => {
         const text = e.target?.result as string;
 
-        // Parse the decklist (handles "4"/"4x", set codes, foil markers, headers).
+        // Parse the decklist (mainboard / sideboard / commander, "4"/"4x", set
+        // codes, foil markers, headers, duplicate-line aggregation).
         const requests = parseDeckList(text);
 
-        const cardsToAdd: { card: Card; quantity: number }[] = [];
+        const cardsToAdd: {
+          card: Card;
+          quantity: number;
+          is_sideboard: boolean;
+          is_commander: boolean;
+        }[] = [];
+        let importedCommander: Card | null = null;
         try {
           // Batched exact lookup, with a fuzzy fallback for flavor/alternate names.
           const cardsByName = await resolveCardsByNames(requests.map(r => r.name));
-          for (const { name, quantity } of requests) {
+          for (const { name, quantity, is_sideboard, is_commander } of requests) {
             const card = cardsByName.get(name.toLowerCase());
             if (card) {
-              cardsToAdd.push({ card, quantity });
+              cardsToAdd.push({ card, quantity, is_sideboard, is_commander });
+              if (is_commander && !importedCommander) importedCommander = card;
             } else {
               console.warn(`Card not found: ${name}`);
               toast.error(`Card not found: ${name}`);
@@ -268,18 +316,29 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
         setSelectedCards(prev => {
           const updatedCards = [...prev];
-          for (const { card, quantity } of cardsToAdd) {
+          for (const { card, quantity, is_sideboard, is_commander } of cardsToAdd) {
+            // Merge on (card.id, is_sideboard) so a card can live in both boards.
             const existingCardIndex = updatedCards.findIndex(
-              c => c.card.id === card.id
+              c => c.card.id === card.id && c.is_sideboard === is_sideboard
             );
             if (existingCardIndex !== -1) {
-              updatedCards[existingCardIndex].quantity += quantity;
+              updatedCards[existingCardIndex] = {
+                ...updatedCards[existingCardIndex],
+                quantity: updatedCards[existingCardIndex].quantity + quantity,
+                is_commander: updatedCards[existingCardIndex].is_commander || is_commander,
+              };
             } else {
-              updatedCards.push({ card, quantity, is_commander: false });
+              updatedCards.push({ card, quantity, is_commander, is_sideboard });
             }
           }
           return updatedCards;
         });
+
+        // A detected commander defaults the deck to the commander format.
+        if (importedCommander) {
+          setCommander(importedCommander);
+          setDeckFormat('commander');
+        }
       };
 
       reader.readAsText(file);
@@ -345,6 +404,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
             validation={validation}
             updateCardQuantity={updateCardQuantity}
             removeCardFromDeck={removeCardFromDeck}
+            moveCardBoard={moveCardBoard}
             handleAddCardToCollection={handleAddCardToCollection}
             addingCardId={addingCardId}
             userCollection={userCollection}
@@ -360,13 +420,13 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
           {/* Deck Stats */}
           <div className="mt-6 bg-gray-800 border border-gray-700 rounded-lg p-4">
             <h2 className="text-lg font-semibold text-white mb-3">Deck Stats</h2>
-            <DeckStats cards={selectedCards} />
+            <DeckStats cards={mainboardCards} />
           </div>
 
           {/* Sample Hand */}
           <div className="mt-4 bg-gray-800 border border-gray-700 rounded-lg p-4">
             <h2 className="text-lg font-semibold text-white mb-3">Sample Hand</h2>
-            <SampleHand cards={selectedCards} />
+            <SampleHand cards={mainboardCards} />
           </div>
         </div>
       </div>
@@ -470,22 +530,22 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       {selectedCard && (
         <CardDetailPanel
           card={selectedCard}
-          quantityInDeck={selectedCards.find(c => c.card.id === selectedCard.id)?.quantity || 0}
-          inDeck={Boolean(selectedCards.find(c => c.card.id === selectedCard.id))}
+          quantityInDeck={selectedCards.find(c => c.card.id === selectedCard.id && !c.is_sideboard)?.quantity || 0}
+          inDeck={Boolean(selectedCards.find(c => c.card.id === selectedCard.id && !c.is_sideboard))}
           collectionQuantity={userCollection[selectedCard.id]}
           getCurrentFaceIndex={getCurrentFaceIndex}
           toggleCardFace={toggleCardFace}
           getLargeImageUri={getCardLargeImageUri}
           onClose={() => setSelectedCard(null)}
-          onChangePrinting={(printing) => changeCardPrinting(selectedCard.id, printing)}
+          onChangePrinting={(printing) => changeCardPrinting(selectedCard.id, printing, false)}
           onIncrement={() => addCardToDeck(selectedCard)}
           onDecrement={() => {
-            const cardInDeck = selectedCards.find(c => c.card.id === selectedCard.id);
+            const cardInDeck = selectedCards.find(c => c.card.id === selectedCard.id && !c.is_sideboard);
             const currentQuantity = cardInDeck?.quantity || 0;
             if (currentQuantity === 1) {
-              removeCardFromDeck(selectedCard.id);
+              removeCardFromDeck(selectedCard.id, false);
             } else if (currentQuantity > 1) {
-              updateCardQuantity(selectedCard.id, currentQuantity - 1);
+              updateCardQuantity(selectedCard.id, currentQuantity - 1, false);
             }
           }}
         />

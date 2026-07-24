@@ -8,6 +8,7 @@ interface DeckCardEntry {
   card: Card;
   quantity: number;
   is_commander: boolean;
+  is_sideboard: boolean;
 }
 
 interface DeckSettingsDrawerProps {
@@ -64,10 +65,10 @@ export default function DeckSettingsDrawer({
           onChange={e => setDeckFormat(e.target.value)}
           className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
         >
+          <option value="commander">Commander</option>
           <option value="standard">Standard</option>
           <option value="modern">Modern</option>
           <option value="pioneer">Pioneer</option>
-          <option value="commander">Commander</option>
           <option value="brawl">Brawl</option>
           <option value="oathbreaker">Oathbreaker</option>
           <option value="legacy">Legacy</option>
@@ -128,7 +129,7 @@ export default function DeckSettingsDrawer({
               <option value="">Select Commander</option>
               {selectedCards
                 .filter(c =>
-                  c.card.type_line?.toLowerCase().includes('legendary')
+                  !c.is_sideboard && c.card.type_line?.toLowerCase().includes('legendary')
                 )
                 .map(({ card }) => (
                   <option key={card.id} value={card.id}>

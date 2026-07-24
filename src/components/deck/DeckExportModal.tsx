@@ -9,7 +9,7 @@ import {
 } from '../../utils/deckExport';
 
 interface DeckExportModalProps {
-  cards: { card: Card; quantity: number; is_commander?: boolean }[];
+  cards: { card: Card; quantity: number; is_commander?: boolean; is_sideboard?: boolean }[];
   onClose: () => void;
   /** Used as the download filename base; defaults to "deck". */
   deckName?: string;

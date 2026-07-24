@@ -67,7 +67,7 @@ export interface Deck {
   id: string;
   name: string;
   format: string;
-  cards: { card: Card; quantity: number, is_commander: boolean }[];
+  cards: { card: Card; quantity: number, is_commander: boolean, is_sideboard: boolean }[];
   userId: string;
   createdAt: Date;
   updatedAt: Date;
@@ -91,4 +91,5 @@ export interface CardEntity {
   card_id: string;
   quantity: number;
   is_commander: boolean;
+  is_sideboard: boolean;
 }

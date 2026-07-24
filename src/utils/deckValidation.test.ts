@@ -19,7 +19,12 @@ const deck = (overrides: Partial<Deck>): Deck => ({
   ...overrides,
 });
 
-const entry = (c: Card, quantity: number, is_commander = false) => ({ card: c, quantity, is_commander });
+const entry = (c: Card, quantity: number, is_commander = false, is_sideboard = false) => ({
+  card: c,
+  quantity,
+  is_commander,
+  is_sideboard,
+});
 
 describe('validateDeck — standard', () => {
   it('accepts a 60-card deck with <= 4 copies each', () => {
@@ -177,5 +182,36 @@ describe('validateDeck — oathbreaker', () => {
     const cards = [entry(card('ob', { colors: ['B'] }), 1, true), ...filler(59, ['B'])];
     const result = validateDeck(deck({ format: 'oathbreaker', cards }));
     expect(result.isValid).toBe(true);
+  });
+});
+
+describe('validateDeck — sideboard is not validated', () => {
+  it('excludes sideboard cards from the minimum card count', () => {
+    const cards = [
+      ...Array.from({ length: 15 }, (_, i) => entry(card(`c${i}`), 4)), // 60 in main
+      entry(card('sb'), 15, false, true), // 15 in sideboard, ignored
+    ];
+    const result = validateDeck(deck({ format: 'standard', cards }));
+    expect(result.isValid).toBe(true);
+  });
+
+  it('does not count sideboard copies toward the max-copies rule', () => {
+    const cards = [
+      entry(card('bolt'), 4),
+      entry(card('bolt'), 4, false, true), // same id in sideboard, must not sum
+      ...Array.from({ length: 14 }, (_, i) => entry(card(`c${i}`), 4)),
+    ];
+    const result = validateDeck(deck({ format: 'standard', cards }));
+    expect(result.errors.some((e) => e.includes('too many copies'))).toBe(false);
+  });
+
+  it('ignores an off-color sideboard card in commander color-identity checks', () => {
+    const cards = [
+      entry(card('cmd', { colors: ['G'] }), 1, true),
+      entry(card('offcolor', { colors: ['R'] }), 1, false, true), // sideboard, off-color, ignored
+      ...Array.from({ length: 98 }, (_, i) => entry(card(`f${i}`, { colors: ['G'] }), 1)),
+    ];
+    const result = validateDeck(deck({ format: 'commander', cards }));
+    expect(result.errors).not.toContain("Some cards don't match commander's color identity");
   });
 });
