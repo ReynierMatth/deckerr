@@ -142,6 +142,8 @@ export type Database = {
                     id: string
                     updated_at: string | null
                     username: string | null
+                    display_name: string | null
+                    handle: string | null
                     collection_visibility: 'public' | 'friends' | 'private' | null
                 }
                 Insert: {
@@ -149,6 +151,8 @@ export type Database = {
                     id: string
                     updated_at?: string | null
                     username?: string | null
+                    display_name?: string | null
+                    handle?: string | null
                     collection_visibility?: 'public' | 'friends' | 'private' | null
                 }
                 Update: {
@@ -156,6 +160,8 @@ export type Database = {
                     id?: string
                     updated_at?: string | null
                     username?: string | null
+                    display_name?: string | null
+                    handle?: string | null
                     collection_visibility?: 'public' | 'friends' | 'private' | null
                 }
                 Relationships: []

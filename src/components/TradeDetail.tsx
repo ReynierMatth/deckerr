@@ -6,6 +6,7 @@ import { useToast } from '../contexts/ToastContext';
 import { Trade, TradeHistoryEntry, getTradeVersionHistory } from '../services/tradesService';
 import { getUserCollection, getCardsByIds } from '../services/api';
 import { Card } from '../types';
+import { profileDisplayName, profileHandleLabel } from '../utils/profileName';
 import TradeCreator from './TradeCreator';
 import CardTile from './card/CardTile';
 
@@ -180,7 +181,7 @@ export default function TradeDetail({
     return (
       <TradeCreator
         receiverId={otherUserId}
-        receiverUsername={otherUser?.username || 'User'}
+        receiverUsername={otherUser ? profileDisplayName(otherUser) : 'User'}
         receiverCollection={editReceiverCollection}
         onClose={() => {
           setShowEditMode(false);
@@ -210,7 +211,10 @@ export default function TradeDetail({
             <div>
               <h2 className="text-lg font-bold">Trade Details {trade.version > 1 && `(v${trade.version})`}</h2>
               <p className="text-sm text-gray-400">
-                With: {otherUser?.username}
+                With: {otherUser ? profileDisplayName(otherUser) : ''}
+                {otherUser && profileHandleLabel(otherUser) && (
+                  <span className="text-gray-500"> {profileHandleLabel(otherUser)}</span>
+                )}
               </p>
             </div>
           </div>
@@ -367,7 +371,7 @@ export default function TradeDetail({
                           <div className="flex items-center justify-between mb-2">
                             <span className="font-semibold text-purple-400">Version {entry.version}</span>
                             <span className="text-gray-400 text-xs">
-                              Edited by {entry.editor?.username} • {new Date(entry.created_at).toLocaleDateString()}
+                              Edited by {entry.editor ? profileDisplayName(entry.editor) : 'someone'} • {new Date(entry.created_at).toLocaleDateString()}
                             </span>
                           </div>
                           {entry.message && (
@@ -428,7 +432,7 @@ export default function TradeDetail({
               /* User made the last edit - can still edit while waiting for response */
               <>
                 <p className="text-center text-gray-400 text-sm py-2">
-                  Waiting for {otherUser?.username} to respond...
+                  Waiting for {otherUser ? profileDisplayName(otherUser) : 'the other user'} to respond...
                 </p>
                 <button
                   onClick={handleEdit}

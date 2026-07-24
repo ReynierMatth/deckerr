@@ -4,11 +4,14 @@ import { Loader2, Save } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
+import { HANDLE_PATTERN } from '../../utils/profileName';
 
 type Visibility = 'public' | 'friends' | 'private';
 
 interface ProfileRow {
   username: string | null;
+  display_name: string | null;
+  handle: string | null;
   collection_visibility: Visibility | null;
 }
 
@@ -18,12 +21,16 @@ const VISIBILITY_OPTIONS = [
   { value: 'private', label: 'Private', description: 'Only you' },
 ] as const;
 
-/** Profile settings tab: username + collection visibility. Self-contained. */
+/** Postgres unique-violation code — raised when a handle is already taken. */
+const UNIQUE_VIOLATION = '23505';
+
+/** Profile settings tab: display name, @handle + collection visibility. Self-contained. */
 export default function ProfileSettings() {
   const { user } = useAuth();
   const toast = useToast();
   const queryClient = useQueryClient();
-  const [username, setUsername] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [handle, setHandle] = useState('');
   const [collectionVisibility, setCollectionVisibility] = useState<Visibility>('private');
 
   const { data: profile } = useQuery({
@@ -32,59 +39,103 @@ export default function ProfileSettings() {
     queryFn: async (): Promise<ProfileRow | null> => {
       const { data } = await supabase
         .from('profiles')
-        .select('username, collection_visibility')
+        .select('username, display_name, handle, collection_visibility')
         .eq('id', user!.id)
         .single();
       return data;
     },
   });
 
-  // Seed the editable form fields once the profile loads.
+  // Seed the editable form fields once the profile loads. Fall back to the
+  // legacy username for the handle so a not-yet-migrated row stays editable.
   useEffect(() => {
     if (!profile) return;
-    setUsername(profile.username || '');
+    setDisplayName(profile.display_name || '');
+    setHandle(profile.handle || profile.username || '');
     setCollectionVisibility(profile.collection_visibility || 'private');
   }, [profile]);
+
+  const handleValid = HANDLE_PATTERN.test(handle);
+  const handleError = handle.length > 0 && !handleValid;
 
   const saveProfile = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from('profiles').upsert({
         id: user!.id,
-        username,
+        display_name: displayName.trim() || null,
+        handle,
+        // Keep the legacy username column synced to the handle for the
+        // currently-deployed image, which still reads it.
+        username: handle,
         collection_visibility: collectionVisibility,
-        updated_at: new Date(),
+        updated_at: new Date().toISOString(),
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      // Prefix invalidation also refreshes ['profile', 'username', userId] in Navigation.
+      // Prefix invalidation also refreshes ['profile', 'name', userId] in Navigation.
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       toast.success('Profile updated!');
     },
-    onError: () => {
-      toast.error('Failed to update profile');
+    onError: (error: unknown) => {
+      const code = (error as { code?: string } | null)?.code;
+      if (code === UNIQUE_VIOLATION) {
+        toast.error('That handle is already taken');
+      } else {
+        toast.error('Failed to update profile');
+      }
     },
   });
 
   const savingProfile = saveProfile.isPending;
 
   const handleSaveProfile = () => {
-    if (!user) return;
+    if (!user || !handleValid) return;
     saveProfile.mutate();
   };
 
   return (
     <div className="space-y-4 max-w-md">
-      {/* Username */}
+      {/* Display name */}
       <div>
-        <label className="block text-sm text-gray-400 mb-1.5">Username</label>
+        <label className="block text-sm text-gray-400 mb-1.5">Display name</label>
         <input
           type="text"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
           className="w-full px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm"
-          placeholder="Your username"
+          placeholder="Your name"
         />
+      </div>
+
+      {/* Handle */}
+      <div>
+        <label className="block text-sm text-gray-400 mb-1.5">Handle</label>
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none">@</span>
+          <input
+            type="text"
+            value={handle}
+            onChange={(e) => setHandle(e.target.value.toLowerCase())}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-invalid={handleError}
+            className={`w-full pl-7 pr-3 py-2.5 bg-gray-800 border rounded-lg text-sm ${
+              handleError ? 'border-red-500' : 'border-gray-700'
+            }`}
+            placeholder="handle"
+          />
+        </div>
+        {handleError ? (
+          <p className="mt-1 text-xs text-red-400">
+            3-20 characters, lowercase letters, numbers or underscore.
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-gray-500">
+            Your unique @handle — how friends find you.
+          </p>
+        )}
       </div>
 
       {/* Visibility */}
@@ -111,7 +162,7 @@ export default function ProfileSettings() {
       {/* Save */}
       <button
         onClick={handleSaveProfile}
-        disabled={savingProfile}
+        disabled={savingProfile || !handleValid}
         className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 py-3 rounded-lg font-medium"
       >
         {savingProfile ? <Loader2 className="animate-spin" size={18} /> : <><Save size={18} /> Save</>}

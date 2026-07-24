@@ -5,6 +5,7 @@ import { Card } from '../types';
 import { supabase } from '../lib/supabase';
 import { getCardsByIds } from '../services/api';
 import { getCardImageUri } from '../utils/cardFaces';
+import { profileDisplayName, profileHandleLabel } from '../utils/profileName';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 
@@ -18,7 +19,8 @@ interface PublicDeckData {
   tags: string[];
   cardCount: number;
   coverCardId: string | null;
-  ownerUsername: string | null;
+  ownerName: string | null;
+  ownerHandle: string | null;
   cards: { card: Card; quantity: number; is_commander: boolean }[];
 }
 
@@ -55,14 +57,18 @@ const fetchPublicDeck = async (deckId: string): Promise<PublicDeckData | null> =
     })
     .filter((entry): entry is { card: Card; quantity: number; is_commander: boolean } => entry !== null);
 
-  let ownerUsername: string | null = null;
+  let ownerName: string | null = null;
+  let ownerHandle: string | null = null;
   if (deckData.user_id) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('username')
+      .select('username, display_name, handle')
       .eq('id', deckData.user_id)
       .maybeSingle();
-    ownerUsername = (profile?.username as string | null) ?? null;
+    if (profile) {
+      ownerName = profileDisplayName(profile);
+      ownerHandle = profileHandleLabel(profile);
+    }
   }
 
   return {
@@ -71,7 +77,8 @@ const fetchPublicDeck = async (deckId: string): Promise<PublicDeckData | null> =
     tags: (deckData.tags as string[] | null) ?? [],
     cardCount: (deckData.card_count as number | null) ?? 0,
     coverCardId: (deckData.cover_card_id as string | null) ?? null,
-    ownerUsername,
+    ownerName,
+    ownerHandle,
     cards,
   };
 };
@@ -186,9 +193,10 @@ export default function PublicDeck({ deckId }: PublicDeckProps) {
             <span className="inline-flex items-center gap-1.5 capitalize">
               <Layers size={16} /> {data.format}
             </span>
-            {data.ownerUsername && (
+            {data.ownerName && (
               <span className="inline-flex items-center gap-1.5">
-                <UserIcon size={16} /> {data.ownerUsername}
+                <UserIcon size={16} /> {data.ownerName}
+                {data.ownerHandle && <span className="text-gray-500">{data.ownerHandle}</span>}
               </span>
             )}
             <span className="inline-flex items-center gap-1.5">{totalCards} cards</span>

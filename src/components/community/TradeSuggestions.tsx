@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getTradeSuggestions, FriendTradeSuggestion } from '../../services/tradeSuggestionsService';
 import { getCardsByIds } from '../../services/api';
 import { getCardImageUri } from '../../utils/cardFaces';
+import { profileDisplayName, profileHandleLabel } from '../../utils/profileName';
 import { Card } from '../../types';
 
 interface TradeSuggestionsData {
@@ -98,9 +99,20 @@ export default function TradeSuggestions() {
         <div key={suggestion.friendId} className="rounded-lg bg-gray-800 p-3 sm:p-4">
           <div className="mb-3 flex items-center gap-2">
             <ArrowLeftRight size={18} className="flex-shrink-0 text-blue-400" />
-            <h3 className="truncate text-base font-semibold sm:text-lg">
-              {suggestion.friendUsername || 'Unknown'}
-            </h3>
+            <div className="min-w-0">
+              <h3 className="truncate text-base font-semibold sm:text-lg">
+                {profileDisplayName({
+                  display_name: suggestion.friendDisplayName,
+                  handle: suggestion.friendHandle,
+                  username: suggestion.friendUsername,
+                })}
+              </h3>
+              {profileHandleLabel({ handle: suggestion.friendHandle }) && (
+                <p className="truncate text-xs text-gray-400">
+                  {profileHandleLabel({ handle: suggestion.friendHandle })}
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="space-y-4">

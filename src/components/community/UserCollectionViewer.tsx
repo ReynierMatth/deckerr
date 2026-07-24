@@ -11,11 +11,14 @@ import UserCardDetailPanel from './UserCardDetailPanel';
 import { supabase } from '../../lib/supabase';
 import { getUserCollectionPaginated, getCardsByIds, getCollectionTotalValue } from '../../services/api';
 import { Card } from '../../types';
+import { profileDisplayName } from '../../utils/profileName';
 import TradeCreator from '../TradeCreator';
 
 export interface UserProfile {
   id: string;
   username: string | null;
+  display_name: string | null;
+  handle: string | null;
   collection_visibility: 'public' | 'friends' | 'private' | null;
 }
 
@@ -222,7 +225,7 @@ export default function UserCollectionViewer({
             <ChevronLeft size={20} />
             <span>Back</span>
           </button>
-          <h1 className="text-2xl md:text-3xl font-bold truncate flex-1 text-center">{selectedUser.username}'s Collection</h1>
+          <h1 className="text-2xl md:text-3xl font-bold truncate flex-1 text-center">{profileDisplayName(selectedUser)}'s Collection</h1>
           <button
             onClick={() => setShowTradeCreator(true)}
             className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm whitespace-nowrap"
@@ -395,7 +398,7 @@ export default function UserCollectionViewer({
       {showTradeCreator && (
         <TradeCreator
           receiverId={selectedUser.id}
-          receiverUsername={selectedUser.username || 'Unknown'}
+          receiverUsername={profileDisplayName(selectedUser)}
           receiverCollection={selectedUserCollection}
           onClose={() => setShowTradeCreator(false)}
           onTradeCreated={() => {

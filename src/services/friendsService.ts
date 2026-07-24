@@ -1,9 +1,17 @@
 import { supabase } from '../lib/supabase';
 
+interface ProfileNames {
+  username: string | null;
+  display_name: string | null;
+  handle: string | null;
+}
+
 export interface Friend {
   id: string;
   friendshipId: string;
   username: string | null;
+  display_name: string | null;
+  handle: string | null;
   status: 'pending' | 'accepted' | 'declined';
   isRequester: boolean;
   created_at: string | null;
@@ -15,8 +23,8 @@ interface FriendshipRequestRow {
   addressee_id: string;
   status: 'pending' | 'accepted' | 'declined';
   created_at: string | null;
-  requester?: { username: string | null } | null;
-  addressee?: { username: string | null } | null;
+  requester?: ProfileNames | null;
+  addressee?: ProfileNames | null;
 }
 
 export interface FriendshipWithProfile {
@@ -25,8 +33,8 @@ export interface FriendshipWithProfile {
   addressee_id: string;
   status: 'pending' | 'accepted' | 'declined';
   created_at: string | null;
-  requester: { username: string | null };
-  addressee: { username: string | null };
+  requester: ProfileNames;
+  addressee: ProfileNames;
 }
 
 // Get all friends (accepted friendships)
@@ -39,8 +47,8 @@ export async function getFriends(userId: string): Promise<Friend[]> {
       addressee_id,
       status,
       created_at,
-      requester:profiles!friendships_requester_id_fkey(username),
-      addressee:profiles!friendships_addressee_id_fkey(username)
+      requester:profiles!friendships_requester_id_fkey(username, display_name, handle),
+      addressee:profiles!friendships_addressee_id_fkey(username, display_name, handle)
     `)
     .eq('status', 'accepted')
     .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
@@ -49,10 +57,13 @@ export async function getFriends(userId: string): Promise<Friend[]> {
 
   return (data as unknown as FriendshipWithProfile[]).map((f) => {
     const isRequester = f.requester_id === userId;
+    const other = isRequester ? f.addressee : f.requester;
     return {
       id: isRequester ? f.addressee_id : f.requester_id,
       friendshipId: f.id,
-      username: isRequester ? f.addressee?.username : f.requester?.username,
+      username: other?.username ?? null,
+      display_name: other?.display_name ?? null,
+      handle: other?.handle ?? null,
       status: f.status,
       isRequester,
       created_at: f.created_at,
@@ -70,7 +81,7 @@ export async function getPendingRequests(userId: string): Promise<Friend[]> {
       addressee_id,
       status,
       created_at,
-      requester:profiles!friendships_requester_id_fkey(username)
+      requester:profiles!friendships_requester_id_fkey(username, display_name, handle)
     `)
     .eq('status', 'pending')
     .eq('addressee_id', userId)
@@ -82,6 +93,8 @@ export async function getPendingRequests(userId: string): Promise<Friend[]> {
     id: f.requester_id,
     friendshipId: f.id,
     username: f.requester?.username ?? null,
+    display_name: f.requester?.display_name ?? null,
+    handle: f.requester?.handle ?? null,
     status: f.status,
     isRequester: false,
     created_at: f.created_at,
@@ -98,7 +111,7 @@ export async function getSentRequests(userId: string): Promise<Friend[]> {
       addressee_id,
       status,
       created_at,
-      addressee:profiles!friendships_addressee_id_fkey(username)
+      addressee:profiles!friendships_addressee_id_fkey(username, display_name, handle)
     `)
     .eq('status', 'pending')
     .eq('requester_id', userId)
@@ -110,18 +123,24 @@ export async function getSentRequests(userId: string): Promise<Friend[]> {
     id: f.addressee_id,
     friendshipId: f.id,
     username: f.addressee?.username ?? null,
+    display_name: f.addressee?.display_name ?? null,
+    handle: f.addressee?.handle ?? null,
     status: f.status,
     isRequester: true,
     created_at: f.created_at,
   }));
 }
 
-// Search users by username
+// Search users by @handle or display name (case-insensitive). A leading '@' the
+// user may type is stripped so "@alice" and "alice" behave the same.
 export async function searchUsers(query: string, currentUserId: string) {
+  const term = query.trim().replace(/^@+/, '');
+  const pattern = `%${term}%`;
+
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, username')
-    .ilike('username', `%${query}%`)
+    .select('id, username, display_name, handle')
+    .or(`handle.ilike.${pattern},display_name.ilike.${pattern}`)
     .neq('id', currentUserId)
     .limit(10);
 
