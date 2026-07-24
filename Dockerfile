@@ -1,39 +1,29 @@
-# Build stage
+# Build stage — config-free: no Supabase values are baked in, so the resulting
+# image is generic and any instance can run it with its own env vars.
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
-
-# Install dependencies
 RUN npm ci
 
-# Copy source code
 COPY . .
-
-# Build arguments for Supabase configuration
-ARG VITE_SUPABASE_URL
-ARG VITE_SUPABASE_ANON_KEY
-
-# Set environment variables for build
-ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
-ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
-
-# Build the application
 RUN npm run build
 
 # Production stage
 FROM nginx:alpine
 
-# Copy custom nginx config
+# Custom nginx config (SPA fallback, cache rules, security headers)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy built assets from builder
+# Built assets
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Expose port 80
+# Runtime config injector: the nginx image runs /docker-entrypoint.d/*.sh at
+# startup, so this writes /config.js from SUPABASE_URL / SUPABASE_ANON_KEY.
+COPY docker/40-deckerr-config.sh /docker-entrypoint.d/40-deckerr-config.sh
+RUN chmod +x /docker-entrypoint.d/40-deckerr-config.sh
+
 EXPOSE 80
 
-# Start nginx
 CMD ["nginx", "-g", "daemon off;"]
