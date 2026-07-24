@@ -4,6 +4,8 @@ import { getFriends } from './friendsService';
 export interface FriendTradeSuggestion {
   friendId: string;
   friendUsername: string | null;
+  friendDisplayName: string | null;
+  friendHandle: string | null;
   /** card_ids the friend owns that are in my wishlist */
   theyHaveIWant: string[];
   /** card_ids I own that are in the friend's wishlist */
@@ -37,6 +39,8 @@ export const getTradeSuggestions = async (userId: string): Promise<FriendTradeSu
       return {
         friendId: friend.id,
         friendUsername: friend.username,
+        friendDisplayName: friend.display_name,
+        friendHandle: friend.handle,
         theyHaveIWant: [...theirHave].filter((id) => myWant.has(id)),
         iHaveTheyWant: [...theirWant].filter((id) => myHave.has(id)),
       };

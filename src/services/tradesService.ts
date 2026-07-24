@@ -1,5 +1,11 @@
 import { supabase } from '../lib/supabase';
 
+interface ProfileNames {
+  username: string | null;
+  display_name: string | null;
+  handle: string | null;
+}
+
 export interface TradeItem {
   id: string;
   trade_id: string;
@@ -19,8 +25,8 @@ export interface Trade {
   version: number;
   editor_id: string | null;
   is_valid: boolean;
-  user1?: { username: string | null };
-  user2?: { username: string | null };
+  user1?: ProfileNames;
+  user2?: ProfileNames;
   items?: TradeItem[];
 }
 
@@ -31,7 +37,7 @@ export interface TradeHistoryEntry {
   editor_id: string;
   message: string | null;
   created_at: string;
-  editor?: { username: string | null };
+  editor?: ProfileNames;
   items?: TradeHistoryItem[];
 }
 
@@ -65,8 +71,8 @@ export async function getTrades(userId: string): Promise<Trade[]> {
     .from('trades')
     .select(`
       *,
-      user1:profiles!trades_user1_id_fkey(username),
-      user2:profiles!trades_user2_id_fkey(username),
+      user1:profiles!trades_user1_id_fkey(username, display_name, handle),
+      user2:profiles!trades_user2_id_fkey(username, display_name, handle),
       items:trade_items(*)
     `)
     .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
@@ -82,8 +88,8 @@ export async function getPendingTrades(userId: string): Promise<Trade[]> {
     .from('trades')
     .select(`
       *,
-      user1:profiles!trades_user1_id_fkey(username),
-      user2:profiles!trades_user2_id_fkey(username),
+      user1:profiles!trades_user1_id_fkey(username, display_name, handle),
+      user2:profiles!trades_user2_id_fkey(username, display_name, handle),
       items:trade_items(*)
     `)
     .eq('status', 'pending')
@@ -100,8 +106,8 @@ export async function getTradeById(tradeId: string): Promise<Trade | null> {
     .from('trades')
     .select(`
       *,
-      user1:profiles!trades_user1_id_fkey(username),
-      user2:profiles!trades_user2_id_fkey(username),
+      user1:profiles!trades_user1_id_fkey(username, display_name, handle),
+      user2:profiles!trades_user2_id_fkey(username, display_name, handle),
       items:trade_items(*)
     `)
     .eq('id', tradeId)
@@ -220,8 +226,8 @@ export async function getTradeHistory(userId: string): Promise<Trade[]> {
     .from('trades')
     .select(`
       *,
-      user1:profiles!trades_user1_id_fkey(username),
-      user2:profiles!trades_user2_id_fkey(username),
+      user1:profiles!trades_user1_id_fkey(username, display_name, handle),
+      user2:profiles!trades_user2_id_fkey(username, display_name, handle),
       items:trade_items(*)
     `)
     .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
@@ -336,7 +342,7 @@ export async function getTradeVersionHistory(tradeId: string): Promise<TradeHist
     .from('trade_history')
     .select(`
       *,
-      editor:profiles!trade_history_editor_id_fkey(username),
+      editor:profiles!trade_history_editor_id_fkey(username, display_name, handle),
       items:trade_history_items(*)
     `)
     .eq('trade_id', tradeId)

@@ -16,6 +16,7 @@ import {
 } from '../../services/tradesService';
 import { getCardsByIds } from '../../services/api';
 import { Card } from '../../types';
+import { profileDisplayName } from '../../utils/profileName';
 import TradeDetail from '../TradeDetail';
 import ConfirmModal from '../ConfirmModal';
 
@@ -272,7 +273,7 @@ export default function TradesTab() {
                   <div className="flex items-center gap-2 min-w-0">
                     <ArrowLeftRight size={16} className="text-blue-400 flex-shrink-0" />
                     <span className="text-sm truncate">
-                      With: <strong>{otherUser?.username}</strong>
+                      With: <strong>{otherUser ? profileDisplayName(otherUser) : ''}</strong>
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5">

@@ -16,6 +16,7 @@ import {
   removeFriend,
   Friend,
 } from '../../services/friendsService';
+import { profileDisplayName, profileHandleLabel } from '../../utils/profileName';
 import ConfirmModal from '../ConfirmModal';
 
 type FriendsSubTab = 'list' | 'requests' | 'search';
@@ -28,7 +29,16 @@ interface FriendshipRealtimeRow {
 interface ViewableUser {
   id: string;
   username: string | null;
+  display_name: string | null;
+  handle: string | null;
   collection_visibility: 'public' | 'friends' | 'private' | null;
+}
+
+interface UserSearchResult {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  handle: string | null;
 }
 
 interface FriendsData {
@@ -52,7 +62,7 @@ export default function FriendsTab({ onViewCollection }: FriendsTabProps) {
 
   const [friendsSubTab, setFriendsSubTab] = useState<FriendsSubTab>('list');
   const [friendSearch, setFriendSearch] = useState('');
-  const [friendSearchResults, setFriendSearchResults] = useState<{ id: string; username: string | null }[]>([]);
+  const [friendSearchResults, setFriendSearchResults] = useState<UserSearchResult[]>([]);
   const [searchingFriends, setSearchingFriends] = useState(false);
   const [friendListFilter, setFriendListFilter] = useState('');
   const [requestsFilter, setRequestsFilter] = useState('');
@@ -177,6 +187,21 @@ export default function FriendsTab({ onViewCollection }: FriendsTabProps) {
     });
   };
 
+  // Match a friend/request against the list filter by shown name, @handle or
+  // the legacy username.
+  const matchesFilter = (
+    p: { username: string | null; display_name: string | null; handle: string | null },
+    filter: string
+  ) => {
+    if (!filter) return true;
+    const q = filter.toLowerCase();
+    return (
+      profileDisplayName(p).toLowerCase().includes(q) ||
+      Boolean(p.handle?.toLowerCase().includes(q)) ||
+      Boolean(p.username?.toLowerCase().includes(q))
+    );
+  };
+
   const isAlreadyFriendOrPending = (userId: string) => {
     return friends.some((f) => f.id === userId) ||
            pendingRequests.some((f) => f.id === userId) ||
@@ -232,28 +257,37 @@ export default function FriendsTab({ onViewCollection }: FriendsTabProps) {
 
           {friends.length === 0 ? (
             <p className="text-gray-400 text-center py-8 text-sm">No friends yet</p>
-          ) : friends.filter((f) =>
-              !friendListFilter || f.username?.toLowerCase().includes(friendListFilter.toLowerCase())
-            ).length === 0 ? (
+          ) : friends.filter((f) => matchesFilter(f, friendListFilter)).length === 0 ? (
             <p className="text-gray-400 text-center py-8 text-sm">No friends match "{friendListFilter}"</p>
           ) : (
             <div className="space-y-2">
               {friends
-                .filter((f) => !friendListFilter || f.username?.toLowerCase().includes(friendListFilter.toLowerCase()))
+                .filter((f) => matchesFilter(f, friendListFilter))
                 .map((friend) => (
-                  <div key={friend.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
-                    <span className="font-medium truncate">{friend.username || 'Unknown'}</span>
-                    <div className="flex gap-1">
+                  <div key={friend.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg gap-2">
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{profileDisplayName(friend)}</div>
+                      {profileHandleLabel(friend) && (
+                        <div className="text-xs text-gray-400 truncate">{profileHandleLabel(friend)}</div>
+                      )}
+                    </div>
+                    <div className="flex gap-1 flex-shrink-0">
                       <button
                         onClick={() => {
-                          onViewCollection({ id: friend.id, username: friend.username, collection_visibility: 'friends' });
+                          onViewCollection({
+                            id: friend.id,
+                            username: friend.username,
+                            display_name: friend.display_name,
+                            handle: friend.handle,
+                            collection_visibility: 'friends',
+                          });
                         }}
                         className="p-2 text-blue-400 active:bg-blue-400/20 rounded-lg"
                       >
                         <Eye size={18} />
                       </button>
                       <button
-                        onClick={() => handleRemoveFriend(friend.friendshipId, friend.username || 'user')}
+                        onClick={() => handleRemoveFriend(friend.friendshipId, profileDisplayName(friend))}
                         className="p-2 text-red-400 active:bg-red-400/20 rounded-lg"
                       >
                         <UserMinus size={18} />
@@ -290,12 +324,8 @@ export default function FriendsTab({ onViewCollection }: FriendsTabProps) {
           </div>
 
           {(() => {
-            const filteredPending = pendingRequests.filter((r) =>
-              !requestsFilter || r.username?.toLowerCase().includes(requestsFilter.toLowerCase())
-            );
-            const filteredSent = sentRequests.filter((r) =>
-              !requestsFilter || r.username?.toLowerCase().includes(requestsFilter.toLowerCase())
-            );
+            const filteredPending = pendingRequests.filter((r) => matchesFilter(r, requestsFilter));
+            const filteredSent = sentRequests.filter((r) => matchesFilter(r, requestsFilter));
 
             return (
               <>
@@ -304,9 +334,14 @@ export default function FriendsTab({ onViewCollection }: FriendsTabProps) {
                     <p className="text-xs text-gray-500 mb-2">Received</p>
                     <div className="space-y-2">
                       {filteredPending.map((req) => (
-                        <div key={req.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
-                          <span className="font-medium truncate">{req.username || 'Unknown'}</span>
-                          <div className="flex gap-1">
+                        <div key={req.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg gap-2">
+                          <div className="min-w-0">
+                            <div className="font-medium truncate">{profileDisplayName(req)}</div>
+                            {profileHandleLabel(req) && (
+                              <div className="text-xs text-gray-400 truncate">{profileHandleLabel(req)}</div>
+                            )}
+                          </div>
+                          <div className="flex gap-1 flex-shrink-0">
                             <button onClick={() => handleAcceptRequest(req.friendshipId)} className="p-2 text-green-400 active:bg-green-400/20 rounded-lg">
                               <Check size={18} />
                             </button>
@@ -325,12 +360,17 @@ export default function FriendsTab({ onViewCollection }: FriendsTabProps) {
                     <p className="text-xs text-gray-500 mb-2">Sent</p>
                     <div className="space-y-2">
                       {filteredSent.map((req) => (
-                        <div key={req.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
-                          <div className="flex items-center gap-2">
-                            <Send size={14} className="text-gray-500" />
-                            <span className="font-medium truncate">{req.username || 'Unknown'}</span>
+                        <div key={req.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Send size={14} className="text-gray-500 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{profileDisplayName(req)}</div>
+                              {profileHandleLabel(req) && (
+                                <div className="text-xs text-gray-400 truncate">{profileHandleLabel(req)}</div>
+                              )}
+                            </div>
                           </div>
-                          <span className="text-xs text-yellow-500">Pending</span>
+                          <span className="text-xs text-yellow-500 flex-shrink-0">Pending</span>
                         </div>
                       ))}
                     </div>
@@ -360,7 +400,10 @@ export default function FriendsTab({ onViewCollection }: FriendsTabProps) {
               value={friendSearch}
               onChange={(e) => setFriendSearch(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearchFriends()}
-              placeholder="Username..."
+              placeholder="Search by @handle or name"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               className="flex-1 px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm"
             />
             <button
@@ -375,10 +418,15 @@ export default function FriendsTab({ onViewCollection }: FriendsTabProps) {
           {friendSearchResults.length > 0 && (
             <div className="space-y-2">
               {friendSearchResults.map((result) => (
-                <div key={result.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
-                  <span className="font-medium truncate">{result.username || 'Unknown'}</span>
+                <div key={result.id} className="flex items-center justify-between bg-gray-800 p-3 rounded-lg gap-2">
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{profileDisplayName(result)}</div>
+                    {profileHandleLabel(result) && (
+                      <div className="text-xs text-gray-400 truncate">{profileHandleLabel(result)}</div>
+                    )}
+                  </div>
                   {isAlreadyFriendOrPending(result.id) ? (
-                    <span className="text-xs text-gray-500">Connected</span>
+                    <span className="text-xs text-gray-500 flex-shrink-0">Connected</span>
                   ) : (
                     <button
                       onClick={() => handleSendRequest(result.id)}

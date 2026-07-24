@@ -5,6 +5,7 @@ import { Compass, Layers, Search as SearchIcon, User as UserIcon } from 'lucide-
 import { supabase } from '../lib/supabase';
 import { getCardsByIds } from '../services/api';
 import { getCardArtCrop } from '../utils/cardFaces';
+import { profileDisplayName, profileHandleLabel } from '../utils/profileName';
 import { useAuth } from '../contexts/AuthContext';
 
 const PAGE_SIZE = 20;
@@ -17,7 +18,8 @@ interface DiscoverDeck {
   format: string;
   cardCount: number;
   userId: string | null;
-  ownerUsername: string | null;
+  ownerName: string | null;
+  ownerHandle: string | null;
   coverArt: string | null;
 }
 
@@ -63,33 +65,34 @@ const fetchDiscoverPage = async (
     ),
   ];
 
-  // Batch the page's cover art (one Scryfall call) and owner usernames (one
+  // Batch the page's cover art (one Scryfall call) and owner names (one
   // profiles query) instead of per-deck requests.
   const [coverCards, profilesResult] = await Promise.all([
     coverIds.length > 0 ? getCardsByIds(coverIds) : Promise.resolve([]),
     userIds.length > 0
-      ? supabase.from('profiles').select('id, username').in('id', userIds)
+      ? supabase.from('profiles').select('id, username, display_name, handle').in('id', userIds)
       : Promise.resolve({ data: [], error: null }),
   ]);
   if (profilesResult.error) throw profilesResult.error;
 
   const artByCardId = new Map(coverCards.map((card) => [card.id, getCardArtCrop(card) ?? null]));
-  const usernameById = new Map(
-    (profilesResult.data ?? []).map((profile) => [
-      profile.id as string,
-      (profile.username as string | null) ?? null,
-    ])
+  const profileById = new Map(
+    (profilesResult.data ?? []).map((profile) => [profile.id as string, profile])
   );
 
-  const decks: DiscoverDeck[] = rows.map((row) => ({
-    id: row.id as string,
-    name: row.name as string,
-    format: row.format as string,
-    cardCount: (row.card_count as number | null) ?? 0,
-    userId: (row.user_id as string | null) ?? null,
-    ownerUsername: row.user_id ? usernameById.get(row.user_id as string) ?? null : null,
-    coverArt: row.cover_card_id ? artByCardId.get(row.cover_card_id as string) ?? null : null,
-  }));
+  const decks: DiscoverDeck[] = rows.map((row) => {
+    const owner = row.user_id ? profileById.get(row.user_id as string) : undefined;
+    return {
+      id: row.id as string,
+      name: row.name as string,
+      format: row.format as string,
+      cardCount: (row.card_count as number | null) ?? 0,
+      userId: (row.user_id as string | null) ?? null,
+      ownerName: owner ? profileDisplayName(owner) : null,
+      ownerHandle: owner ? profileHandleLabel(owner) : null,
+      coverArt: row.cover_card_id ? artByCardId.get(row.cover_card_id as string) ?? null : null,
+    };
+  });
 
   return {
     decks,
@@ -252,10 +255,13 @@ export default function Discover() {
                     {deck.format}
                   </span>
                   <span>{deck.cardCount} cards</span>
-                  {deck.ownerUsername && (
+                  {deck.ownerName && (
                     <span className="inline-flex items-center gap-1 truncate">
                       <UserIcon size={12} className="flex-shrink-0" />
-                      <span className="truncate">{deck.ownerUsername}</span>
+                      <span className="truncate">{deck.ownerName}</span>
+                      {deck.ownerHandle && (
+                        <span className="truncate text-gray-500">{deck.ownerHandle}</span>
+                      )}
                     </span>
                   )}
                 </div>

@@ -13,6 +13,7 @@ import CommunityTabBar, { CommunityTab } from './community/CommunityTabBar';
 import UserCollectionViewer, { UserProfile } from './community/UserCollectionViewer';
 import { getFriends } from '../services/friendsService';
 import { getPendingTrades } from '../services/tradesService';
+import { profileDisplayName, profileHandleLabel } from '../utils/profileName';
 
 interface ProfileRealtimeRow {
   id: string;
@@ -63,7 +64,7 @@ export default function Community() {
     queryFn: async (): Promise<UserProfile[]> => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, username, collection_visibility')
+        .select('id, username, display_name, handle, collection_visibility')
         .eq('collection_visibility', 'public')
         .neq('id', user!.id)
         .order('username');
@@ -156,9 +157,15 @@ export default function Community() {
     );
   }
 
-  const filteredPublicUsers = publicUsers.filter(
-    (u) => !browseSearch || u.username?.toLowerCase().includes(browseSearch.toLowerCase())
-  );
+  const filteredPublicUsers = publicUsers.filter((u) => {
+    if (!browseSearch) return true;
+    const q = browseSearch.toLowerCase();
+    return (
+      profileDisplayName(u).toLowerCase().includes(q) ||
+      Boolean(u.handle?.toLowerCase().includes(q)) ||
+      Boolean(u.username?.toLowerCase().includes(q))
+    );
+  });
 
   // ============ MAIN VIEW ============
   return (
@@ -203,7 +210,12 @@ export default function Community() {
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <Globe size={18} className="text-green-400 flex-shrink-0" />
-                      <span className="font-medium truncate">{userProfile.username || 'Unknown'}</span>
+                      <div className="min-w-0 text-left">
+                        <div className="font-medium truncate">{profileDisplayName(userProfile)}</div>
+                        {profileHandleLabel(userProfile) && (
+                          <div className="text-xs text-gray-400 truncate">{profileHandleLabel(userProfile)}</div>
+                        )}
+                      </div>
                     </div>
                     <Eye size={18} className="text-gray-400 flex-shrink-0" />
                   </button>
@@ -220,13 +232,24 @@ export default function Community() {
                     <button
                       key={friend.id}
                       onClick={() => {
-                        setSelectedUser({ id: friend.id, username: friend.username, collection_visibility: 'friends' });
+                        setSelectedUser({
+                          id: friend.id,
+                          username: friend.username,
+                          display_name: friend.display_name,
+                          handle: friend.handle,
+                          collection_visibility: 'friends',
+                        });
                       }}
                       className="w-full flex items-center justify-between bg-gray-800 p-3 rounded-lg active:bg-gray-700 transition"
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <Users size={18} className="text-blue-400 flex-shrink-0" />
-                        <span className="font-medium truncate">{friend.username || 'Unknown'}</span>
+                        <div className="min-w-0 text-left">
+                          <div className="font-medium truncate">{profileDisplayName(friend)}</div>
+                          {profileHandleLabel(friend) && (
+                            <div className="text-xs text-gray-400 truncate">{profileHandleLabel(friend)}</div>
+                          )}
+                        </div>
                       </div>
                       <Eye size={18} className="text-gray-400 flex-shrink-0" />
                     </button>

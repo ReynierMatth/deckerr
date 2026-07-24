@@ -4,6 +4,7 @@ import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { profileDisplayName } from '../utils/profileName';
 import NotificationBell from './NotificationBell';
 
 export default function Navigation() {
@@ -14,16 +15,16 @@ export default function Navigation() {
   const [showMore, setShowMore] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const { data: username } = useQuery({
-    queryKey: ['profile', 'username', user?.id],
+  const { data: profileName } = useQuery({
+    queryKey: ['profile', 'name', user?.id],
     enabled: Boolean(user),
     queryFn: async () => {
       const { data } = await supabase
         .from('profiles')
-        .select('username')
+        .select('username, display_name, handle')
         .eq('id', user!.id)
         .single();
-      return data?.username ?? null;
+      return data ? profileDisplayName(data) : null;
     },
   });
 
@@ -107,7 +108,7 @@ export default function Navigation() {
                       alt="User avatar"
                       className="w-8 h-8 rounded-full bg-gray-700 transition-smooth hover:scale-110"
                     />
-                    <span className="text-gray-300 text-sm">{username || user.email}</span>
+                    <span className="text-gray-300 text-sm">{profileName || user.email}</span>
                     <ChevronDown size={16} className="text-gray-400" />
                   </button>
 

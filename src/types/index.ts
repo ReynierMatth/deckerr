@@ -2,6 +2,8 @@ export interface User {
   id: string;
   email: string;
   username: string;
+  display_name?: string | null;
+  handle?: string | null;
   themeColor: 'red' | 'green' | 'blue' | 'yellow' | 'grey' | 'purple';
 }
 
