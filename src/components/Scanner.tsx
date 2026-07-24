@@ -31,12 +31,16 @@ const MAX_OCR_WIDTH = 1000;
 const SCAN_INTERVAL = 1200;
 // How many candidate text lines to try resolving against Scryfall per pass.
 const MAX_CANDIDATES = 4;
-// Max Hamming distance (of 64 bits) to accept an image-hash match. Live camera
-// crops diverge from the reference border_crop, so this is generous. Being
-// calibrated against real scans (see DEBUG_HASH).
-const HASH_MAX_DISTANCE = 16;
-// Temporary: overlay the nearest index match + distance to calibrate the
-// threshold on real hardware. Flip off once tuned.
+// Max Hamming distance (of 64 bits) to consider an image-hash match. Live
+// camera crops diverge from the reference border_crop, so this is generous;
+// the real guard against wrong matches is the confirmation count below.
+const HASH_MAX_DISTANCE = 12;
+// The same card must be the nearest match this many consecutive passes before
+// it's committed — a wrong match from one blurry frame won't repeat, so this
+// kills the transient mis-reads that a bare threshold lets through.
+const HASH_CONFIRMATIONS = 2;
+// Temporary: overlay the nearest index match + distance to calibrate on real
+// hardware. Flip off once tuned.
 const DEBUG_HASH = true;
 
 /**
@@ -112,6 +116,8 @@ export default function Scanner() {
   const lastNameRef = useRef('');
   // Last image-hash match id acted on, same lingering-guard for the hash path.
   const lastHashIdRef = useRef('');
+  // Consecutive-pass confirmation of the current nearest hash match.
+  const pendingHashRef = useRef<{ id: string; count: number }>({ id: '', count: 0 });
   // Candidate lines Scryfall didn't recognise, skipped on later passes.
   const failedNamesRef = useRef<Set<string>>(new Set());
   // Latest toast fns via a ref: the context value isn't memoized, so reading
@@ -287,15 +293,34 @@ export default function Scanner() {
         if (region) {
           const hash = dhashFromRGBA(region.data, region.width, region.height);
           const nearest = matchHashIndex(hashIndex, hash, 64); // nearest, any distance
-          if (nearest && (DEBUG_HASH || nearest.distance <= HASH_MAX_DISTANCE)) {
+          const within = nearest !== null && nearest.distance <= HASH_MAX_DISTANCE;
+
+          // Track how many consecutive passes agree on this nearest card.
+          const pending = pendingHashRef.current;
+          if (within && nearest) {
+            pending.count = pending.id === nearest.id ? pending.count + 1 : 1;
+            pending.id = nearest.id;
+          } else {
+            pending.id = '';
+            pending.count = 0;
+          }
+          const confirmed = within && pending.count >= HASH_CONFIRMATIONS;
+
+          if (nearest && (DEBUG_HASH || confirmed)) {
             const [card] = await getCardsByIds([nearest.id]);
             if (isCancelled()) return;
             if (DEBUG_HASH) {
-              setHashDebug(card ? `≈ ${card.name} · ${card.set?.toUpperCase()} · d${nearest.distance}` : `d${nearest.distance}`);
+              setHashDebug(
+                card
+                  ? `≈ ${card.name} · ${card.set?.toUpperCase()} · d${nearest.distance} (${pending.count}/${HASH_CONFIRMATIONS})`
+                  : `d${nearest.distance}`,
+              );
             }
-            if (card && nearest.distance <= HASH_MAX_DISTANCE && nearest.id !== lastHashIdRef.current) {
+            if (confirmed && card && nearest.id !== lastHashIdRef.current) {
               lastHashIdRef.current = nearest.id;
               lastNameRef.current = card.name;
+              pending.id = '';
+              pending.count = 0;
               addCardToBasket(card);
               return;
             }
@@ -351,6 +376,7 @@ export default function Scanner() {
     // Allow the last-detected card to be picked up again after a pause.
     lastNameRef.current = '';
     lastHashIdRef.current = '';
+    pendingHashRef.current = { id: '', count: 0 };
 
     const tick = async () => {
       setScanning(true);
