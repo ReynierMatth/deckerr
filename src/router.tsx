@@ -136,6 +136,11 @@ const searchRoute = createRoute({
   path: '/search',
   component: lazyRouteComponent(() => import('./components/CardSearch')),
 });
+const scanRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/scan',
+  component: lazyRouteComponent(() => import('./components/Scanner')),
+});
 const lifeCounterRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/life-counter',
@@ -165,6 +170,7 @@ const routeTree = rootRoute.addChildren([
   communityRoute,
   discoverRoute,
   searchRoute,
+  scanRoute,
   lifeCounterRoute,
   alertsRoute,
   editDeckRoute,
