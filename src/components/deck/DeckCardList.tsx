@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
 import {
-  Plus, Trash2, Loader2, AlertCircle, X, Share2, Copy, Check, PackagePlus, CheckCircle,
+  Plus, Trash2, Loader2, AlertCircle, PackagePlus, CheckCircle,
   Swords, Sparkles, Zap, Flame, Cog, Gem, Shield, Mountain, Layers,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import React from 'react';
 import { Card } from '../../types';
 import { ManaSymbol } from '../ManaCost';
 import WishlistButton from '../WishlistButton';
@@ -35,23 +35,11 @@ interface DeckValidation {
 }
 
 interface DeckCardListProps {
-  deckName: string;
-  setDeckName: React.Dispatch<React.SetStateAction<string>>;
   deckFormat: string;
-  setDeckFormat: React.Dispatch<React.SetStateAction<string>>;
-  tags: string[];
-  addTag: (tag: string) => void;
-  removeTag: (tag: string) => void;
-  isPublic: boolean;
-  setIsPublic: React.Dispatch<React.SetStateAction<boolean>>;
-  deckId: string | null;
   commander: Card | null;
-  setCommander: React.Dispatch<React.SetStateAction<Card | null>>;
   selectedCards: DeckCardEntry[];
   commanderColors: string[];
   isCardValidForCommander: (card: Card, commanderColors: string[]) => boolean;
-  handleFileUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  isImporting: boolean;
   validation: DeckValidation;
   updateCardQuantity: (cardId: string, quantity: number) => void;
   removeCardFromDeck: (cardId: string) => void;
@@ -68,29 +56,17 @@ interface DeckCardListProps {
 }
 
 /**
- * Presentational deck-builder panel: deck name/format/commander controls, the
- * decklist import, validation warnings, the list of cards currently in the deck,
- * and the suggested-lands helper. All state lives in the parent (DeckManager);
- * this component receives data and delegates mutations back through callbacks.
+ * Presentational deck card list: validation warnings, the list of cards
+ * currently in the deck (grouped by type), and the suggested-lands helper.
+ * All state lives in the parent (DeckManager); this component receives data
+ * and delegates mutations back through callbacks.
  */
 export default function DeckCardList({
-  deckName,
-  setDeckName,
   deckFormat,
-  setDeckFormat,
-  tags,
-  addTag,
-  removeTag,
-  isPublic,
-  setIsPublic,
-  deckId,
   commander,
-  setCommander,
   selectedCards,
   commanderColors,
   isCardValidForCommander,
-  handleFileUpload,
-  isImporting,
   validation,
   updateCardQuantity,
   removeCardFromDeck,
@@ -105,206 +81,9 @@ export default function DeckCardList({
   suggestedLands,
   addSuggestedLandsToDeck,
 }: DeckCardListProps) {
-  const [tagInput, setTagInput] = useState('');
-  const [copied, setCopied] = useState(false);
-
-  const commitTag = () => {
-    addTag(tagInput);
-    setTagInput('');
-  };
-
-  const shareUrl = deckId ? `${window.location.origin}/decks/${deckId}/view` : '';
-
-  const handleCopyLink = async () => {
-    if (!shareUrl) return;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
-  };
-
   return (
     <div className="bg-gray-800 rounded-lg p-6">
       <div className="space-y-4">
-        <input
-          type="text"
-          value={deckName}
-          onChange={e => setDeckName(e.target.value)}
-          className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
-          placeholder="Deck Name"
-        />
-
-        <select
-          value={deckFormat}
-          onChange={e => setDeckFormat(e.target.value)}
-          className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
-        >
-          <option value="standard">Standard</option>
-          <option value="modern">Modern</option>
-          <option value="pioneer">Pioneer</option>
-          <option value="commander">Commander</option>
-          <option value="brawl">Brawl</option>
-          <option value="oathbreaker">Oathbreaker</option>
-          <option value="legacy">Legacy</option>
-          <option value="vintage">Vintage</option>
-          <option value="pauper">Pauper</option>
-        </select>
-
-        {/* Tags editor: add on Enter, removable chips */}
-        <div className="space-y-2">
-          <input
-            type="text"
-            value={tagInput}
-            onChange={e => setTagInput(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                commitTag();
-              }
-            }}
-            onBlur={commitTag}
-            className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
-            placeholder="Add tag (press Enter)"
-          />
-          {tags.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {tags.map(tag => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center gap-1 pl-3 pr-2 py-1 bg-blue-600/20 border border-blue-500/40 text-blue-200 rounded-full text-xs"
-                >
-                  {tag}
-                  <button
-                    type="button"
-                    onClick={() => removeTag(tag)}
-                    className="text-blue-300 hover:text-white"
-                    aria-label={`Remove tag ${tag}`}
-                  >
-                    <X size={14} />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Public / share controls */}
-        <div className="bg-gray-700/60 border border-gray-600 rounded-lg p-3 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <Share2 size={18} className="text-blue-400 shrink-0" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-white">Public deck</p>
-                <p className="text-xs text-gray-400 truncate">
-                  Anyone with the link can view this deck.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isPublic}
-              aria-label="Make deck public"
-              onClick={() => setIsPublic(prev => !prev)}
-              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-                isPublic ? 'bg-blue-600' : 'bg-gray-500'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  isPublic ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
-          </div>
-
-          {isPublic && (
-            deckId ? (
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={shareUrl}
-                  readOnly
-                  onFocus={e => e.currentTarget.select()}
-                  className="flex-1 min-w-0 px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-xs text-gray-300"
-                />
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  className="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium text-white transition-colors"
-                >
-                  {copied ? <Check size={16} /> : <Copy size={16} />}
-                  <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy link'}</span>
-                </button>
-              </div>
-            ) : (
-              <p className="text-xs text-yellow-400">
-                Save the deck first to get a shareable link.
-              </p>
-            )
-          )}
-        </div>
-
-        {deckFormat === 'commander' && (
-          <div className="space-y-2">
-            <select
-              value={commander?.id || ''}
-              onChange={e => {
-                const card =
-                  selectedCards.find(c => c.card.id === e.target.value)?.card ||
-                  null;
-                setCommander(card);
-              }}
-              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
-            >
-              <option value="">Select Commander</option>
-              {selectedCards
-                .filter(c =>
-                  c.card.type_line?.toLowerCase().includes('legendary')
-                )
-                .map(({ card }) => (
-                  <option key={card.id} value={card.id}>
-                    {card.name}
-                  </option>
-                ))}
-            </select>
-            {commander && commanderColors.length > 0 && (
-              <div className="bg-gray-700 rounded px-3 py-2 flex items-center gap-2">
-                <span className="text-xs text-gray-400">Commander Colors:</span>
-                <div className="flex items-center gap-1">
-                  {commanderColors.map(color => (
-                    <ManaSymbol key={color} symbol={color} size={18} />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="relative">
-          <input
-            type="file"
-            accept=".txt"
-            onChange={handleFileUpload}
-            disabled={isImporting}
-            className="w-full text-sm text-gray-500
-          file:mr-4 file:py-2 file:px-4
-          file:rounded-lg
-          file:border-0
-          file:text-sm file:font-semibold
-          file:bg-blue-500 file:text-white
-          hover:file:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-          />
-          {isImporting && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-800 bg-opacity-50 rounded-lg">
-              <Loader2 className="animate-spin text-white" size={48} />
-            </div>
-          )}
-        </div>
-
         {!validation.isValid && (
           <div className="bg-red-500/10 border border-red-500 rounded-lg p-3">
             <ul className="list-disc list-inside text-red-400 text-sm">

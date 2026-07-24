@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, Deck } from '../types';
+import { Card, Deck, DeckVisibility } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
@@ -16,7 +16,7 @@ interface UseDeckSaveParams {
 }
 
 /**
- * Owns deck persistence: the current deck id, the public flag (persisted
+ * Owns deck persistence: the current deck id, the visibility (persisted
  * immediately for already-saved decks) and the save/update flow.
  */
 export function useDeckSave({
@@ -31,21 +31,21 @@ export function useDeckSave({
   const { user } = useAuth();
   const toast = useToast();
   const [currentDeckId, setCurrentDeckId] = useState<string | null>(initialDeck?.id || null);
-  const [isPublic, setIsPublic] = useState<boolean>(initialDeck?.isPublic ?? false);
+  const [visibility, setVisibility] = useState<DeckVisibility>(initialDeck?.visibility ?? 'private');
   const [isSaving, setIsSaving] = useState(false);
 
   /**
-   * Toggling visibility applies immediately for an already-saved deck: the
+   * Changing visibility applies immediately for an already-saved deck: the
    * share link is shown (and likely copied) right away, so waiting for the
-   * next explicit Save would hand out links to a still-private deck.
+   * next explicit Save would hand out links to a still-private deck. Keeps the
+   * derived is_public flag in sync in the same update.
    */
-  const setIsPublicPersisted: React.Dispatch<React.SetStateAction<boolean>> = (value) => {
-    const next = typeof value === 'function' ? value(isPublic) : value;
-    setIsPublic(next);
+  const setVisibilityPersisted = (v: DeckVisibility) => {
+    setVisibility(v);
     if (currentDeckId) {
       supabase
         .from('decks')
-        .update({ is_public: next })
+        .update({ visibility: v, is_public: v !== 'private' })
         .eq('id', currentDeckId)
         .then(({ error }) => {
           if (error) {
@@ -96,7 +96,8 @@ export function useDeckSave({
         is_valid: validation.isValid,
         card_count: totalCardCount,
         tags,
-        is_public: isPublic,
+        visibility,
+        is_public: visibility !== 'private',
       };
 
       // Save or update the deck
@@ -141,5 +142,5 @@ export function useDeckSave({
     }
   };
 
-  return { currentDeckId, isPublic, setIsPublicPersisted, isSaving, saveDeck };
+  return { currentDeckId, visibility, setVisibilityPersisted, isSaving, saveDeck };
 }
