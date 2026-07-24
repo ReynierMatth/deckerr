@@ -32,8 +32,12 @@ const SCAN_INTERVAL = 1200;
 // How many candidate text lines to try resolving against Scryfall per pass.
 const MAX_CANDIDATES = 4;
 // Max Hamming distance (of 64 bits) to accept an image-hash match. Live camera
-// crops diverge from the reference border_crop, so this is generous.
-const HASH_MAX_DISTANCE = 12;
+// crops diverge from the reference border_crop, so this is generous. Being
+// calibrated against real scans (see DEBUG_HASH).
+const HASH_MAX_DISTANCE = 16;
+// Temporary: overlay the nearest index match + distance to calibrate the
+// threshold on real hardware. Flip off once tuned.
+const DEBUG_HASH = true;
 
 /**
  * Per-copy price for a printing, matching how the collection values entries:
@@ -52,6 +56,21 @@ const priceForVariant = (card: Card, isFoil: boolean): number => {
  * earliest plausible lines are the best guesses; the caller tries them in
  * order against Scryfall until one resolves.
  */
+/** Significant words (3+ letters, lowercased) of a card-name-ish string. */
+const nameTokens = (s: string): Set<string> =>
+  new Set(s.toLowerCase().split(/[^a-zà-ÿ]+/).filter((w) => w.length >= 3));
+
+/**
+ * Guard against wild fuzzy leaps: accept an OCR result only if the resolved
+ * card name shares at least one significant word with what we read. Stops
+ * "Bury in Books" resolving to an unrelated "Fifty Feet of Rope".
+ */
+const sharesToken = (read: string, resolved: string): boolean => {
+  const a = nameTokens(read);
+  for (const w of nameTokens(resolved)) if (a.has(w)) return true;
+  return false;
+};
+
 const ocrNameCandidates = (raw: string): string[] => {
   const seen = new Set<string>();
   const candidates: string[] = [];
@@ -106,6 +125,8 @@ export default function Scanner() {
   const [showBasket, setShowBasket] = useState(false);
   // Basket entry whose printing picker is open (by card id), or null.
   const [pickerEntryId, setPickerEntryId] = useState<string | null>(null);
+  // Calibration overlay: nearest index match + distance (DEBUG_HASH only).
+  const [hashDebug, setHashDebug] = useState<string | null>(null);
   // Cards found during this scanning session (resets on unmount).
   const [scanned, setScanned] = useState<ScannedEntry[]>([]);
 
@@ -264,16 +285,16 @@ export default function Scanner() {
       if (hashIndex) {
         const region = captureGuideRegion();
         if (region) {
-          const match = matchHashIndex(
-            hashIndex,
-            dhashFromRGBA(region.data, region.width, region.height),
-            HASH_MAX_DISTANCE,
-          );
-          if (match && match.id !== lastHashIdRef.current) {
-            const [card] = await getCardsByIds([match.id]);
+          const hash = dhashFromRGBA(region.data, region.width, region.height);
+          const nearest = matchHashIndex(hashIndex, hash, 64); // nearest, any distance
+          if (nearest && (DEBUG_HASH || nearest.distance <= HASH_MAX_DISTANCE)) {
+            const [card] = await getCardsByIds([nearest.id]);
             if (isCancelled()) return;
-            if (card) {
-              lastHashIdRef.current = match.id;
+            if (DEBUG_HASH) {
+              setHashDebug(card ? `≈ ${card.name} · ${card.set?.toUpperCase()} · d${nearest.distance}` : `d${nearest.distance}`);
+            }
+            if (card && nearest.distance <= HASH_MAX_DISTANCE && nearest.id !== lastHashIdRef.current) {
+              lastHashIdRef.current = nearest.id;
               lastNameRef.current = card.name;
               addCardToBasket(card);
               return;
@@ -305,7 +326,7 @@ export default function Scanner() {
         const card = await getCardByFuzzyName(name);
         if (isCancelled()) return;
 
-        if (!card) {
+        if (!card || !sharesToken(name, card.name)) {
           failedNamesRef.current.add(name.toLowerCase());
           continue;
         }
@@ -458,7 +479,16 @@ export default function Scanner() {
 
       {cameraState === 'ready' && (
         <>
-          {/* Card-shaped guide frame — align the card here (its region is hashed) */}
+          {/* Calibration overlay (DEBUG_HASH): nearest index match + distance */}
+          {DEBUG_HASH && hashDebug && (
+            <div className="absolute top-3 inset-x-3 flex justify-center pointer-events-none">
+              <div className="px-3 py-1.5 rounded-lg bg-black/80 text-xs font-mono text-blue-200 max-w-full truncate">
+                {hashDebug}
+              </div>
+            </div>
+          )}
+
+          {/* Card-shaped guide frame — fill it with the card (its region is hashed) */}
           <div className="absolute inset-x-0 top-0 bottom-32 flex items-center justify-center pointer-events-none">
             <div
               ref={frameRef}
@@ -489,7 +519,7 @@ export default function Scanner() {
               ) : (
                 <ScanLine size={16} className="text-blue-400" />
               )}
-              <span>Point at a card — scanning automatically</span>
+              <span>Fill the frame with the card — scanning automatically</span>
             </div>
           </div>
         </>
