@@ -1,9 +1,16 @@
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, Check, ArrowLeftRight, DollarSign, Loader2, Edit, RefreshCcw, History, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { Trade, TradeHistoryEntry, getTradeVersionHistory } from '../services/tradesService';
+import {
+  Trade,
+  TradeHistoryEntry,
+  getTradeVersionHistory,
+  confirmTrade,
+  declineTrade,
+  cancelTrade,
+} from '../services/tradesService';
 import { getUserCollection, getCardsByIds } from '../services/api';
 import { Card } from '../types';
 import { profileDisplayName, profileHandleLabel } from '../utils/profileName';
@@ -13,8 +20,6 @@ import CardTile from './card/CardTile';
 interface TradeDetailProps {
   trade: Trade;
   onClose: () => void;
-  onAccept: (tradeId: string) => Promise<void>;
-  onDecline: (tradeId: string) => Promise<void>;
   onTradeUpdated: () => void;
 }
 
@@ -46,12 +51,11 @@ function calculateTotalPrice(items: TradeCardItem[]): number {
 export default function TradeDetail({
   trade,
   onClose,
-  onAccept,
-  onDecline,
   onTradeUpdated,
 }: TradeDetailProps) {
   const { user } = useAuth();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const [processing, setProcessing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showEditMode, setShowEditMode] = useState(false);
@@ -61,6 +65,11 @@ export default function TradeDetail({
   const otherUser = isUser1 ? trade.user2 : trade.user1;
   const myUserId = user?.id || '';
   const otherUserId = isUser1 ? trade.user2_id : trade.user1_id;
+
+  // Per-side confirmation of the physical exchange.
+  const myConfirmed = isUser1 ? trade.user1_confirmed : trade.user2_confirmed;
+  const theirConfirmed = isUser1 ? trade.user2_confirmed : trade.user1_confirmed;
+  const someoneConfirmed = trade.user1_confirmed || trade.user2_confirmed;
 
   // Card details for both sides of the trade. Version is part of the key so an
   // edited trade (new items) refetches; myUserId keeps the you/them split right.
@@ -117,13 +126,28 @@ export default function TradeDetail({
   });
   const history = historyData ?? EMPTY_HISTORY;
 
-  const handleAccept = async () => {
+  // Trade list + community badge caches shared by both participants' views.
+  const invalidateTradeLists = () => {
+    queryClient.invalidateQueries({ queryKey: ['trades'] });
+    queryClient.invalidateQueries({ queryKey: ['trade'] });
+    queryClient.invalidateQueries({ queryKey: ['communityPendingTrades'] });
+  };
+
+  // "I did the exchange": update only the confirming user's own collection.
+  const handleConfirm = async () => {
     setProcessing(true);
     try {
-      await onAccept(trade.id);
+      await confirmTrade(trade.id);
+      invalidateTradeLists();
+      // The confirming user's collection just changed (cards given/received).
+      queryClient.invalidateQueries({ queryKey: ['myCollection'] });
+      queryClient.invalidateQueries({ queryKey: ['collection'] });
+      queryClient.invalidateQueries({ queryKey: ['collectionValue'] });
+      toast.success('Exchange confirmed — your collection was updated');
       onClose();
     } catch (error) {
-      console.error('Error accepting trade:', error);
+      console.error('Error confirming trade:', error);
+      toast.error('Failed to confirm exchange');
     } finally {
       setProcessing(false);
     }
@@ -132,10 +156,28 @@ export default function TradeDetail({
   const handleDecline = async () => {
     setProcessing(true);
     try {
-      await onDecline(trade.id);
+      await declineTrade(trade.id);
+      invalidateTradeLists();
+      toast.info('Trade declined');
       onClose();
     } catch (error) {
       console.error('Error declining trade:', error);
+      toast.error('Error declining trade');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    setProcessing(true);
+    try {
+      await cancelTrade(trade.id);
+      invalidateTradeLists();
+      toast.info('Trade cancelled');
+      onClose();
+    } catch (error) {
+      console.error('Error cancelling trade:', error);
+      toast.error('Error cancelling trade');
     } finally {
       setProcessing(false);
     }
@@ -241,7 +283,7 @@ export default function TradeDetail({
                   <div>
                     <h4 className="font-semibold text-red-400 text-sm">Trade No Longer Valid</h4>
                     <p className="text-red-200 text-xs mt-1">
-                      One or more cards in this trade are no longer available in the required quantities. This trade cannot be accepted until it is updated.
+                      One or more cards in this trade are no longer available in the required quantities. Quantities are clamped to what you own when you confirm.
                     </p>
                   </div>
                 </div>
@@ -387,112 +429,116 @@ export default function TradeDetail({
           )}
         </div>
 
-        {/* Actions - Only for pending trades */}
+        {/* Completed: no actions, just the outcome. */}
+        {trade.status === 'completed' && !loading && (
+          <div className="border-t border-gray-800 p-4">
+            <div className="flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] bg-green-900/30 text-green-400 rounded-lg font-medium">
+              <Check size={18} />
+              Trade completed
+            </div>
+          </div>
+        )}
+
+        {/* Actions - Only while pending (negotiating / awaiting confirmations) */}
         {trade.status === 'pending' && !loading && (
-          <div className="border-t border-gray-800 p-4 space-y-2">
-            {/* Only the user who DIDN'T make the last edit can respond */}
-            {trade.editor_id && trade.editor_id !== user?.id ? (
-              /* User receives the last edit - can accept/decline/counter */
-              <>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleAccept}
-                    disabled={processing || !trade.is_valid}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition"
-                    title={!trade.is_valid ? 'This trade is no longer valid' : ''}
-                  >
-                    {processing ? (
-                      <Loader2 className="animate-spin" size={18} />
-                    ) : (
-                      <>
-                        <Check size={18} />
-                        Accept Trade
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={handleDecline}
-                    disabled={processing}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 rounded-lg font-medium transition"
-                  >
-                    <X size={18} />
-                    Decline
-                  </button>
-                </div>
-                <button
-                  onClick={handleCounterOffer}
-                  disabled={processing}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded-lg font-medium transition"
-                >
-                  <RefreshCcw size={18} />
-                  Make Counter Offer
-                </button>
-              </>
-            ) : trade.editor_id === user?.id ? (
-              /* User made the last edit - can still edit while waiting for response */
-              <>
-                <p className="text-center text-gray-400 text-sm py-2">
-                  Waiting for {otherUser ? profileDisplayName(otherUser) : 'the other user'} to respond...
-                </p>
-                <button
-                  onClick={handleEdit}
-                  disabled={processing}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded-lg font-medium transition"
-                >
-                  <Edit size={18} />
-                  Modify Your Offer
-                </button>
-              </>
+          <div className="border-t border-gray-800 p-4 space-y-3">
+            {/* Per-side confirmation status */}
+            <div className="grid grid-cols-2 gap-2">
+              <div
+                className={`rounded-lg p-2 text-center text-sm ${
+                  myConfirmed ? 'bg-green-900/30 text-green-400' : 'bg-gray-800 text-gray-400'
+                }`}
+              >
+                You: {myConfirmed ? 'confirmed ✓' : 'to confirm'}
+              </div>
+              <div
+                className={`rounded-lg p-2 text-center text-sm ${
+                  theirConfirmed ? 'bg-green-900/30 text-green-400' : 'bg-gray-800 text-gray-400'
+                }`}
+              >
+                Them: {theirConfirmed ? 'confirmed ✓' : 'waiting'}
+              </div>
+            </div>
+
+            {/* "I did the exchange": updates only the confirming user's collection. */}
+            {!myConfirmed && (
+              <button
+                onClick={handleConfirm}
+                disabled={processing}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] bg-green-600 hover:bg-green-700 disabled:bg-gray-600 rounded-lg font-medium transition"
+              >
+                {processing ? (
+                  <Loader2 className="animate-spin" size={18} />
+                ) : (
+                  <>
+                    <Check size={18} />
+                    I did the exchange
+                  </>
+                )}
+              </button>
+            )}
+
+            {someoneConfirmed ? (
+              /* Terms lock once anyone confirms — negotiation is over. */
+              <p className="text-center text-gray-500 text-xs">
+                Terms are locked once someone confirms.
+              </p>
             ) : (
-              /* No editor yet (initial trade) */
               <>
-                {isUser1 ? (
-                  /* User1 (initiator) can edit their initial offer */
+                {/* Counter-offer / edit (turn-based). Same handler in the symmetric model. */}
+                {trade.editor_id === user?.id ? (
+                  <>
+                    <p className="text-center text-gray-400 text-sm">
+                      Waiting for {otherUser ? profileDisplayName(otherUser) : 'the other user'} to respond...
+                    </p>
+                    <button
+                      onClick={handleEdit}
+                      disabled={processing}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded-lg font-medium transition"
+                    >
+                      <Edit size={18} />
+                      Modify Your Offer
+                    </button>
+                  </>
+                ) : !trade.editor_id && isUser1 ? (
                   <button
                     onClick={handleEdit}
                     disabled={processing}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded-lg font-medium transition"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded-lg font-medium transition"
                   >
                     <Edit size={18} />
                     Edit Trade Offer
                   </button>
                 ) : (
-                  /* User2 (partner) can accept/decline/counter */
-                  <>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleAccept}
-                        disabled={processing || !trade.is_valid}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-medium transition"
-                        title={!trade.is_valid ? 'This trade is no longer valid' : ''}
-                      >
-                        {processing ? (
-                          <Loader2 className="animate-spin" size={18} />
-                        ) : (
-                          <>
-                            <Check size={18} />
-                            Accept Trade
-                          </>
-                        )}
-                      </button>
-                      <button
-                        onClick={handleDecline}
-                        disabled={processing}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 rounded-lg font-medium transition"
-                      >
-                        <X size={18} />
-                        Decline
-                      </button>
-                    </div>
-                    <button
-                      onClick={handleCounterOffer}
-                      disabled={processing}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded-lg font-medium transition"
-                    >
-                      <RefreshCcw size={18} />
-                      Make Counter Offer
-                    </button>
-                  </>
+                  <button
+                    onClick={handleCounterOffer}
+                    disabled={processing}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded-lg font-medium transition"
+                  >
+                    <RefreshCcw size={18} />
+                    Make Counter Offer
+                  </button>
+                )}
+
+                {/* Cancel (sender) / Decline (recipient) — only while neither side has confirmed. */}
+                {isUser1 ? (
+                  <button
+                    onClick={handleCancel}
+                    disabled={processing}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 rounded-lg font-medium transition"
+                  >
+                    <X size={18} />
+                    Cancel Trade
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleDecline}
+                    disabled={processing}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] bg-red-600 hover:bg-red-700 disabled:bg-gray-600 rounded-lg font-medium transition"
+                  >
+                    <X size={18} />
+                    Decline
+                  </button>
                 )}
               </>
             )}
