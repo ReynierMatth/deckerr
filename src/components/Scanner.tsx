@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Camera, Minus, Plus, Sparkles, ScanLine } from 'lucide-react';
+import { Camera, Minus, Plus, Sparkles, ScanLine, ShoppingBasket, Trash2, Check, PackagePlus } from 'lucide-react';
 import type { Worker as TesseractWorker } from 'tesseract.js';
 import { Card } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,7 +9,6 @@ import { addCardToCollection } from '../services/api';
 import { getCardByFuzzyName } from '../services/scryfall';
 import { getCardArtCrop } from '../utils/cardFaces';
 import Modal from './Modal';
-import CardRow from './card/CardRow';
 
 type CameraState = 'starting' | 'ready' | 'denied' | 'unavailable';
 
@@ -17,6 +16,8 @@ interface ScannedEntry {
   card: Card;
   quantity: number;
   isFoil: boolean;
+  /** Whether this entry has already been committed to the collection. */
+  added: boolean;
 }
 
 // Upscale factor for the OCR crop (small title strips read better enlarged).
@@ -79,14 +80,16 @@ export default function Scanner() {
   const workerPromiseRef = useRef<Promise<TesseractWorker> | null>(null);
   // Last name sent to Scryfall, to avoid re-querying an identical failed read.
   const lastNameRef = useRef('');
+  // Latest toast fns via a ref: the context value isn't memoized, so reading
+  // it in a ref keeps the auto-scan callback stable across renders.
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
 
   const [cameraState, setCameraState] = useState<CameraState>('starting');
   const [scanning, setScanning] = useState(false);
-  const [match, setMatch] = useState<Card | null>(null);
-  const [quantity, setQuantity] = useState(1);
-  const [isFoil, setIsFoil] = useState(false);
-  const [adding, setAdding] = useState(false);
-  // Cards added during this scanning session (resets on unmount).
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const [showBasket, setShowBasket] = useState(false);
+  // Cards found during this scanning session (resets on unmount).
   const [scanned, setScanned] = useState<ScannedEntry[]>([]);
 
   // Start the rear camera on mount; stop every track on unmount.
@@ -206,64 +209,67 @@ export default function Scanner() {
 
   /**
    * One automatic scan pass: OCR the title strip and, if it reads confidently
-   * and resolves to a card, open the result drawer. Returns true when a match
-   * was found (so the loop stops rescheduling). Misses are silent — this runs
-   * on a timer, so toasting each failure would be unbearable.
+   * and resolves to a card, drop it into the scanned basket. Misses are silent
+   * — this runs on a timer, so toasting each failure would be unbearable. A
+   * freshly-detected card increments its quantity if already in the basket.
    */
   const scanOnce = useCallback(
-    async (isCancelled: () => boolean): Promise<boolean> => {
+    async (isCancelled: () => boolean): Promise<void> => {
       const canvas = captureTitleStrip();
-      if (!canvas) return false;
+      if (!canvas) return;
 
       const worker = await getWorker();
-      if (isCancelled()) return false;
+      if (isCancelled()) return;
 
       const { data } = await worker.recognize(canvas);
-      if (isCancelled()) return false;
-      if ((data.confidence ?? 0) < MIN_CONFIDENCE) return false;
+      if (isCancelled()) return;
+      if ((data.confidence ?? 0) < MIN_CONFIDENCE) return;
 
       const name = cleanOcrText(data.text ?? '');
       // Skip empty reads and identical consecutive reads (an unchanged frame
       // that already failed to resolve would just spend Scryfall lookups).
-      if (name.length < 3 || name === lastNameRef.current) return false;
+      if (name.length < 3 || name === lastNameRef.current) return;
       lastNameRef.current = name;
 
       const card = await getCardByFuzzyName(name);
-      if (isCancelled() || !card) return false;
+      if (isCancelled() || !card) return;
 
-      setQuantity(1);
-      setIsFoil(false);
-      setMatch(card);
-      return true;
+      setScanned((prev) => {
+        const existing = prev.find((e) => e.card.id === card.id && !e.added);
+        if (existing) {
+          return prev.map((e) =>
+            e === existing ? { ...e, quantity: e.quantity + 1 } : e,
+          );
+        }
+        return [{ card, quantity: 1, isFoil: false, added: false }, ...prev];
+      });
+      toastRef.current.success(`Found ${card.name}`);
     },
     [captureTitleStrip, getWorker],
   );
 
-  // Automatic detection loop: runs while the camera is ready and no result
-  // drawer is open. Pauses whenever a match is showing (match !== null) and
-  // resumes when the drawer closes.
+  // Automatic detection loop: runs continuously while the camera is ready.
+  // Pauses while the basket drawer is open (the camera is hidden and the user
+  // is reviewing) and resumes when it closes.
   useEffect(() => {
-    if (cameraState !== 'ready' || match !== null) return;
+    if (cameraState !== 'ready' || showBasket) return;
 
     let cancelled = false;
     let timer: number | undefined;
     const isCancelled = () => cancelled;
-    // Allow the just-scanned name to be detected again after the drawer closed.
+    // Allow the last-detected name to be picked up again after a pause.
     lastNameRef.current = '';
 
     const tick = async () => {
       setScanning(true);
-      let found = false;
       try {
-        found = await scanOnce(isCancelled);
+        await scanOnce(isCancelled);
       } catch (error) {
         console.error('Error during auto-scan:', error);
       } finally {
         if (!cancelled) setScanning(false);
       }
-      // On a match the effect re-runs (match !== null) and cleans up; only
-      // reschedule while still hunting.
-      if (!cancelled && !found) {
+      if (!cancelled) {
         timer = window.setTimeout(tick, SCAN_INTERVAL);
       }
     };
@@ -274,33 +280,65 @@ export default function Scanner() {
       cancelled = true;
       if (timer !== undefined) clearTimeout(timer);
     };
-  }, [cameraState, match, scanOnce]);
+  }, [cameraState, showBasket, scanOnce]);
 
-  const handleAddToCollection = async () => {
-    if (!match || !user || adding) return;
-    setAdding(true);
+  const updateEntry = (cardId: string, patch: Partial<ScannedEntry>) => {
+    setScanned((prev) => prev.map((e) => (e.card.id === cardId && !e.added ? { ...e, ...patch } : e)));
+  };
+
+  const removeEntry = (cardId: string) => {
+    setScanned((prev) => prev.filter((e) => !(e.card.id === cardId && !e.added)));
+  };
+
+  const invalidateCollection = () => {
+    queryClient.invalidateQueries({ queryKey: ['myCollection'] });
+    queryClient.invalidateQueries({ queryKey: ['collection'] });
+    queryClient.invalidateQueries({ queryKey: ['collectionValue'] });
+  };
+
+  const addEntryToCollection = async (entry: ScannedEntry) => {
+    if (!user || entry.added || addingId) return;
+    setAddingId(entry.card.id);
     try {
-      const priceUsd = priceForVariant(match, isFoil);
-      await addCardToCollection(user.id, match.id, quantity, priceUsd, match.name);
-
-      queryClient.invalidateQueries({ queryKey: ['myCollection'] });
-      queryClient.invalidateQueries({ queryKey: ['collection'] });
-      queryClient.invalidateQueries({ queryKey: ['collectionValue'] });
-
-      setScanned((prev) => [{ card: match, quantity, isFoil }, ...prev]);
-      setMatch(null);
-      toast.success(`Added ${quantity}x ${match.name} to collection`);
+      const priceUsd = priceForVariant(entry.card, entry.isFoil);
+      await addCardToCollection(user.id, entry.card.id, entry.quantity, priceUsd, entry.card.name);
+      invalidateCollection();
+      setScanned((prev) => prev.map((e) => (e === entry ? { ...e, added: true } : e)));
+      toast.success(`Added ${entry.quantity}x ${entry.card.name} to collection`);
     } catch (error) {
       console.error('Error adding scanned card to collection:', error);
       toast.error('Failed to add card to collection');
     } finally {
-      setAdding(false);
+      setAddingId(null);
     }
   };
 
-  const matchPrice = match
-    ? (isFoil ? match.prices?.usd_foil ?? match.prices?.usd : match.prices?.usd) ?? null
-    : null;
+  const addAllToCollection = async () => {
+    if (!user || addingId) return;
+    const pending = scanned.filter((e) => !e.added);
+    if (pending.length === 0) return;
+    setAddingId('all');
+    try {
+      for (const entry of pending) {
+        const priceUsd = priceForVariant(entry.card, entry.isFoil);
+        await addCardToCollection(user.id, entry.card.id, entry.quantity, priceUsd, entry.card.name);
+      }
+      invalidateCollection();
+      setScanned((prev) => prev.map((e) => ({ ...e, added: true })));
+      toast.success(`Added ${pending.length} card(s) to collection`);
+    } catch (error) {
+      console.error('Error adding scanned cards to collection:', error);
+      toast.error('Failed to add some cards to collection');
+    } finally {
+      setAddingId(null);
+    }
+  };
+
+  const pendingCount = scanned.filter((e) => !e.added).length;
+  const basketValue = scanned.reduce(
+    (sum, e) => sum + priceForVariant(e.card, e.isFoil) * e.quantity,
+    0,
+  );
 
   return (
     <div className="fixed inset-x-0 top-14 md:top-16 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 z-40 bg-black text-white overflow-hidden">
@@ -357,36 +395,23 @@ export default function Scanner() {
             </div>
           </div>
 
-          {/* Recently scanned session strip */}
-          {scanned.length > 0 && (
-            <div className="absolute inset-x-0 bottom-24 px-3 pointer-events-none">
-              <div className="flex gap-2 overflow-x-auto pointer-events-auto pb-1">
-                {scanned.map((entry, index) => {
-                  const art = getCardArtCrop(entry.card, 0);
-                  return (
-                    <div
-                      key={`${entry.card.id}-${index}`}
-                      className="relative flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden border border-gray-600 bg-gray-800"
-                      title={entry.card.name}
-                    >
-                      {art ? (
-                        <img src={art} alt={entry.card.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full bg-gray-700" />
-                      )}
-                      <span className="absolute bottom-0 right-0 bg-black/80 text-[10px] px-1 rounded-tl">
-                        x{entry.quantity}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Auto-detect status pill (no shutter — detection is automatic) */}
-          <div className="absolute inset-x-0 bottom-6 flex justify-center pointer-events-none">
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-black/70 text-sm text-white">
+          {/* Bottom bar: scan status + basket button */}
+          <div className="absolute inset-x-0 bottom-6 flex flex-col items-center gap-3 px-4">
+            {scanned.length > 0 && (
+              <button
+                onClick={() => setShowBasket(true)}
+                className="flex items-center gap-2 px-5 h-12 rounded-full bg-blue-600 active:bg-blue-700 font-semibold shadow-lg shadow-blue-600/30"
+              >
+                <ShoppingBasket size={20} />
+                <span>Review {scanned.length} scanned</span>
+                {pendingCount > 0 && (
+                  <span className="ml-1 min-w-6 px-1.5 h-6 rounded-full bg-white text-blue-700 text-sm font-bold flex items-center justify-center">
+                    {pendingCount}
+                  </span>
+                )}
+              </button>
+            )}
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-black/70 text-sm text-white pointer-events-none">
               {scanning ? (
                 <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-400"></div>
               ) : (
@@ -398,80 +423,129 @@ export default function Scanner() {
         </>
       )}
 
-      {/* Match result drawer */}
-      <Modal isOpen={match !== null} onClose={() => setMatch(null)} labelledBy="scan-result-title">
-        {match && (
-          <div className="p-4 pt-2 space-y-4">
-            <h2 id="scan-result-title" className="text-lg font-bold">
-              Card found
+      {/* Scanned-cards basket drawer */}
+      <Modal isOpen={showBasket} onClose={() => setShowBasket(false)} size="lg" labelledBy="scan-basket-title">
+        <div className="p-4 pt-2">
+          <div className="flex items-baseline justify-between mb-3 pr-8">
+            <h2 id="scan-basket-title" className="text-lg font-bold">
+              Scanned cards ({scanned.length})
             </h2>
+            <span className="text-sm text-green-400 font-semibold">${basketValue.toFixed(2)}</span>
+          </div>
 
-            <CardRow
-              card={match}
-              price={matchPrice}
-              subtitle={
-                match.set_name ? (
-                  <p className="text-xs text-gray-400 truncate">{match.set_name}</p>
-                ) : undefined
-              }
-            />
+          {scanned.length === 0 ? (
+            <p className="text-sm text-gray-400 py-8 text-center">
+              No cards scanned yet. Point the camera at a card to start.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {scanned.map((entry) => {
+                const art = getCardArtCrop(entry.card, 0);
+                const unitPrice = priceForVariant(entry.card, entry.isFoil);
+                return (
+                  <div
+                    key={entry.card.id}
+                    className={`bg-gray-900 border border-gray-700 rounded-lg p-3 ${entry.added ? 'opacity-60' : ''}`}
+                  >
+                    <div className="flex gap-3">
+                      <div className="w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-gray-700">
+                        {art && <img src={art} alt={entry.card.name} loading="lazy" className="w-full h-full object-cover" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm truncate">{entry.card.name}</p>
+                        {entry.card.set_name && (
+                          <p className="text-xs text-gray-400 truncate">{entry.card.set_name}</p>
+                        )}
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          ${unitPrice.toFixed(2)}
+                          {entry.quantity > 1 && <span className="text-gray-500"> × {entry.quantity} = ${(unitPrice * entry.quantity).toFixed(2)}</span>}
+                        </p>
+                      </div>
+                      {!entry.added ? (
+                        <button
+                          onClick={() => removeEntry(entry.card.id)}
+                          aria-label="Remove from list"
+                          className="self-start p-2 text-red-400 hover:bg-gray-700 rounded-lg"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      ) : (
+                        <span className="self-start flex items-center gap-1 text-green-400 text-xs font-medium">
+                          <Check size={14} /> Added
+                        </span>
+                      )}
+                    </div>
 
-            <div className="flex items-center justify-between gap-3">
-              {/* Quantity stepper */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  disabled={quantity <= 1}
-                  aria-label="Decrease quantity"
-                  className="w-11 h-11 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-40 flex items-center justify-center"
-                >
-                  <Minus size={18} />
-                </button>
-                <span className="w-8 text-center font-bold text-lg">{quantity}</span>
-                <button
-                  onClick={() => setQuantity((q) => q + 1)}
-                  aria-label="Increase quantity"
-                  className="w-11 h-11 rounded-lg bg-gray-700 hover:bg-gray-600 flex items-center justify-center"
-                >
-                  <Plus size={18} />
-                </button>
-              </div>
-
-              {/* Foil toggle */}
-              <button
-                onClick={() => setIsFoil((f) => !f)}
-                aria-pressed={isFoil}
-                className={`flex items-center gap-2 px-4 h-11 rounded-lg border transition-colors ${
-                  isFoil
-                    ? 'border-yellow-400 bg-yellow-400/10 text-yellow-300'
-                    : 'border-gray-600 text-gray-300 hover:bg-gray-700'
-                }`}
-              >
-                <Sparkles size={18} />
-                <span className="text-sm font-medium">Foil</span>
-              </button>
+                    {!entry.added && (
+                      <div className="flex items-center gap-2 mt-3">
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => updateEntry(entry.card.id, { quantity: Math.max(1, entry.quantity - 1) })}
+                            disabled={entry.quantity <= 1}
+                            aria-label="Decrease quantity"
+                            className="w-9 h-9 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-40 flex items-center justify-center"
+                          >
+                            <Minus size={16} />
+                          </button>
+                          <span className="w-7 text-center font-bold">{entry.quantity}</span>
+                          <button
+                            onClick={() => updateEntry(entry.card.id, { quantity: entry.quantity + 1 })}
+                            aria-label="Increase quantity"
+                            className="w-9 h-9 rounded-lg bg-gray-700 hover:bg-gray-600 flex items-center justify-center"
+                          >
+                            <Plus size={16} />
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => updateEntry(entry.card.id, { isFoil: !entry.isFoil })}
+                          aria-pressed={entry.isFoil}
+                          aria-label="Toggle foil"
+                          className={`flex items-center gap-1.5 px-3 h-9 rounded-lg border text-sm transition-colors ${
+                            entry.isFoil
+                              ? 'border-yellow-400 bg-yellow-400/10 text-yellow-300'
+                              : 'border-gray-600 text-gray-300 hover:bg-gray-700'
+                          }`}
+                        >
+                          <Sparkles size={16} />
+                          Foil
+                        </button>
+                        <button
+                          onClick={() => addEntryToCollection(entry)}
+                          disabled={addingId !== null}
+                          className="flex-1 h-9 rounded-lg bg-green-600 hover:bg-green-700 disabled:opacity-60 text-sm font-medium flex items-center justify-center gap-1.5"
+                        >
+                          {addingId === entry.card.id ? (
+                            <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                          ) : (
+                            <>
+                              <PackagePlus size={16} /> Add
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
+          )}
 
+          {pendingCount > 0 && (
             <button
-              onClick={handleAddToCollection}
-              disabled={adding}
-              className="w-full h-12 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 font-semibold flex items-center justify-center gap-2"
+              onClick={addAllToCollection}
+              disabled={addingId !== null}
+              className="w-full h-12 mt-4 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 font-semibold flex items-center justify-center gap-2"
             >
-              {adding ? (
+              {addingId === 'all' ? (
                 <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
               ) : (
-                'Add to collection'
+                <>
+                  <PackagePlus size={18} /> Add all {pendingCount} to collection
+                </>
               )}
             </button>
-
-            <button
-              onClick={() => setMatch(null)}
-              className="w-full h-11 rounded-lg text-gray-300 hover:bg-gray-700 text-sm"
-            >
-              Not this card? Rescan
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </Modal>
     </div>
   );
