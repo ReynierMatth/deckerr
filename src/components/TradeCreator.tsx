@@ -1,211 +1,50 @@
 import { useState, useEffect } from 'react';
-import { X, ArrowLeftRight, ArrowRight, ArrowLeft, Minus, Send, Gift, Loader2, Search } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { X, ArrowLeftRight, ArrowRight, Gift, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { getUserCollection, getCardsByIds } from '../services/api';
 import { createTrade, updateTrade } from '../services/tradesService';
 import { Card } from '../types';
+import CollectionGrid from './trade/CollectionGrid';
+import TradeOfferPanel from './trade/TradeOfferPanel';
+import TradeReviewStep from './trade/TradeReviewStep';
+import TradeMobileFooter from './trade/TradeMobileFooter';
+import { CollectionItem, SelectedCard } from './trade/types';
 
-interface CollectionItem {
-  card: Card;
-  quantity: number;
-}
+const EMPTY_COLLECTION: CollectionItem[] = [];
 
-interface SelectedCard {
-  card: Card;
-  quantity: number;
-  maxQuantity: number;
-}
+type SelectionSetter = React.Dispatch<React.SetStateAction<Map<string, SelectedCard>>>;
 
-// ============ MOVED OUTSIDE TO PREVENT RE-RENDER ============
+// The offered and wanted sides share identical add/remove semantics; only the
+// underlying state setter differs.
+const addCardToSelection = (setSelection: SelectionSetter) => (card: Card, maxQuantity: number) => {
+  setSelection((prev) => {
+    const newMap = new Map(prev);
+    const existing = newMap.get(card.id);
+    if (existing) {
+      if (existing.quantity < existing.maxQuantity) {
+        newMap.set(card.id, { ...existing, quantity: existing.quantity + 1 });
+      }
+    } else {
+      newMap.set(card.id, { card, quantity: 1, maxQuantity });
+    }
+    return newMap;
+  });
+};
 
-interface CollectionGridProps {
-  items: CollectionItem[];
-  selectedCards: Map<string, SelectedCard>;
-  onAdd: (card: Card, maxQty: number) => void;
-  onRemove: (cardId: string) => void;
-  emptyMessage: string;
-  selectionColor: 'green' | 'blue';
-  searchValue: string;
-  onSearchChange: (value: string) => void;
-  searchPlaceholder: string;
-}
-
-function CollectionGrid({
-  items,
-  selectedCards,
-  onAdd,
-  onRemove,
-  emptyMessage,
-  selectionColor,
-  searchValue,
-  onSearchChange,
-  searchPlaceholder,
-}: CollectionGridProps) {
-  const ringColor = selectionColor === 'green' ? 'ring-green-500' : 'ring-blue-500';
-  const badgeColor = selectionColor === 'green' ? 'bg-green-600' : 'bg-blue-500';
-
-  const filteredItems = items.filter(({ card }) =>
-    card.name.toLowerCase().includes(searchValue.toLowerCase())
-  );
-
-  return (
-    <div className="space-y-3">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-        <input
-          type="text"
-          value={searchValue}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder={searchPlaceholder}
-          className="w-full pl-9 pr-8 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        />
-        {searchValue && (
-          <button
-            onClick={() => onSearchChange('')}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
-          >
-            <X size={16} />
-          </button>
-        )}
-      </div>
-
-      {items.length === 0 ? (
-        <p className="text-gray-400 text-center py-8">{emptyMessage}</p>
-      ) : filteredItems.length === 0 ? (
-        <p className="text-gray-400 text-center py-8">No cards match "{searchValue}"</p>
-      ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-          {filteredItems.map(({ card, quantity }) => {
-            const selected = selectedCards.get(card.id);
-            const remainingQty = quantity - (selected?.quantity || 0);
-            return (
-              <div
-                key={card.id}
-                className={`relative cursor-pointer rounded-lg overflow-hidden transition active:scale-95 ${
-                  selected ? `ring-2 ${ringColor}` : 'active:ring-2 active:ring-gray-500'
-                }`}
-                onClick={() => remainingQty > 0 && onAdd(card, quantity)}
-              >
-                <img
-                  src={card.image_uris?.small || card.image_uris?.normal}
-                  alt={card.name}
-                  className={`w-full h-auto ${remainingQty === 0 ? 'opacity-50' : ''}`}
-                />
-                <div className="absolute top-1 right-1 bg-gray-900/80 text-white text-[10px] px-1 py-0.5 rounded">
-                  {remainingQty}/{quantity}
-                </div>
-                {card.prices?.usd && (
-                  <div className="absolute top-1 left-1 bg-gray-900/80 text-green-400 text-[10px] px-1 py-0.5 rounded font-semibold">
-                    ${card.prices.usd}
-                  </div>
-                )}
-                {selected && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRemove(card.id);
-                    }}
-                    className={`absolute bottom-1 left-1 ${badgeColor} text-white text-[10px] px-1.5 py-0.5 rounded flex items-center gap-0.5`}
-                  >
-                    +{selected.quantity}
-                    <Minus size={10} />
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface SelectedCardsSummaryProps {
-  cards: Map<string, SelectedCard>;
-  onRemove: (cardId: string) => void;
-  label: string;
-  emptyLabel: string;
-  color: 'green' | 'blue';
-}
-
-function SelectedCardsSummary({ cards, onRemove, label, emptyLabel, color }: SelectedCardsSummaryProps) {
-  const bgColor = color === 'green' ? 'bg-green-900/50' : 'bg-blue-900/50';
-  const textColor = color === 'green' ? 'text-green-400' : 'text-blue-400';
-
-  // Calculate total price
-  const totalPrice = Array.from(cards.values()).reduce((total, item) => {
-    const price = item.card.prices?.usd ? parseFloat(item.card.prices.usd) : 0;
-    return total + (price * item.quantity);
-  }, 0);
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <h4 className={`text-xs font-semibold ${textColor}`}>{label}:</h4>
-        {cards.size > 0 && (
-          <span className={`text-xs font-semibold ${textColor}`}>
-            ${totalPrice.toFixed(2)}
-          </span>
-        )}
-      </div>
-      {cards.size === 0 ? (
-        <p className="text-gray-500 text-xs">{emptyLabel}</p>
-      ) : (
-        <div className="flex flex-wrap gap-1">
-          {Array.from(cards.values()).map((item) => (
-            <div
-              key={item.card.id}
-              className={`flex items-center gap-1 ${bgColor} px-1.5 py-0.5 rounded text-xs`}
-            >
-              <span className="truncate max-w-[80px]">{item.card.name}</span>
-              <span className={textColor}>x{item.quantity}</span>
-              <button
-                onClick={() => onRemove(item.card.id)}
-                className="text-red-400 active:text-red-300"
-              >
-                <Minus size={12} />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-const sumSideValue = (cards: Map<string, SelectedCard>): number =>
-  Array.from(cards.values()).reduce(
-    (total, item) => total + (item.card.prices?.usd ? parseFloat(item.card.prices.usd) : 0) * item.quantity,
-    0,
-  );
-
-function TradeBalance({ give, want }: { give: Map<string, SelectedCard>; want: Map<string, SelectedCard> }) {
-  const giveTotal = sumSideValue(give);
-  const wantTotal = sumSideValue(want);
-  const diff = giveTotal - wantTotal;
-  const even = Math.abs(diff) < 0.01;
-  return (
-    <div className="border-t border-gray-700 pt-2 mt-1 space-y-1 text-xs">
-      <div className="flex justify-between">
-        <span className="text-gray-400">You give</span>
-        <span className="text-green-400 font-semibold">${giveTotal.toFixed(2)}</span>
-      </div>
-      <div className="flex justify-between">
-        <span className="text-gray-400">You get</span>
-        <span className="text-blue-400 font-semibold">${wantTotal.toFixed(2)}</span>
-      </div>
-      <div className="flex justify-between font-semibold">
-        <span className="text-gray-300">Balance</span>
-        <span className={even ? 'text-gray-300' : diff > 0 ? 'text-red-400' : 'text-green-400'}>
-          {even ? 'Even' : diff > 0 ? `You give $${diff.toFixed(2)} more` : `In your favor by $${(-diff).toFixed(2)}`}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-// ============ MAIN COMPONENT ============
+const removeCardFromSelection = (setSelection: SelectionSetter) => (cardId: string) => {
+  setSelection((prev) => {
+    const newMap = new Map(prev);
+    const existing = newMap.get(cardId);
+    if (existing && existing.quantity > 1) {
+      newMap.set(cardId, { ...existing, quantity: existing.quantity - 1 });
+    } else {
+      newMap.delete(cardId);
+    }
+    return newMap;
+  });
+};
 
 interface TradeCreatorProps {
   receiverId: string;
@@ -236,8 +75,7 @@ export default function TradeCreator({
 }: TradeCreatorProps) {
   const { user } = useAuth();
   const toast = useToast();
-  const [myCollection, setMyCollection] = useState<CollectionItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(initialMessage);
 
@@ -250,9 +88,24 @@ export default function TradeCreator({
   const [myCollectionSearch, setMyCollectionSearch] = useState('');
   const [theirCollectionSearch, setTheirCollectionSearch] = useState('');
 
-  useEffect(() => {
-    loadMyCollection();
-  }, [user]);
+  // My full collection joined with card data (never returns Map/Set: arrays only).
+  const { data: myCollectionData, isPending: loading } = useQuery({
+    queryKey: ['collection', user?.id, 'full'],
+    enabled: !!user,
+    queryFn: async (): Promise<CollectionItem[]> => {
+      const collectionMap = await getUserCollection(user!.id);
+      if (collectionMap.size === 0) return [];
+
+      const cardIds = Array.from(collectionMap.keys());
+      const cards = await getCardsByIds(cardIds);
+
+      return cards.map((card) => ({
+        card,
+        quantity: collectionMap.get(card.id) || 0,
+      }));
+    },
+  });
+  const myCollection = myCollectionData ?? EMPTY_COLLECTION;
 
   useEffect(() => {
     if (isGiftMode) {
@@ -314,87 +167,10 @@ export default function TradeCreator({
     setWantedCards(receiverMap);
   }, [editMode, myCollection, receiverCollection, initialSenderCards, initialReceiverCards]);
 
-  const loadMyCollection = async () => {
-    if (!user) return;
-    setLoading(true);
-    try {
-      const collectionMap = await getUserCollection(user.id);
-      if (collectionMap.size === 0) {
-        setMyCollection([]);
-        return;
-      }
-
-      const cardIds = Array.from(collectionMap.keys());
-      const cards = await getCardsByIds(cardIds);
-
-      const collectionWithCards = cards.map((card) => ({
-        card,
-        quantity: collectionMap.get(card.id) || 0,
-      }));
-
-      setMyCollection(collectionWithCards);
-    } catch (error) {
-      console.error('Error loading my collection:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const addToOffer = (card: Card, maxQuantity: number) => {
-    setMyOfferedCards((prev) => {
-      const newMap = new Map(prev);
-      const existing = newMap.get(card.id);
-      if (existing) {
-        if (existing.quantity < existing.maxQuantity) {
-          newMap.set(card.id, { ...existing, quantity: existing.quantity + 1 });
-        }
-      } else {
-        newMap.set(card.id, { card, quantity: 1, maxQuantity });
-      }
-      return newMap;
-    });
-  };
-
-  const removeFromOffer = (cardId: string) => {
-    setMyOfferedCards((prev) => {
-      const newMap = new Map(prev);
-      const existing = newMap.get(cardId);
-      if (existing && existing.quantity > 1) {
-        newMap.set(cardId, { ...existing, quantity: existing.quantity - 1 });
-      } else {
-        newMap.delete(cardId);
-      }
-      return newMap;
-    });
-  };
-
-  const addToWanted = (card: Card, maxQuantity: number) => {
-    setWantedCards((prev) => {
-      const newMap = new Map(prev);
-      const existing = newMap.get(card.id);
-      if (existing) {
-        if (existing.quantity < existing.maxQuantity) {
-          newMap.set(card.id, { ...existing, quantity: existing.quantity + 1 });
-        }
-      } else {
-        newMap.set(card.id, { card, quantity: 1, maxQuantity });
-      }
-      return newMap;
-    });
-  };
-
-  const removeFromWanted = (cardId: string) => {
-    setWantedCards((prev) => {
-      const newMap = new Map(prev);
-      const existing = newMap.get(cardId);
-      if (existing && existing.quantity > 1) {
-        newMap.set(cardId, { ...existing, quantity: existing.quantity - 1 });
-      } else {
-        newMap.delete(cardId);
-      }
-      return newMap;
-    });
-  };
+  const addToOffer = addCardToSelection(setMyOfferedCards);
+  const removeFromOffer = removeCardFromSelection(setMyOfferedCards);
+  const addToWanted = addCardToSelection(setWantedCards);
+  const removeFromWanted = removeCardFromSelection(setWantedCards);
 
   const handleSubmit = async () => {
     if (!user) return;
@@ -438,6 +214,11 @@ export default function TradeCreator({
         toast.success('Trade offer sent!');
       }
 
+      // Realtime also covers these, but invalidate eagerly so lists/badges
+      // update even if the websocket is flaky.
+      queryClient.invalidateQueries({ queryKey: ['trades'] });
+      queryClient.invalidateQueries({ queryKey: ['communityPendingTrades'] });
+
       onTradeCreated();
     } catch (error) {
       console.error('Error with trade:', error);
@@ -446,9 +227,6 @@ export default function TradeCreator({
       setSubmitting(false);
     }
   };
-
-  const isGift = myOfferedCards.size > 0 && wantedCards.size === 0;
-  const isRequest = myOfferedCards.size === 0 && wantedCards.size > 0;
 
   const goToNextStep = () => {
     if (mobileStep === 'want') setMobileStep('give');
@@ -459,8 +237,6 @@ export default function TradeCreator({
     if (mobileStep === 'review') setMobileStep('give');
     else if (mobileStep === 'give' && !isGiftMode) setMobileStep('want');
   };
-
-  const canSubmit = myOfferedCards.size > 0 || wantedCards.size > 0;
 
   if (loading) {
     return (
@@ -564,95 +340,29 @@ export default function TradeCreator({
             )}
 
             {mobileStep === 'review' && (
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-purple-400">Review Trade</h3>
-                <div className="bg-gray-900/50 rounded-lg p-3 space-y-3">
-                  <SelectedCardsSummary
-                    cards={myOfferedCards}
-                    onRemove={removeFromOffer}
-                    label="I Give"
-                    emptyLabel="Nothing (requesting cards)"
-                    color="green"
-                  />
-                  {!isGiftMode && (
-                    <SelectedCardsSummary
-                      cards={wantedCards}
-                      onRemove={removeFromWanted}
-                      label="I Want"
-                      emptyLabel="Nothing (sending gift)"
-                      color="blue"
-                    />
-                  )}
-                  {!isGiftMode && <TradeBalance give={myOfferedCards} want={wantedCards} />}
-                </div>
-                <div>
-                  <label className="text-xs text-gray-400 mb-1 block">Message (optional)</label>
-                  <input
-                    type="text"
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    placeholder="Add a message..."
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
+              <TradeReviewStep
+                myOfferedCards={myOfferedCards}
+                wantedCards={wantedCards}
+                onRemoveFromOffer={removeFromOffer}
+                onRemoveFromWanted={removeFromWanted}
+                isGiftMode={isGiftMode}
+                message={message}
+                onMessageChange={setMessage}
+              />
             )}
           </div>
 
-          <div className="border-t border-gray-700 p-3 flex gap-2">
-            {(mobileStep !== 'want' && !isGiftMode) || (mobileStep !== 'give' && isGiftMode) ? (
-              <button
-                onClick={goToPrevStep}
-                disabled={mobileStep === 'give' && isGiftMode}
-                className="flex items-center justify-center gap-1 px-4 py-2.5 bg-gray-700 active:bg-gray-600 disabled:opacity-50 rounded-lg flex-1"
-              >
-                <ArrowLeft size={18} />
-                Back
-              </button>
-            ) : (
-              <button
-                onClick={onClose}
-                className="flex items-center justify-center gap-1 px-4 py-2.5 bg-gray-700 active:bg-gray-600 rounded-lg flex-1"
-              >
-                Cancel
-              </button>
-            )}
-
-            {mobileStep === 'review' ? (
-              <button
-                onClick={handleSubmit}
-                disabled={submitting || !canSubmit}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 active:bg-blue-700 disabled:bg-gray-600 rounded-lg flex-1"
-              >
-                {submitting ? (
-                  <Loader2 className="animate-spin" size={18} />
-                ) : isGift ? (
-                  <>
-                    <Gift size={18} />
-                    Send Gift
-                  </>
-                ) : isRequest ? (
-                  <>
-                    <Send size={18} />
-                    Request
-                  </>
-                ) : (
-                  <>
-                    <Send size={18} />
-                    Send Trade
-                  </>
-                )}
-              </button>
-            ) : (
-              <button
-                onClick={goToNextStep}
-                className="flex items-center justify-center gap-1 px-4 py-2.5 bg-blue-600 active:bg-blue-700 rounded-lg flex-1"
-              >
-                Next
-                <ArrowRight size={18} />
-              </button>
-            )}
-          </div>
+          <TradeMobileFooter
+            mobileStep={mobileStep}
+            isGiftMode={isGiftMode}
+            myOfferedCards={myOfferedCards}
+            wantedCards={wantedCards}
+            submitting={submitting}
+            onPrevStep={goToPrevStep}
+            onNextStep={goToNextStep}
+            onClose={onClose}
+            onSubmit={handleSubmit}
+          />
         </div>
 
         {/* ============ DESKTOP VIEW ============ */}
@@ -719,72 +429,18 @@ export default function TradeCreator({
             )}
           </div>
 
-          <div className="border-t border-gray-700 p-4">
-            <div className="flex gap-6 mb-4">
-              <SelectedCardsSummary
-                cards={myOfferedCards}
-                onRemove={removeFromOffer}
-                label="I Give"
-                emptyLabel="Nothing selected (gift request)"
-                color="green"
-              />
-              {!isGiftMode && (
-                <SelectedCardsSummary
-                  cards={wantedCards}
-                  onRemove={removeFromWanted}
-                  label="I Want"
-                  emptyLabel="Nothing selected (gift)"
-                  color="blue"
-                />
-              )}
-            </div>
-
-            {!isGiftMode && (
-              <div className="mb-4 max-w-xs">
-                <TradeBalance give={myOfferedCards} want={wantedCards} />
-              </div>
-            )}
-
-            <div className="flex items-center gap-4 mb-4">
-              <input
-                type="text"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Add a message (optional)"
-                className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <button
-                onClick={onClose}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={submitting || !canSubmit}
-                className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded-lg transition"
-              >
-                {submitting ? (
-                  <Loader2 className="animate-spin" size={20} />
-                ) : isGift ? (
-                  <>
-                    <Gift size={20} />
-                    Send Gift
-                  </>
-                ) : isRequest ? (
-                  <>
-                    <Send size={20} />
-                    Request Cards
-                  </>
-                ) : (
-                  <>
-                    <Send size={20} />
-                    Propose Trade
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
+          <TradeOfferPanel
+            myOfferedCards={myOfferedCards}
+            wantedCards={wantedCards}
+            onRemoveFromOffer={removeFromOffer}
+            onRemoveFromWanted={removeFromWanted}
+            isGiftMode={isGiftMode}
+            message={message}
+            onMessageChange={setMessage}
+            onClose={onClose}
+            onSubmit={handleSubmit}
+            submitting={submitting}
+          />
         </div>
       </div>
     </div>

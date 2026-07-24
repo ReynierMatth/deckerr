@@ -295,3 +295,38 @@
   border-radius: 50%;
   animation: loading 1s linear infinite;
 }
+
+/* Modal drawer: slide up from the bottom on mobile, scale in on desktop (Modal.tsx). */
+@keyframes drawerUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-drawer-up {
+  animation: drawerUp 0.25s ease-out;
+}
+
+@media (min-width: 640px) {
+  .animate-drawer-up {
+    animation: scaleIn 0.4s ease-out forwards;
+  }
+}
+
+/* iOS safe areas: keep fixed bottom UI above the home indicator.
+   Used by the mobile bottom navbar and bottom sheets (Navigation.tsx). */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Hide scrollbars on horizontal scrollers (tab bars) without disabling scroll. */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

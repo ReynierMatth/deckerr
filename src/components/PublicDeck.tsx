@@ -1,9 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
-import { User as UserIcon, Layers } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
+import { User as UserIcon, Layers, Copy } from 'lucide-react';
 import { Card } from '../types';
 import { supabase } from '../lib/supabase';
 import { getCardsByIds } from '../services/api';
 import { getCardImageUri } from '../utils/cardFaces';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 
 interface PublicDeckProps {
   deckId: string;
@@ -13,6 +16,8 @@ interface PublicDeckData {
   name: string;
   format: string;
   tags: string[];
+  cardCount: number;
+  coverCardId: string | null;
   ownerUsername: string | null;
   cards: { card: Card; quantity: number; is_commander: boolean }[];
 }
@@ -64,16 +69,89 @@ const fetchPublicDeck = async (deckId: string): Promise<PublicDeckData | null> =
     name: deckData.name as string,
     format: deckData.format as string,
     tags: (deckData.tags as string[] | null) ?? [],
+    cardCount: (deckData.card_count as number | null) ?? 0,
+    coverCardId: (deckData.cover_card_id as string | null) ?? null,
     ownerUsername,
     cards,
   };
 };
 
+/**
+ * Copy a public deck into the viewer's own decks: a fresh deck row (private,
+ * new uuid, "(copy)" suffix) plus a copy of every deck_cards row.
+ */
+const cloneDeck = async (deck: PublicDeckData, userId: string): Promise<string> => {
+  const newDeckId = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  const { error: deckError } = await supabase.from('decks').insert({
+    id: newDeckId,
+    name: `${deck.name} (copy)`,
+    format: deck.format,
+    user_id: userId,
+    created_at: now,
+    updated_at: now,
+    cover_card_id: deck.coverCardId,
+    card_count: deck.cardCount,
+    tags: deck.tags,
+    is_public: false,
+  });
+  if (deckError) throw deckError;
+
+  if (deck.cards.length > 0) {
+    const rows = deck.cards.map(({ card, quantity, is_commander }) => ({
+      deck_id: newDeckId,
+      card_id: card.id,
+      quantity,
+      is_commander,
+    }));
+    const { error: cardsError } = await supabase.from('deck_cards').insert(rows);
+    if (cardsError) {
+      // Best-effort cleanup so a half-cloned deck doesn't linger.
+      await supabase.from('decks').delete().eq('id', newDeckId);
+      throw cardsError;
+    }
+  }
+
+  return newDeckId;
+};
+
 export default function PublicDeck({ deckId }: PublicDeckProps) {
+  // Both providers wrap the router in App.tsx, so they are mounted even for
+  // signed-out visitors on this public route (user is just null then).
+  const { user } = useAuth();
+  const toast = useToast();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
   const { data, isLoading, isError } = useQuery({
     queryKey: ['publicDeck', deckId],
     queryFn: () => fetchPublicDeck(deckId),
   });
+
+  const cloneMutation = useMutation({
+    mutationFn: ({ deck, userId }: { deck: PublicDeckData; userId: string }) =>
+      cloneDeck(deck, userId),
+    onSuccess: (newDeckId) => {
+      toast.success('Deck cloned to your decks!');
+      // DeckList reads the ['decks'] key — refetch so the clone shows up there.
+      queryClient.invalidateQueries({ queryKey: ['decks'] });
+      navigate({ to: '/decks/$deckId/edit', params: { deckId: newDeckId } });
+    },
+    onError: (error) => {
+      console.error('Error cloning deck:', error);
+      toast.error('Failed to clone deck.');
+    },
+  });
+
+  const handleClone = () => {
+    if (!data || cloneMutation.isPending) return;
+    if (!user) {
+      toast.info('Sign in to clone this deck');
+      return;
+    }
+    cloneMutation.mutate({ deck: data, userId: user.id });
+  };
 
   if (isLoading) {
     return (
@@ -127,6 +205,14 @@ export default function PublicDeck({ deckId }: PublicDeckProps) {
               ))}
             </div>
           )}
+          <button
+            onClick={handleClone}
+            disabled={cloneMutation.isPending}
+            className="mt-4 w-full sm:w-auto inline-flex items-center justify-center gap-2 min-h-[44px] px-5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+          >
+            <Copy size={18} />
+            {cloneMutation.isPending ? 'Cloning...' : 'Clone to my decks'}
+          </button>
         </div>
 
         {/* Card grid */}

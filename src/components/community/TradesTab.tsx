@@ -29,11 +29,12 @@ interface TradeRealtimeRow {
 interface TradesData {
   pendingTrades: Trade[];
   tradeHistory: Trade[];
-  tradeCardDetails: Map<string, Card>;
+  // Plain object (not Map): TanStack Query structural sharing drops Map/Set.
+  tradeCardDetails: Record<string, Card>;
 }
 
 const EMPTY_TRADES: Trade[] = [];
-const EMPTY_CARD_DETAILS = new Map<string, Card>();
+const EMPTY_CARD_DETAILS: Record<string, Card> = {};
 
 /** Trades tab: pending trades + history. Self-contained. */
 export default function TradesTab() {
@@ -54,7 +55,7 @@ export default function TradesTab() {
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'danger' });
 
   const loadTradesData = async (): Promise<TradesData> => {
-    if (!user) return { pendingTrades: [], tradeHistory: [], tradeCardDetails: new Map() };
+    if (!user) return { pendingTrades: [], tradeHistory: [], tradeCardDetails: {} };
     const [pending, history] = await Promise.all([
       getTrades(user.id).then((trades) => trades.filter((t) => t.status === 'pending')),
       getTradeHistory(user.id),
@@ -65,13 +66,15 @@ export default function TradesTab() {
       trade.items?.forEach((item) => allCardIds.add(item.card_id));
     });
 
-    const cardMap = new Map<string, Card>();
+    const cardDetails: Record<string, Card> = {};
     if (allCardIds.size > 0) {
       const cards = await getCardsByIds(Array.from(allCardIds));
-      cards.forEach((card) => cardMap.set(card.id, card));
+      cards.forEach((card) => {
+        cardDetails[card.id] = card;
+      });
     }
 
-    return { pendingTrades: pending, tradeHistory: history, tradeCardDetails: cardMap };
+    return { pendingTrades: pending, tradeHistory: history, tradeCardDetails: cardDetails };
   };
 
   const { data: tradesData } = useQuery({
@@ -119,6 +122,8 @@ export default function TradesTab() {
       const success = await acceptTrade(tradeId);
       if (success) {
         queryClient.invalidateQueries({ queryKey: ['trades', user?.id] });
+        // Cards changed hands: refresh any cached collection data.
+        queryClient.invalidateQueries({ queryKey: ['collection'] });
         toast.success('Trade accepted! Cards exchanged.');
       } else {
         toast.error('Failed. Check your collection.');
@@ -168,7 +173,7 @@ export default function TradesTab() {
   const calculateTradeItemsPrice = (items: TradeItem[] | undefined, ownerId: string): number => {
     const ownerItems = items?.filter((i) => i.owner_id === ownerId) || [];
     return ownerItems.reduce((total, item) => {
-      const card = tradeCardDetails.get(item.card_id);
+      const card = tradeCardDetails[item.card_id];
       const price = card?.prices?.usd ? parseFloat(card.prices.usd) : 0;
       return total + (price * item.quantity);
     }, 0);
@@ -195,7 +200,7 @@ export default function TradesTab() {
         </div>
         <div className="flex flex-wrap gap-1">
           {ownerItems.map((item) => {
-            const card = tradeCardDetails.get(item.card_id);
+            const card = tradeCardDetails[item.card_id];
             return (
               <div key={item.id} className="flex items-center gap-1 bg-gray-700 px-2 py-0.5 rounded text-xs">
                 <span className="truncate max-w-[100px]">{card?.name || 'Card'}</span>

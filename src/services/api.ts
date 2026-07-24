@@ -9,6 +9,8 @@ export {
   getCardById,
   getCardsByIds,
   getCardsByNames,
+  getCardsBySetNumber,
+  setNumberKey,
   getCardByFuzzyName,
   resolveCardsByNames,
   ScryfallHttpError,
@@ -236,6 +238,20 @@ export const refreshCollectionPrices = async (userId: string): Promise<void> => 
 
   if (error) throw error;
 
+  // Record today's per-card price point (one row per card per day) for the
+  // card price-history chart. Single batched upsert across all fetched cards.
+  const today = now.slice(0, 10);
+  const historyRows = cards.map((card) => ({
+    card_id: card.id,
+    recorded_at: today,
+    price_usd: card.prices?.usd ? Number(card.prices.usd) : null,
+    price_usd_foil: card.prices?.usd_foil ? Number(card.prices.usd_foil) : null,
+  }));
+  const { error: historyError } = await supabase
+    .from('card_price_history')
+    .upsert(historyRows, { onConflict: 'card_id,recorded_at' });
+  if (historyError) throw historyError;
+
   await snapshotCollectionValue(userId);
 };
 
@@ -265,6 +281,30 @@ export const getCollectionValueHistory = async (userId: string): Promise<ValueHi
   return (data ?? []).map((r) => ({ date: r.snapshot_date as string, value: Number(r.value) }));
 };
 
+// ---- Per-card price history ----
+export interface CardPriceHistoryPoint {
+  date: string;
+  usd: number | null;
+  usdFoil: number | null;
+}
+
+/** Last 90 days of recorded prices for one card, oldest first. */
+export const getCardPriceHistory = async (cardId: string): Promise<CardPriceHistoryPoint[]> => {
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const { data, error } = await supabase
+    .from('card_price_history')
+    .select('recorded_at, price_usd, price_usd_foil')
+    .eq('card_id', cardId)
+    .gte('recorded_at', since)
+    .order('recorded_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    date: r.recorded_at as string,
+    usd: r.price_usd === null ? null : Number(r.price_usd),
+    usdFoil: r.price_usd_foil === null ? null : Number(r.price_usd_foil),
+  }));
+};
+
 // ---- Wishlist ----
 // Returns a plain array (not a Set) because TanStack Query's structural
 // sharing does not preserve Set/Map instances.
@@ -272,6 +312,51 @@ export const getWishlist = async (userId: string): Promise<string[]> => {
   const { data, error } = await supabase.from('wishlists').select('card_id').eq('user_id', userId);
   if (error) throw error;
   return (data ?? []).map((r) => r.card_id);
+};
+
+export type WishlistPriority = 'high' | 'medium' | 'low';
+
+export interface WishlistEntry {
+  cardId: string;
+  quantity: number;
+  priority: WishlistPriority;
+}
+
+const WISHLIST_PRIORITIES: readonly WishlistPriority[] = ['high', 'medium', 'low'];
+
+const asWishlistPriority = (value: unknown): WishlistPriority =>
+  WISHLIST_PRIORITIES.includes(value as WishlistPriority) ? (value as WishlistPriority) : 'medium';
+
+/** Full wishlist rows (quantity + priority), unlike getWishlist's id-only membership list. */
+export const getWishlistDetailed = async (userId: string): Promise<WishlistEntry[]> => {
+  const { data, error } = await supabase
+    .from('wishlists')
+    .select('card_id, quantity, priority')
+    .eq('user_id', userId);
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    cardId: r.card_id,
+    quantity: Math.max(1, Number(r.quantity) || 1),
+    priority: asWishlistPriority(r.priority),
+  }));
+};
+
+export const updateWishlistItem = async (
+  userId: string,
+  cardId: string,
+  updates: { quantity?: number; priority?: WishlistPriority },
+): Promise<void> => {
+  const payload: { quantity?: number; priority?: WishlistPriority } = {};
+  if (updates.quantity !== undefined) payload.quantity = Math.max(1, Math.floor(updates.quantity));
+  if (updates.priority !== undefined) payload.priority = updates.priority;
+  if (Object.keys(payload).length === 0) return;
+
+  const { error } = await supabase
+    .from('wishlists')
+    .update(payload)
+    .eq('user_id', userId)
+    .eq('card_id', cardId);
+  if (error) throw error;
 };
 
 export const addToWishlist = async (userId: string, cardId: string): Promise<void> => {

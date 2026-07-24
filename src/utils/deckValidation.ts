@@ -43,7 +43,14 @@ function copyLimitFor(card: Card, formatMax: number): number {
   return formatMax;
 }
 
-const FORMAT_RULES = {
+interface FormatRules {
+  minCards: number;
+  maxCards?: number;
+  maxCopies: number;
+  requiresCommander?: boolean;
+}
+
+const FORMAT_RULES: Record<string, FormatRules> = {
   standard: {
     minCards: 60,
     maxCards: undefined,
@@ -54,9 +61,29 @@ const FORMAT_RULES = {
     maxCards: undefined,
     maxCopies: 4,
   },
+  pioneer: {
+    minCards: 60,
+    maxCards: undefined,
+    maxCopies: 4,
+  },
   commander: {
     minCards: 100,
     maxCards: 100,
+    maxCopies: 1,
+    requiresCommander: true,
+  },
+  // Brawl: exactly 60 cards, singleton, commander required.
+  brawl: {
+    minCards: 60,
+    maxCards: 60,
+    maxCopies: 1,
+    requiresCommander: true,
+  },
+  // Oathbreaker: 58 + oathbreaker + signature spell. Validated pragmatically
+  // as a 60-card singleton deck with a required commander (the oathbreaker).
+  oathbreaker: {
+    minCards: 60,
+    maxCards: 60,
     maxCopies: 1,
     requiresCommander: true,
   },
@@ -118,12 +145,18 @@ export function validateDeck(deck: Deck): DeckValidation {
     }
   });
 
-  // Commander-specific validations
-  if (deck.format === 'commander') {
+  // Commander-style validations (commander / brawl / oathbreaker)
+  if (rules.requiresCommander) {
     const commander = deck.cards.find(card => card.is_commander)?.card;
 
     if (!commander) {
-      errors.push('Commander deck must have a commander');
+      errors.push(
+        deck.format === 'oathbreaker'
+          ? 'Oathbreaker deck must have an oathbreaker'
+          : deck.format === 'brawl'
+            ? 'Brawl deck must have a commander'
+            : 'Commander deck must have a commander'
+      );
     } else {
       // Check commander color identity
       const commanderColors = getCommanderColors(commander);

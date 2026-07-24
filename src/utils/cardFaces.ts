@@ -15,6 +15,22 @@ export const getCardImageUri = (card: Card, faceIndex = 0): string | undefined =
   return card.image_uris?.normal ?? card.image_uris?.small ?? card.card_faces?.[0]?.image_uris?.normal;
 };
 
+/** Small (146px) image URI for dense thumbnail grids (falls back gracefully). */
+export const getCardImageSmall = (card: Card, faceIndex = 0): string | undefined => {
+  if (isDoubleFaced(card) && card.card_faces) {
+    return card.card_faces[faceIndex]?.image_uris?.small ?? card.card_faces[faceIndex]?.image_uris?.normal;
+  }
+  return card.image_uris?.small ?? card.image_uris?.normal ?? card.card_faces?.[0]?.image_uris?.small;
+};
+
+/** Large image URI for hover previews and detail panels (falls back gracefully). */
+export const getCardLargeImageUri = (card: Card, faceIndex = 0): string | undefined => {
+  if (isDoubleFaced(card) && card.card_faces) {
+    return card.card_faces[faceIndex]?.image_uris?.large || card.card_faces[faceIndex]?.image_uris?.normal;
+  }
+  return card.image_uris?.large || card.image_uris?.normal;
+};
+
 /** Art-crop image URI for the given face (falls back gracefully). */
 export const getCardArtCrop = (card: Card, faceIndex = 0): string | undefined => {
   if (isDoubleFaced(card) && card.card_faces) {

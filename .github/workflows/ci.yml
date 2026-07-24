@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: ['**']
   pull_request:
 
 jobs:
@@ -30,3 +30,8 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          # Placeholders — the build only inlines these; the real values are
+          # baked into the published image (release-image.yml) from secrets.
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder

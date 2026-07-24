@@ -19,7 +19,7 @@ interface DeckSearchPanelProps {
   isSearching: boolean;
   searchResults: Card[];
   selectedCards: DeckCardEntry[];
-  userCollection: Map<string, number>;
+  userCollection: Record<string, number>;
   addingCardId: string | null;
   deckFormat: string;
   commander: Card | null;
@@ -113,7 +113,7 @@ export default function DeckSearchPanel({
           searchResults.map(card => {
           const currentFaceIndex = getCurrentFaceIndex(card.id);
           const isMultiFaced = isDoubleFaced(card);
-          const inCollection = userCollection.get(card.id) || 0;
+          const inCollection = userCollection[card.id] ?? 0;
           const isAddingThisCard = addingCardId === card.id;
           const cardInDeck = selectedCards.find(c => c.card.id === card.id);
           const quantityInDeck = cardInDeck?.quantity || 0;

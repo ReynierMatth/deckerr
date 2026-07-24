@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeDeckStats } from './deckStats';
+import { computeDeckStats, groupCardsByType } from './deckStats';
 import { Card } from '../types';
 
 const card = (over: Partial<Card>): Card => ({ id: over.name ?? 'x', name: 'x', ...over });
@@ -56,5 +56,35 @@ describe('computeDeckStats', () => {
     const byType = Object.fromEntries(stats.typeCounts.map((t) => [t.type, t.count]));
     expect(byType.Land).toBe(1);
     expect(byType.Creature).toBe(3);
+  });
+});
+
+describe('groupCardsByType', () => {
+  it('groups entries by primary type in display order (spells before lands)', () => {
+    const groups = groupCardsByType([
+      entry(card({ name: 'Forest', type_line: 'Basic Land — Forest' }), 10),
+      entry(card({ name: 'Bolt', type_line: 'Instant', colors: ['R'] }), 4),
+      entry(card({ name: 'Bear', type_line: 'Creature — Bear', colors: ['G'] }), 2),
+    ]);
+    expect(groups.map((g) => g.type)).toEqual(['Creature', 'Instant', 'Land']);
+    expect(groups.map((g) => g.count)).toEqual([2, 4, 10]);
+  });
+
+  it('sums quantities and keeps entry order within a group', () => {
+    const groups = groupCardsByType([
+      entry(card({ name: 'Bear', type_line: 'Creature — Bear' }), 2),
+      entry(card({ name: 'Elf', type_line: 'Creature — Elf' }), 3),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ type: 'Creature', count: 5 });
+    expect(groups[0].entries.map((e) => e.card.name)).toEqual(['Bear', 'Elf']);
+  });
+
+  it('skips zero-quantity entries', () => {
+    const groups = groupCardsByType([
+      entry(card({ name: 'Bear', type_line: 'Creature' }), 0),
+      entry(card({ name: 'Bolt', type_line: 'Instant' }), 1),
+    ]);
+    expect(groups.map((g) => g.type)).toEqual(['Instant']);
   });
 });
