@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search } from 'lucide-react';
+import { Search, SlidersHorizontal, Share2 } from 'lucide-react';
 import { Card, Deck } from '../types';
 import { searchCards, resolveCardsByNames } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,6 +16,8 @@ import HoverCardPreview from './card/HoverCardPreview';
 import DeckExportModal from './deck/DeckExportModal';
 import DeckSearchPanel from './deck/DeckSearchPanel';
 import DeckCardList from './deck/DeckCardList';
+import DeckSettingsDrawer from './deck/DeckSettingsDrawer';
+import DeckShareDrawer from './deck/DeckShareDrawer';
 import DeckStats from './deck/DeckStats';
 import SampleHand from './deck/SampleHand';
 import DeckActionBar from './deck/DeckActionBar';
@@ -50,12 +52,14 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const [isImporting, setIsImporting] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const [hoverSource, setHoverSource] = useState<'search' | 'deck' | null>(null);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
 
-  // Deck persistence: current deck id, public flag and the save/update flow.
-  const { currentDeckId, isPublic, setIsPublicPersisted, isSaving, saveDeck } = useDeckSave({
+  // Deck persistence: current deck id, visibility and the save/update flow.
+  const { currentDeckId, visibility, setVisibilityPersisted, isSaving, saveDeck } = useDeckSave({
     initialDeck,
     onSave,
     deckName,
@@ -288,6 +292,41 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     <div className="relative bg-gray-900 text-white p-3 sm:p-6 pt-6 pb-44 md:pt-20 md:pb-6 md:min-h-screen">
       <div className="max-w-7xl mx-auto">
         <div className="max-w-3xl mx-auto">
+          {/* Cards-first header: inline-editable deck name, meta line, drawers */}
+          <div className="mb-4 flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <input
+                type="text"
+                value={deckName}
+                onChange={e => setDeckName(e.target.value)}
+                className="w-full bg-transparent text-2xl font-bold text-white placeholder-gray-500 border-b border-transparent hover:border-gray-700 focus:border-blue-500 focus:outline-none px-0 py-1"
+                placeholder="Untitled deck"
+                aria-label="Deck name"
+              />
+              <p className="mt-1 text-sm text-gray-400 capitalize">
+                {deckFormat} · {deckSize} {deckSize === 1 ? 'card' : 'cards'}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                onClick={() => setShowSettings(true)}
+                aria-label="Deck settings"
+                className="flex h-11 min-w-[44px] items-center justify-center gap-1.5 rounded-lg bg-gray-800 px-3 text-sm font-medium text-white active:bg-gray-700 hover:bg-gray-700 transition-colors"
+              >
+                <SlidersHorizontal size={18} />
+                <span className="hidden sm:inline">Settings</span>
+              </button>
+              <button
+                onClick={() => setShowShare(true)}
+                aria-label="Share deck"
+                className="flex h-11 min-w-[44px] items-center justify-center gap-1.5 rounded-lg bg-gray-800 px-3 text-sm font-medium text-white active:bg-gray-700 hover:bg-gray-700 transition-colors"
+              >
+                <Share2 size={18} />
+                <span className="hidden sm:inline">Share</span>
+              </button>
+            </div>
+          </div>
+
           {/* Open the card-search drawer/modal (desktop; mobile uses the FAB) */}
           <button
             onClick={() => setShowSearch(true)}
@@ -298,23 +337,11 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
           {/* Deck Builder Section */}
           <DeckCardList
-            deckName={deckName}
-            setDeckName={setDeckName}
             deckFormat={deckFormat}
-            setDeckFormat={setDeckFormat}
-            tags={tags}
-            addTag={addTag}
-            removeTag={removeTag}
-            isPublic={isPublic}
-            setIsPublic={setIsPublicPersisted}
-            deckId={currentDeckId}
             commander={commander}
-            setCommander={setCommander}
             selectedCards={selectedCards}
             commanderColors={commanderColors}
             isCardValidForCommander={isCardValidForCommander}
-            handleFileUpload={handleFileUpload}
-            isImporting={isImporting}
             validation={validation}
             updateCardQuantity={updateCardQuantity}
             removeCardFromDeck={removeCardFromDeck}
@@ -399,6 +426,32 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
           />
         </div>
       </Modal>
+
+      {/* Deck settings — format, tags, commander, decklist import */}
+      <DeckSettingsDrawer
+        deckFormat={deckFormat}
+        setDeckFormat={setDeckFormat}
+        tags={tags}
+        addTag={addTag}
+        removeTag={removeTag}
+        commander={commander}
+        setCommander={setCommander}
+        commanderColors={commanderColors}
+        selectedCards={selectedCards}
+        handleFileUpload={handleFileUpload}
+        isImporting={isImporting}
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+      />
+
+      {/* Share deck — 3-level visibility + shareable link */}
+      <DeckShareDrawer
+        visibility={visibility}
+        setVisibility={setVisibilityPersisted}
+        deckId={currentDeckId}
+        isOpen={showShare}
+        onClose={() => setShowShare(false)}
+      />
 
       {showExport && (
         <DeckExportModal cards={selectedCards} deckName={deckName} onClose={() => setShowExport(false)} />
