@@ -40,7 +40,7 @@ const fetchDiscoverPage = async (
   let query = supabase
     .from('decks')
     .select('id, name, format, card_count, cover_card_id, user_id', { count: 'exact' })
-    .eq('is_public', true);
+    .eq('visibility', 'public'); // unlisted decks are link-only, not browsable
   if (search) query = query.ilike('name', `%${search}%`);
   if (format) query = query.eq('format', format);
 
