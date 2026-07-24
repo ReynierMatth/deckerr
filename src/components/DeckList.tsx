@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getCardsByIds } from '../services/api';
 import { Deck } from '../types';
 import { supabase } from "../lib/supabase";
+import { useAuth } from '../contexts/AuthContext';
 import DeckCard from "./DeckCard";
 import { PlusCircle } from 'lucide-react';
 
@@ -11,8 +12,14 @@ interface DeckListProps {
   onCreateDeck?: () => void;
 }
 
-const fetchDecks = async (): Promise<Deck[]> => {
-  const { data: decksData, error: decksError } = await supabase.from('decks').select('*');
+const fetchDecks = async (userId: string): Promise<Deck[]> => {
+  // Only the signed-in user's own decks. RLS also allows reading other people's
+  // *public* decks (for sharing/Discover), so this filter is required or they'd
+  // leak into "My Decks".
+  const { data: decksData, error: decksError } = await supabase
+    .from('decks')
+    .select('*')
+    .eq('user_id', userId);
   if (decksError) throw decksError;
 
   // Fetch only cover cards (much lighter than loading every card in every deck).
@@ -34,9 +41,11 @@ const fetchDecks = async (): Promise<Deck[]> => {
 };
 
 const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
+  const { user } = useAuth();
   const { data: decks = [], isLoading } = useQuery({
-    queryKey: ['decks'],
-    queryFn: fetchDecks,
+    queryKey: ['decks', user?.id],
+    enabled: !!user,
+    queryFn: () => fetchDecks(user!.id),
     staleTime: 0, // always refetch on mount so newly created/edited decks appear
   });
 
