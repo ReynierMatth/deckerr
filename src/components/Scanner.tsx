@@ -33,12 +33,15 @@ const SCAN_INTERVAL = 1200;
 const MAX_CANDIDATES = 4;
 // Max Hamming distance (of 64 bits) to consider an image-hash match. Live
 // camera crops diverge from the reference border_crop, so this is generous;
-// the real guard against wrong matches is the confirmation count below.
-const HASH_MAX_DISTANCE = 12;
-// The same card must be the nearest match this many consecutive passes before
-// it's committed — a wrong match from one blurry frame won't repeat, so this
-// kills the transient mis-reads that a bare threshold lets through.
-const HASH_CONFIRMATIONS = 2;
+// the real guard against wrong matches is the sliding-window vote below.
+const HASH_MAX_DISTANCE = 14;
+// The nearest match flickers frame-to-frame (camera noise, focus, motion), so
+// instead of N consecutive identical matches we vote over a sliding window: a
+// card wins once it's the nearest (within threshold) HASH_VOTES times out of
+// the last HASH_WINDOW passes. Tolerates flicker while still rejecting one-off
+// mis-reads (which rarely repeat).
+const HASH_WINDOW = 4;
+const HASH_VOTES = 2;
 // Temporary: overlay the nearest index match + distance to calibrate on real
 // hardware. Flip off once tuned.
 const DEBUG_HASH = true;
@@ -116,8 +119,8 @@ export default function Scanner() {
   const lastNameRef = useRef('');
   // Last image-hash match id acted on, same lingering-guard for the hash path.
   const lastHashIdRef = useRef('');
-  // Consecutive-pass confirmation of the current nearest hash match.
-  const pendingHashRef = useRef<{ id: string; count: number }>({ id: '', count: 0 });
+  // Sliding window of recent nearest-within-threshold match ids (for voting).
+  const recentMatchesRef = useRef<string[]>([]);
   // Candidate lines Scryfall didn't recognise, skipped on later passes.
   const failedNamesRef = useRef<Set<string>>(new Set());
   // Latest toast fns via a ref: the context value isn't memoized, so reading
@@ -295,32 +298,46 @@ export default function Scanner() {
           const nearest = matchHashIndex(hashIndex, hash, 64); // nearest, any distance
           const within = nearest !== null && nearest.distance <= HASH_MAX_DISTANCE;
 
-          // Track how many consecutive passes agree on this nearest card.
-          const pending = pendingHashRef.current;
-          if (within && nearest) {
-            pending.count = pending.id === nearest.id ? pending.count + 1 : 1;
-            pending.id = nearest.id;
-          } else {
-            pending.id = '';
-            pending.count = 0;
-          }
-          const confirmed = within && pending.count >= HASH_CONFIRMATIONS;
+          // Slide the window and tally votes over it.
+          const hist = recentMatchesRef.current;
+          hist.push(within && nearest ? nearest.id : '');
+          while (hist.length > HASH_WINDOW) hist.shift();
 
-          if (nearest && (DEBUG_HASH || confirmed)) {
-            const [card] = await getCardsByIds([nearest.id]);
-            if (isCancelled()) return;
-            if (DEBUG_HASH) {
-              setHashDebug(
-                card
-                  ? `≈ ${card.name} · ${card.set?.toUpperCase()} · d${nearest.distance} (${pending.count}/${HASH_CONFIRMATIONS})`
-                  : `d${nearest.distance}`,
-              );
+          let bestId = '';
+          let bestVotes = 0;
+          const tally = new Map<string, number>();
+          for (const id of hist) {
+            if (!id) continue;
+            const v = (tally.get(id) ?? 0) + 1;
+            tally.set(id, v);
+            if (v > bestVotes) {
+              bestVotes = v;
+              bestId = id;
             }
-            if (confirmed && card && nearest.id !== lastHashIdRef.current) {
-              lastHashIdRef.current = nearest.id;
+          }
+          const confirmed = bestVotes >= HASH_VOTES && bestId !== '';
+
+          if (DEBUG_HASH && nearest) {
+            if (within) {
+              const [c] = await getCardsByIds([nearest.id]);
+              if (isCancelled()) return;
+              setHashDebug(
+                c
+                  ? `≈ ${c.name} · ${c.set?.toUpperCase()} · d${nearest.distance} · ${bestVotes}/${HASH_VOTES}`
+                  : `d${nearest.distance} · ${bestVotes}/${HASH_VOTES}`,
+              );
+            } else {
+              setHashDebug(`d${nearest.distance} (>${HASH_MAX_DISTANCE})`);
+            }
+          }
+
+          if (confirmed && bestId !== lastHashIdRef.current) {
+            const [card] = await getCardsByIds([bestId]);
+            if (isCancelled()) return;
+            if (card) {
+              lastHashIdRef.current = bestId;
               lastNameRef.current = card.name;
-              pending.id = '';
-              pending.count = 0;
+              recentMatchesRef.current = [];
               addCardToBasket(card);
               return;
             }
@@ -376,7 +393,7 @@ export default function Scanner() {
     // Allow the last-detected card to be picked up again after a pause.
     lastNameRef.current = '';
     lastHashIdRef.current = '';
-    pendingHashRef.current = { id: '', count: 0 };
+    recentMatchesRef.current = [];
 
     const tick = async () => {
       setScanning(true);
