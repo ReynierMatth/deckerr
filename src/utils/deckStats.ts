@@ -28,11 +28,51 @@ const TYPE_PRIORITY = [
 
 const isLand = (card: Card): boolean => /\bLand\b/i.test(card.type_line ?? '');
 
-const primaryType = (card: Card): string => {
+/** The single card type a card is filed under (Land wins over Creature, etc.). */
+export const primaryType = (card: Card): string => {
   const line = card.type_line ?? '';
   const match = TYPE_PRIORITY.find((t) => new RegExp(`\\b${t}\\b`, 'i').test(line));
   return match ?? 'Other';
 };
+
+/** Order card-type sections are shown in (Moxfield-style: spells first, lands last). */
+export const TYPE_DISPLAY_ORDER = [
+  'Creature',
+  'Planeswalker',
+  'Instant',
+  'Sorcery',
+  'Artifact',
+  'Enchantment',
+  'Battle',
+  'Land',
+  'Other',
+] as const;
+
+export interface CardTypeGroup<T> {
+  type: string;
+  /** Sum of quantities in this group. */
+  count: number;
+  entries: T[];
+}
+
+/**
+ * Group (card, quantity) entries by primary card type, in TYPE_DISPLAY_ORDER.
+ * Within a group, entries keep their incoming order. Pure.
+ */
+export function groupCardsByType<T extends { card: Card; quantity: number }>(
+  entries: T[],
+): CardTypeGroup<T>[] {
+  const groups = new Map<string, CardTypeGroup<T>>();
+  for (const entry of entries) {
+    if (entry.quantity <= 0) continue;
+    const type = primaryType(entry.card);
+    const group = groups.get(type) ?? { type, count: 0, entries: [] };
+    group.count += entry.quantity;
+    group.entries.push(entry);
+    groups.set(type, group);
+  }
+  return TYPE_DISPLAY_ORDER.filter((t) => groups.has(t)).map((t) => groups.get(t)!);
+}
 
 /** Compute deck composition stats from (card, quantity) entries. Pure. */
 export function computeDeckStats(cards: { card: Card; quantity: number }[]): DeckStats {
