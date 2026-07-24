@@ -28,7 +28,7 @@ const OCR_CONTRAST = 1.4;
 // Downscale the captured frame to at most this width before OCR (perf).
 const MAX_OCR_WIDTH = 1000;
 // Delay between automatic scan passes (the OCR pass itself adds to this).
-const SCAN_INTERVAL = 1200;
+const SCAN_INTERVAL = 600;
 // How many candidate text lines to try resolving against Scryfall per pass.
 const MAX_CANDIDATES = 4;
 // Max Hamming distance (of 64 bits) to consider an image-hash match. Live
@@ -42,6 +42,10 @@ const HASH_MAX_DISTANCE = 14;
 // mis-reads (which rarely repeat).
 const HASH_WINDOW = 4;
 const HASH_VOTES = 2;
+// Fast path: a very close match (few bits differ) is unambiguous, so commit it
+// on the first sighting instead of waiting for the vote — snappy validation
+// when the card is well framed, vote still covers the borderline cases.
+const HASH_STRONG_DISTANCE = 6;
 // Temporary: overlay the nearest index match + distance to calibrate on real
 // hardware. Flip off once tuned.
 const DEBUG_HASH = true;
@@ -315,7 +319,11 @@ export default function Scanner() {
               bestId = id;
             }
           }
-          const confirmed = bestVotes >= HASH_VOTES && bestId !== '';
+          // Fast path: an unambiguous (very close) match commits immediately;
+          // otherwise a card must win the sliding-window vote.
+          const strong = within && nearest !== null && nearest.distance <= HASH_STRONG_DISTANCE;
+          const commitId = strong && nearest ? nearest.id : bestId;
+          const confirmed = (strong || bestVotes >= HASH_VOTES) && commitId !== '';
 
           if (DEBUG_HASH && nearest) {
             if (within) {
@@ -323,7 +331,7 @@ export default function Scanner() {
               if (isCancelled()) return;
               setHashDebug(
                 c
-                  ? `≈ ${c.name} · ${c.set?.toUpperCase()} · d${nearest.distance} · ${bestVotes}/${HASH_VOTES}`
+                  ? `≈ ${c.name} · ${c.set?.toUpperCase()} · d${nearest.distance} · ${bestVotes}/${HASH_VOTES}${strong ? ' ⚡' : ''}`
                   : `d${nearest.distance} · ${bestVotes}/${HASH_VOTES}`,
               );
             } else {
@@ -331,11 +339,11 @@ export default function Scanner() {
             }
           }
 
-          if (confirmed && bestId !== lastHashIdRef.current) {
-            const [card] = await getCardsByIds([bestId]);
+          if (confirmed && commitId !== lastHashIdRef.current) {
+            const [card] = await getCardsByIds([commitId]);
             if (isCancelled()) return;
             if (card) {
-              lastHashIdRef.current = bestId;
+              lastHashIdRef.current = commitId;
               lastNameRef.current = card.name;
               recentMatchesRef.current = [];
               addCardToBasket(card);
