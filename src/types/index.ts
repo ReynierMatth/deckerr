@@ -75,8 +75,13 @@ export interface Deck {
   isValid?: boolean;
   cardCount?: number;
   tags?: string[];
+  /** private = owner only; unlisted = link only; public = link + Discover. */
+  visibility?: DeckVisibility;
+  /** Derived (visibility != 'private'); kept for the link/anon RLS. */
   isPublic?: boolean;
 }
+
+export type DeckVisibility = 'private' | 'unlisted' | 'public';
 
 export interface CardEntity {
   id: string;

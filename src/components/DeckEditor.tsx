@@ -37,6 +37,7 @@ const fetchDeck = async (deckId: string): Promise<Deck> => {
     cards,
     tags: deckData.tags ?? [],
     isPublic: deckData.is_public ?? false,
+    visibility: deckData.visibility ?? (deckData.is_public ? 'public' : 'private'),
     createdAt: new Date(deckData.created_at),
     updatedAt: new Date(deckData.updated_at),
   };
