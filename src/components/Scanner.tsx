@@ -5,9 +5,11 @@ import type { Worker as TesseractWorker } from 'tesseract.js';
 import { Card } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { addCardToCollection } from '../services/api';
+import { addCardToCollection, getCardsByIds } from '../services/api';
 import { getCardByFuzzyName } from '../services/scryfall';
 import { getCardArtCrop } from '../utils/cardFaces';
+import { dhashFromRGBA, matchHashIndex } from '../utils/imageHash';
+import { useCardHashIndex } from '../hooks/useCardHashIndex';
 import Modal from './Modal';
 import PrintingPickerModal from './card/PrintingPickerModal';
 
@@ -29,6 +31,9 @@ const MAX_OCR_WIDTH = 1000;
 const SCAN_INTERVAL = 1200;
 // How many candidate text lines to try resolving against Scryfall per pass.
 const MAX_CANDIDATES = 4;
+// Max Hamming distance (of 64 bits) to accept an image-hash match. Live camera
+// crops diverge from the reference border_crop, so this is generous.
+const HASH_MAX_DISTANCE = 12;
 
 /**
  * Per-copy price for a printing, matching how the collection values entries:
@@ -77,12 +82,17 @@ export default function Scanner() {
   const toast = useToast();
   const queryClient = useQueryClient();
 
+  const { index: hashIndex } = useCardHashIndex();
+
   const videoRef = useRef<HTMLVideoElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   // Created lazily on the first scan pass, then reused for every scan.
   const workerPromiseRef = useRef<Promise<TesseractWorker> | null>(null);
   // Last name we acted on, so a card lingering in frame isn't re-added.
   const lastNameRef = useRef('');
+  // Last image-hash match id acted on, same lingering-guard for the hash path.
+  const lastHashIdRef = useRef('');
   // Candidate lines Scryfall didn't recognise, skipped on later passes.
   const failedNamesRef = useRef<Set<string>>(new Set());
   // Latest toast fns via a ref: the context value isn't memoized, so reading
@@ -194,13 +204,85 @@ export default function Scanner() {
   }, []);
 
   /**
-   * One automatic scan pass: OCR the title strip and, if it reads confidently
-   * and resolves to a card, drop it into the scanned basket. Misses are silent
-   * — this runs on a timer, so toasting each failure would be unbearable. A
+   * Crop the on-screen guide frame's region out of the video as raw RGBA. The
+   * video is object-cover, so it's scaled by max(dispW/vidW, dispH/vidH) and
+   * centred; inverting that maps the guide rect back to source pixels. The
+   * region is the whole card outline — the same framing as the border_crop
+   * images the hash index was built from.
+   */
+  const captureGuideRegion = useCallback((): ImageData | null => {
+    const video = videoRef.current;
+    const frame = frameRef.current;
+    if (!video || !frame || video.videoWidth === 0) return null;
+
+    const vRect = video.getBoundingClientRect();
+    const fRect = frame.getBoundingClientRect();
+    if (vRect.width === 0 || vRect.height === 0) return null;
+
+    const scale = Math.max(vRect.width / video.videoWidth, vRect.height / video.videoHeight);
+    const offsetX = (vRect.width - video.videoWidth * scale) / 2;
+    const offsetY = (vRect.height - video.videoHeight * scale) / 2;
+
+    const sx = Math.max(0, (fRect.left - vRect.left - offsetX) / scale);
+    const sy = Math.max(0, (fRect.top - vRect.top - offsetY) / scale);
+    const sw = Math.min(fRect.width / scale, video.videoWidth - sx);
+    const sh = Math.min(fRect.height / scale, video.videoHeight - sy);
+    if (sw <= 0 || sh <= 0) return null;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 100;
+    canvas.height = 140;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    return ctx.getImageData(0, 0, canvas.width, canvas.height);
+  }, []);
+
+  /** Add a resolved card to the basket (or bump its quantity), with feedback. */
+  const addCardToBasket = useCallback((card: Card) => {
+    setScanned((prev) => {
+      const existing = prev.find((e) => e.card.id === card.id && !e.added);
+      if (existing) {
+        return prev.map((e) => (e === existing ? { ...e, quantity: e.quantity + 1 } : e));
+      }
+      return [{ card, quantity: 1, isFoil: false, added: false }, ...prev];
+    });
+    toastRef.current.success(`Found ${card.name}`);
+  }, []);
+
+  /**
+   * One automatic scan pass. Image-hash first (edition-accurate, on-device);
+   * if that misses, fall back to OCR of the card name. Misses are silent —
+   * this runs on a timer, so toasting each failure would be unbearable. A
    * freshly-detected card increments its quantity if already in the basket.
    */
   const scanOnce = useCallback(
     async (isCancelled: () => boolean): Promise<void> => {
+      // 1. Image-hash match against the on-device index (exact printing).
+      if (hashIndex) {
+        const region = captureGuideRegion();
+        if (region) {
+          const match = matchHashIndex(
+            hashIndex,
+            dhashFromRGBA(region.data, region.width, region.height),
+            HASH_MAX_DISTANCE,
+          );
+          if (match && match.id !== lastHashIdRef.current) {
+            const [card] = await getCardsByIds([match.id]);
+            if (isCancelled()) return;
+            if (card) {
+              lastHashIdRef.current = match.id;
+              lastNameRef.current = card.name;
+              addCardToBasket(card);
+              return;
+            }
+          }
+        }
+      }
+
+      // 2. OCR fallback: read the whole frame and resolve the name on Scryfall.
       const canvas = captureFrame();
       if (!canvas) return;
 
@@ -210,9 +292,8 @@ export default function Scanner() {
       const { data } = await worker.recognize(canvas);
       if (isCancelled()) return;
 
-      // Try the top candidate lines against Scryfall (the card name is the
-      // topmost text) until one resolves. Skip lines already known to fail
-      // and the last name we acted on (a card lingering in frame).
+      // Try the top candidate lines (the card name is the topmost text) until
+      // one resolves. Skip lines already known to fail and the last name acted on.
       const candidates = ocrNameCandidates(data.text ?? '')
         .filter((line) => !failedNamesRef.current.has(line.toLowerCase()))
         .slice(0, MAX_CANDIDATES);
@@ -230,18 +311,11 @@ export default function Scanner() {
         }
 
         lastNameRef.current = name;
-        setScanned((prev) => {
-          const existing = prev.find((e) => e.card.id === card.id && !e.added);
-          if (existing) {
-            return prev.map((e) => (e === existing ? { ...e, quantity: e.quantity + 1 } : e));
-          }
-          return [{ card, quantity: 1, isFoil: false, added: false }, ...prev];
-        });
-        toastRef.current.success(`Found ${card.name}`);
+        addCardToBasket(card);
         return;
       }
     },
-    [captureFrame, getWorker],
+    [captureFrame, captureGuideRegion, addCardToBasket, getWorker, hashIndex],
   );
 
   // Automatic detection loop: runs continuously while the camera is ready.
@@ -253,8 +327,9 @@ export default function Scanner() {
     let cancelled = false;
     let timer: number | undefined;
     const isCancelled = () => cancelled;
-    // Allow the last-detected name to be picked up again after a pause.
+    // Allow the last-detected card to be picked up again after a pause.
     lastNameRef.current = '';
+    lastHashIdRef.current = '';
 
     const tick = async () => {
       setScanning(true);
@@ -383,9 +458,10 @@ export default function Scanner() {
 
       {cameraState === 'ready' && (
         <>
-          {/* Card-shaped guide frame — just an aiming aid; the whole frame is OCR'd */}
+          {/* Card-shaped guide frame — align the card here (its region is hashed) */}
           <div className="absolute inset-x-0 top-0 bottom-32 flex items-center justify-center pointer-events-none">
             <div
+              ref={frameRef}
               className="aspect-[5/7] border-2 border-white/40 rounded-xl"
               style={{ width: 'min(78vw, 340px)' }}
             />
