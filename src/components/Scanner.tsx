@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Camera, Minus, Plus, Sparkles } from 'lucide-react';
+import { Camera, Minus, Plus, Sparkles, ScanLine } from 'lucide-react';
 import type { Worker as TesseractWorker } from 'tesseract.js';
 import { Card } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -23,6 +23,10 @@ interface ScannedEntry {
 const OCR_UPSCALE = 2;
 // Simple linear contrast boost applied after grayscale conversion.
 const OCR_CONTRAST = 1.6;
+// Delay between automatic scan passes (the OCR pass itself adds to this).
+const SCAN_INTERVAL = 1200;
+// Minimum tesseract confidence (0-100) before spending a Scryfall lookup.
+const MIN_CONFIDENCE = 55;
 
 /**
  * Per-copy price for a printing, matching how the collection values entries:
@@ -56,11 +60,12 @@ const cleanOcrText = (raw: string): string => {
 };
 
 /**
- * Camera card scanner: point the phone at a card, align its name in the
- * title strip, tap the shutter. The strip is OCR'd with tesseract.js and
- * resolved against Scryfall's fuzzy name lookup; the match opens a drawer
- * to add it to the collection. The camera stays live between scans so a
- * stack of cards can be scanned in one session.
+ * Camera card scanner: point the phone at a card and align its name in the
+ * title strip — detection is automatic. A background loop OCRs the strip
+ * with tesseract.js every SCAN_INTERVAL and, once a name reads confidently
+ * and resolves against Scryfall's fuzzy lookup, opens a drawer to add it to
+ * the collection (pausing the loop). Scan misses are silent. The camera
+ * stays live between scans so a stack of cards can be scanned in one session.
  */
 export default function Scanner() {
   const { user } = useAuth();
@@ -70,8 +75,10 @@ export default function Scanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  // Created lazily on the first shutter press, then reused for every scan.
+  // Created lazily on the first scan pass, then reused for every scan.
   const workerPromiseRef = useRef<Promise<TesseractWorker> | null>(null);
+  // Last name sent to Scryfall, to avoid re-querying an identical failed read.
+  const lastNameRef = useRef('');
 
   const [cameraState, setCameraState] = useState<CameraState>('starting');
   const [scanning, setScanning] = useState(false);
@@ -129,16 +136,16 @@ export default function Scanner() {
     };
   }, []);
 
-  const getWorker = (): Promise<TesseractWorker> => {
+  const getWorker = useCallback((): Promise<TesseractWorker> => {
     if (!workerPromiseRef.current) {
       // Dynamic import keeps tesseract.js out of the route chunk until the
-      // first scan actually needs it.
+      // first scan pass actually needs it.
       workerPromiseRef.current = import('tesseract.js').then(({ createWorker }) =>
         createWorker('eng'),
       );
     }
     return workerPromiseRef.current;
-  };
+  }, []);
 
   /**
    * Grab the current video frame region under the on-screen title strip.
@@ -149,7 +156,7 @@ export default function Scanner() {
    * maps the strip's screen rect back to source-pixel coordinates, which
    * are drawn upscaled onto an offscreen canvas and contrast-boosted.
    */
-  const captureTitleStrip = (): HTMLCanvasElement | null => {
+  const captureTitleStrip = useCallback((): HTMLCanvasElement | null => {
     const video = videoRef.current;
     const strip = stripRef.current;
     if (!video || !strip || video.videoWidth === 0 || video.videoHeight === 0) return null;
@@ -195,42 +202,79 @@ export default function Scanner() {
     ctx.putImageData(image, 0, 0);
 
     return canvas;
-  };
+  }, []);
 
-  const handleShutter = async () => {
-    if (scanning || cameraState !== 'ready') return;
-    setScanning(true);
-    try {
+  /**
+   * One automatic scan pass: OCR the title strip and, if it reads confidently
+   * and resolves to a card, open the result drawer. Returns true when a match
+   * was found (so the loop stops rescheduling). Misses are silent — this runs
+   * on a timer, so toasting each failure would be unbearable.
+   */
+  const scanOnce = useCallback(
+    async (isCancelled: () => boolean): Promise<boolean> => {
       const canvas = captureTitleStrip();
-      if (!canvas) {
-        toast.error("Couldn't capture the frame — try again");
-        return;
-      }
+      if (!canvas) return false;
 
       const worker = await getWorker();
+      if (isCancelled()) return false;
+
       const { data } = await worker.recognize(canvas);
+      if (isCancelled()) return false;
+      if ((data.confidence ?? 0) < MIN_CONFIDENCE) return false;
+
       const name = cleanOcrText(data.text ?? '');
-      if (!name) {
-        toast.error("Couldn't read the card — try again closer or in better light");
-        return;
-      }
+      // Skip empty reads and identical consecutive reads (an unchanged frame
+      // that already failed to resolve would just spend Scryfall lookups).
+      if (name.length < 3 || name === lastNameRef.current) return false;
+      lastNameRef.current = name;
 
       const card = await getCardByFuzzyName(name);
-      if (!card) {
-        toast.error(`No card matched "${name}" — try again closer or in better light`);
-        return;
-      }
+      if (isCancelled() || !card) return false;
 
       setQuantity(1);
       setIsFoil(false);
       setMatch(card);
-    } catch (error) {
-      console.error('Error scanning card:', error);
-      toast.error('Scan failed — try again');
-    } finally {
-      setScanning(false);
-    }
-  };
+      return true;
+    },
+    [captureTitleStrip, getWorker],
+  );
+
+  // Automatic detection loop: runs while the camera is ready and no result
+  // drawer is open. Pauses whenever a match is showing (match !== null) and
+  // resumes when the drawer closes.
+  useEffect(() => {
+    if (cameraState !== 'ready' || match !== null) return;
+
+    let cancelled = false;
+    let timer: number | undefined;
+    const isCancelled = () => cancelled;
+    // Allow the just-scanned name to be detected again after the drawer closed.
+    lastNameRef.current = '';
+
+    const tick = async () => {
+      setScanning(true);
+      let found = false;
+      try {
+        found = await scanOnce(isCancelled);
+      } catch (error) {
+        console.error('Error during auto-scan:', error);
+      } finally {
+        if (!cancelled) setScanning(false);
+      }
+      // On a match the effect re-runs (match !== null) and cleans up; only
+      // reschedule while still hunting.
+      if (!cancelled && !found) {
+        timer = window.setTimeout(tick, SCAN_INTERVAL);
+      }
+    };
+
+    timer = window.setTimeout(tick, SCAN_INTERVAL);
+
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) clearTimeout(timer);
+    };
+  }, [cameraState, match, scanOnce]);
 
   const handleAddToCollection = async () => {
     if (!match || !user || adding) return;
@@ -340,20 +384,16 @@ export default function Scanner() {
             </div>
           )}
 
-          {/* Shutter */}
-          <div className="absolute inset-x-0 bottom-4 flex justify-center">
-            <button
-              onClick={handleShutter}
-              disabled={scanning}
-              aria-label="Scan card"
-              className="w-16 h-16 rounded-full bg-white/90 border-4 border-white flex items-center justify-center text-gray-900 active:scale-95 transition-transform disabled:opacity-60"
-            >
+          {/* Auto-detect status pill (no shutter — detection is automatic) */}
+          <div className="absolute inset-x-0 bottom-6 flex justify-center pointer-events-none">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-black/70 text-sm text-white">
               {scanning ? (
-                <div className="animate-spin rounded-full h-7 w-7 border-t-2 border-b-2 border-gray-900"></div>
+                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-400"></div>
               ) : (
-                <Camera size={28} />
+                <ScanLine size={16} className="text-blue-400" />
               )}
-            </button>
+              <span>Point at a card — scanning automatically</span>
+            </div>
           </div>
         </>
       )}
