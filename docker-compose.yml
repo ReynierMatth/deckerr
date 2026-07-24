@@ -1,20 +1,14 @@
 # Deckerr — static PWA served by nginx, behind Traefik.
-# Uses your external (cloud) Supabase: the URL + anon key are baked at BUILD
-# time (Vite inlines VITE_* vars), so set them in a .env next to this file:
-#   VITE_SUPABASE_URL=https://<ref>.supabase.co
-#   VITE_SUPABASE_ANON_KEY=<anon key>   # public, protected by RLS
-#   DECKERR_HOST=deckerr.your-domain.tld # the host Traefik routes to
-# then: docker compose up -d --build
+# Pulls the prebuilt image from GHCR (built by .github/workflows/release-image.yml
+# with the Supabase URL + anon key baked in). On the NAS you only need a .env with:
+#   DECKERR_HOST=deckerr.your-domain.tld   # the host Traefik routes to
+# then: docker compose pull && docker compose up -d
+#
+# To build locally instead of pulling, swap `image:` for a `build: .` block.
 
 services:
   deckerr:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
-    image: deckerr:latest
+    image: ghcr.io/reyniermatth/deckerr:latest
     container_name: deckerr
     restart: always
     healthcheck:
