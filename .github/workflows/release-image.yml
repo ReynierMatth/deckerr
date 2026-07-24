@@ -2,8 +2,9 @@ name: Publish image
 
 # Build the Docker image and push it to GHCR whenever a version tag is pushed
 # (e.g. `git tag v1.0.0 && git push origin v1.0.0`) or a GitHub Release is
-# published. The Supabase URL + anon key are baked in at build time from repo
-# secrets (the anon key is public / RLS-protected, but kept out of the repo).
+# published. The image is GENERIC — no Supabase config is baked in; each
+# instance provides SUPABASE_URL / SUPABASE_ANON_KEY at runtime. So no secrets
+# are needed here, and the published image is reusable by anyone.
 on:
   push:
     tags: ['v*.*.*']
@@ -39,6 +40,3 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
-            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}

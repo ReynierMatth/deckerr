@@ -24,6 +24,11 @@
     <!-- MS Application -->
     <meta name="msapplication-TileColor" content="#0f172a" />
     <meta name="msapplication-config" content="/browserconfig.xml" />
+
+    <!-- Runtime config (window.__DECKERR_CONFIG__): overwritten by the container
+         at startup; empty in dev. Classic script in <head> runs before the
+         deferred module bundle, so the Supabase client sees it. -->
+    <script src="/config.js"></script>
   </head>
   <body>
     <div id="root"></div>
