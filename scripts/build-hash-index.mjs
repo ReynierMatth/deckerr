@@ -16,12 +16,15 @@
  * IMPORTANT: the dHash here MUST stay byte-for-byte algorithmically identical
  * to src/utils/imageHash.ts, or client reads won't match the index.
  */
-import { writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, readFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import Jimp from 'jimp';
 
 const UA = 'Deckerr/1.0 (card scanner index builder; contact matthieu.reynier@echoes.solutions)';
-const OUT = 'public/card-hashes.json';
+const OUT = process.env.OUT || 'public/card-hashes.json';
+// MERGE=1 folds the newly-hashed cards into the existing index (dedupe by id)
+// instead of overwriting it — handy to add a set without rebuilding everything.
+const MERGE = process.env.MERGE === '1';
 const GRID_W = 9;
 const GRID_H = 8;
 const REQUEST_DELAY_MS = 100; // be a good Scryfall citizen
@@ -136,9 +139,25 @@ async function main() {
     await sleep(REQUEST_DELAY_MS);
   }
 
+  let outIds = ids;
+  let outHashes = hashes;
+  if (MERGE) {
+    try {
+      const existing = JSON.parse(await readFile(OUT, 'utf8'));
+      const byId = new Map();
+      for (let i = 0; i < existing.ids.length; i++) byId.set(existing.ids[i], existing.hashes[i]);
+      for (let i = 0; i < ids.length; i++) byId.set(ids[i], hashes[i]); // new wins on conflict
+      outIds = [...byId.keys()];
+      outHashes = [...byId.values()];
+      console.log(`Merged with ${existing.ids.length} existing -> ${outIds.length} total.`);
+    } catch {
+      console.log('No existing index to merge; writing fresh.');
+    }
+  }
+
   await mkdir(dirname(OUT), { recursive: true });
-  await writeFile(OUT, JSON.stringify({ version: 1, algo: 'dhash9x8', ids, hashes }));
-  console.log(`\nWrote ${OUT}: ${done} hashes (${failed} failed).`);
+  await writeFile(OUT, JSON.stringify({ version: 1, algo: 'dhash9x8', ids: outIds, hashes: outHashes }));
+  console.log(`\nWrote ${OUT}: ${done} hashes this run (${failed} failed), ${outIds.length} total.`);
 }
 
 main().catch((err) => {
