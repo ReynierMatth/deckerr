@@ -22,9 +22,6 @@ import Jimp from 'jimp';
 
 const UA = 'Deckerr/1.0 (card scanner index builder; contact matthieu.reynier@echoes.solutions)';
 const OUT = process.env.OUT || 'public/card-hashes.json';
-// MERGE=1 folds the newly-hashed cards into the existing index (dedupe by id)
-// instead of overwriting it — handy to add a set without rebuilding everything.
-const MERGE = process.env.MERGE === '1';
 const GRID_W = 9;
 const GRID_H = 8;
 const REQUEST_DELAY_MS = 100; // be a good Scryfall citizen
@@ -114,12 +111,27 @@ async function main() {
     console.log(`  ${cards.length} cards`);
   }
 
-  const ids = [];
-  const hashes = [];
+  // Resume-friendly: keep everything in a Map(id -> hash), seeded from the
+  // existing index so a re-run skips already-hashed cards (unless FRESH=1).
+  const byId = new Map();
+  if (!process.env.FRESH) {
+    try {
+      const existing = JSON.parse(await readFile(OUT, 'utf8'));
+      for (let i = 0; i < existing.ids.length; i++) byId.set(existing.ids[i], existing.hashes[i]);
+      if (byId.size) console.log(`Resuming from ${byId.size} already-hashed cards.`);
+    } catch { /* no existing index — start fresh */ }
+  }
+
+  await mkdir(dirname(OUT), { recursive: true });
+  const write = async () =>
+    writeFile(OUT, JSON.stringify({ version: 1, algo: 'dhash9x8', ids: [...byId.keys()], hashes: [...byId.values()] }));
+
   let done = 0;
   let failed = 0;
+  const CHECKPOINT = 500;
 
   for (const card of cards) {
+    if (byId.has(card.id)) continue; // already hashed on a previous run
     const url = borderCrop(card);
     if (!url) continue;
     try {
@@ -128,10 +140,10 @@ async function main() {
       const buf = Buffer.from(await res.arrayBuffer());
       const img = await Jimp.read(buf);
       const { data, width, height } = img.bitmap;
-      ids.push(card.id);
-      hashes.push(dhashFromRGBA(data, width, height));
+      byId.set(card.id, dhashFromRGBA(data, width, height));
       done += 1;
-      if (done % 100 === 0) console.log(`  hashed ${done}/${cards.length}`);
+      if (done % 100 === 0) console.log(`  hashed ${done} this run / ${byId.size} total (of ${cards.length})`);
+      if (done % CHECKPOINT === 0) await write(); // periodic checkpoint so progress survives interruption
     } catch (err) {
       failed += 1;
       console.warn(`  skip ${card.name} (${card.set}): ${err.message}`);
@@ -139,25 +151,8 @@ async function main() {
     await sleep(REQUEST_DELAY_MS);
   }
 
-  let outIds = ids;
-  let outHashes = hashes;
-  if (MERGE) {
-    try {
-      const existing = JSON.parse(await readFile(OUT, 'utf8'));
-      const byId = new Map();
-      for (let i = 0; i < existing.ids.length; i++) byId.set(existing.ids[i], existing.hashes[i]);
-      for (let i = 0; i < ids.length; i++) byId.set(ids[i], hashes[i]); // new wins on conflict
-      outIds = [...byId.keys()];
-      outHashes = [...byId.values()];
-      console.log(`Merged with ${existing.ids.length} existing -> ${outIds.length} total.`);
-    } catch {
-      console.log('No existing index to merge; writing fresh.');
-    }
-  }
-
-  await mkdir(dirname(OUT), { recursive: true });
-  await writeFile(OUT, JSON.stringify({ version: 1, algo: 'dhash9x8', ids: outIds, hashes: outHashes }));
-  console.log(`\nWrote ${OUT}: ${done} hashes this run (${failed} failed), ${outIds.length} total.`);
+  await write();
+  console.log(`\nWrote ${OUT}: ${done} hashed this run (${failed} failed), ${byId.size} total.`);
 }
 
 main().catch((err) => {
