@@ -72,7 +72,10 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         // Runtime config is written per-container; never precache it or the SW
         // would serve the empty build-time placeholder instead of live values.
-        globIgnores: ['**/config.js'],
+        // The experimental CV scanner's OpenCV.js (~15 MB) and transformers.js
+        // chunks are dynamically imported only on /scan-cv — keep them out of
+        // the precache (OpenCV also exceeds the size cap); they load on demand.
+        globIgnores: ['**/config.js', '**/opencv-*.js', '**/transformers-*.js'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/api\.scryfall\.com\/.*/i,

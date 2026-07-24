@@ -26,11 +26,30 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let extractorP;
 const extractor = () => (extractorP ??= pipeline('image-feature-extraction', MODEL));
 
-/** L2-normalized embedding (Float array) of an image URL/path. */
+/** L2-normalized embedding (Float array) of an image URL/path.
+ * transformers.js returned the full patch grid [1, T, D] for DINOv2, so we
+ * mean-pool over the T tokens ourselves down to a single D-dim vector. */
 async function embed(src) {
   const img = await RawImage.read(src);
-  const out = await (await extractor())(img, { pooling: 'mean', normalize: true });
-  return Array.from(out.data);
+  const out = await (await extractor())(img);
+  const dims = out.dims;
+  const data = out.data;
+  // Expected [1, T, D]; fall back to treating the whole thing as one vector.
+  const [, T, D] = dims.length === 3 ? dims : [1, 1, data.length];
+  const v = new Float64Array(D);
+  for (let t = 0; t < T; t++) {
+    const off = t * D;
+    for (let d = 0; d < D; d++) v[d] += data[off + d];
+  }
+  let norm = 0;
+  for (let d = 0; d < D; d++) {
+    v[d] /= T;
+    norm += v[d] * v[d];
+  }
+  norm = Math.sqrt(norm) || 1;
+  const outVec = new Array(D);
+  for (let d = 0; d < D; d++) outVec[d] = v[d] / norm;
+  return outVec;
 }
 
 const cosine = (a, b) => {
@@ -66,7 +85,7 @@ async function build() {
   const rows = [];
   let done = 0;
   for (const card of cards.slice(0, limit)) {
-    const url = imgUri(card, 'normal');
+    const url = imgUri(card, process.env.IMGKIND || 'normal');
     if (!url) continue;
     try {
       rows.push({ id: card.id, name: card.name, set: card.set, vec: await embed(url) });
