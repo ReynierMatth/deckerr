@@ -34,6 +34,31 @@ describe('buildDeckExport', () => {
     ]);
     expect(out).toBe('1 Atraxa\n5 Forest');
   });
+
+  it('appends a Sideboard section after a blank line (plain)', () => {
+    const out = buildDeckExport([
+      { card: card({ name: 'Island' }), quantity: 10 },
+      { card: card({ name: 'Negate' }), quantity: 2, is_sideboard: true },
+      { card: card({ name: 'Duress' }), quantity: 1, is_sideboard: true },
+    ]);
+    expect(out).toBe('10 Island\n\nSideboard\n2 Negate\n1 Duress');
+  });
+
+  it('appends a Sideboard section in arena format with set/collector', () => {
+    const out = buildDeckExport(
+      [
+        { card: card({ name: 'Lightning Bolt', set: 'm10', collector_number: '146' }), quantity: 4 },
+        { card: card({ name: 'Negate', set: 'mom', collector_number: '58' }), quantity: 2, is_sideboard: true },
+      ],
+      'arena',
+    );
+    expect(out).toBe('4 Lightning Bolt (M10) 146\n\nSideboard\n2 Negate (MOM) 58');
+  });
+
+  it('omits the Sideboard header when there are no sideboard entries', () => {
+    const out = buildDeckExport([{ card: card({ name: 'Island' }), quantity: 10 }]);
+    expect(out).toBe('10 Island');
+  });
 });
 
 describe('buildDeckExport — csv', () => {
@@ -42,7 +67,7 @@ describe('buildDeckExport — csv', () => {
       [{ card: card({ name: 'Lightning Bolt', set: 'm10', collector_number: '146' }), quantity: 4 }],
       'csv',
     );
-    expect(out).toBe(`${DECK_CSV_HEADER}\n4,Lightning Bolt,m10,146,false`);
+    expect(out).toBe(`${DECK_CSV_HEADER}\n4,Lightning Bolt,m10,146,false,false`);
   });
 
   it('marks commanders and lists them first', () => {
@@ -53,17 +78,28 @@ describe('buildDeckExport — csv', () => {
       ],
       'csv',
     );
-    expect(out).toBe(`${DECK_CSV_HEADER}\n1,Atraxa,one,196,true\n5,Forest,,,false`);
+    expect(out).toBe(`${DECK_CSV_HEADER}\n1,Atraxa,one,196,true,false\n5,Forest,,,false,false`);
   });
 
   it('quotes names containing commas', () => {
     const out = buildDeckExport([{ card: card({ name: 'Who, What, When' }), quantity: 1 }], 'csv');
-    expect(out).toBe(`${DECK_CSV_HEADER}\n1,"Who, What, When",,,false`);
+    expect(out).toBe(`${DECK_CSV_HEADER}\n1,"Who, What, When",,,false,false`);
   });
 
   it('leaves set/collector empty when unknown', () => {
     const out = buildDeckExport([{ card: card({ name: 'Sol Ring' }), quantity: 1 }], 'csv');
-    expect(out).toBe(`${DECK_CSV_HEADER}\n1,Sol Ring,,,false`);
+    expect(out).toBe(`${DECK_CSV_HEADER}\n1,Sol Ring,,,false,false`);
+  });
+
+  it('marks sideboard entries in the is_sideboard column, after the mainboard', () => {
+    const out = buildDeckExport(
+      [
+        { card: card({ name: 'Island' }), quantity: 5 },
+        { card: card({ name: 'Negate' }), quantity: 2, is_sideboard: true },
+      ],
+      'csv',
+    );
+    expect(out).toBe(`${DECK_CSV_HEADER}\n5,Island,,,false,false\n2,Negate,,,false,true`);
   });
 });
 
@@ -101,5 +137,18 @@ describe('buildDeckExport — mtgo (.dek)', () => {
     expect(atraxa).toBeGreaterThan(-1);
     expect(forest).toBeGreaterThan(atraxa);
     expect(out).not.toContain('Gone');
+  });
+
+  it('flags sideboard entries with Sideboard="true" and lists them last', () => {
+    const out = buildDeckExport(
+      [
+        { card: card({ name: 'Island' }), quantity: 10 },
+        { card: card({ name: 'Negate' }), quantity: 2, is_sideboard: true },
+      ],
+      'mtgo',
+    );
+    expect(out).toContain('<Cards Quantity="10" Sideboard="false" Name="Island" />');
+    expect(out).toContain('<Cards Quantity="2" Sideboard="true" Name="Negate" />');
+    expect(out.indexOf('Name="Negate"')).toBeGreaterThan(out.indexOf('Name="Island"'));
   });
 });

@@ -12,7 +12,7 @@ import { useCollectionCounts } from './useCollectionCounts';
  * wishlist missing" flows with their optimistic cache updates.
  */
 export function useDeckCollectionActions(
-  selectedCards: { card: Card; quantity: number; is_commander: boolean }[],
+  selectedCards: { card: Card; quantity: number; is_commander: boolean; is_sideboard: boolean }[],
 ) {
   const { user } = useAuth();
   const toast = useToast();

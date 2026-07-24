@@ -10,7 +10,7 @@ interface UseDeckSaveParams {
   onSave?: () => void;
   deckName: string;
   deckFormat: string;
-  selectedCards: { card: Card; quantity: number; is_commander: boolean }[];
+  selectedCards: { card: Card; quantity: number; is_commander: boolean; is_sideboard: boolean }[];
   tags: string[];
   commander: Card | null;
 }
@@ -77,7 +77,7 @@ export function useDeckSave({
       const validation = validateDeck(deckToSave);
 
       // Determine cover card (commander or first card)
-      const commanderCard = deckFormat === 'commander' ? selectedCards.find(c => c.card.id === commander?.id) : null;
+      const commanderCard = deckFormat === 'commander' ? selectedCards.find(c => c.card.id === commander?.id && !c.is_sideboard) : null;
       const coverCard = commanderCard?.card || selectedCards[0]?.card;
       const coverCardId = coverCard?.id || null;
 
@@ -123,7 +123,9 @@ export function useDeckSave({
         deck_id: deckToSave.id,
         card_id: card.card.id,
         quantity: card.quantity,
-        is_commander: card.card.id === commander?.id,
+        // Commanders live on the mainboard only.
+        is_commander: !card.is_sideboard && card.card.id === commander?.id,
+        is_sideboard: card.is_sideboard,
       }));
 
       const { error: cardsError } = await supabase

@@ -62,9 +62,10 @@ export async function migrateExistingDecks() {
             card,
             quantity: Number(entity.quantity),
             is_commander: Boolean(entity.is_commander),
+            is_sideboard: Boolean(entity.is_sideboard),
           };
         })
-        .filter((c): c is { card: Card; quantity: number; is_commander: boolean } => c !== null);
+        .filter((c): c is { card: Card; quantity: number; is_commander: boolean; is_sideboard: boolean } => c !== null);
 
       // Create deck object for validation
       const deckToValidate: Deck = {

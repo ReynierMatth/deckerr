@@ -113,8 +113,11 @@ export function validateDeck(deck: Deck): DeckValidation {
     return { isValid: true, errors };
   }
 
+  // The sideboard carries no rules: validate the mainboard only.
+  const cards = deck.cards.filter((c) => !c.is_sideboard);
+
   // Count total cards
-  const totalCards = deck.cards.reduce((acc, curr) => acc + curr.quantity, 0);
+  const totalCards = cards.reduce((acc, curr) => acc + curr.quantity, 0);
 
   // Check minimum cards
   if (totalCards < rules.minCards) {
@@ -128,15 +131,14 @@ export function validateDeck(deck: Deck): DeckValidation {
 
   // Check card copies
   const cardCounts = new Map<string, number>();
-  for (const element of deck.cards) {
+  for (const element of cards) {
     const {card, quantity} = element;
-    //console.log("card", card);
     const currentCount = cardCounts.get(card.id) || 0;
     cardCounts.set(card.id, currentCount + quantity);
   }
 
   cardCounts.forEach((count, cardId) => {
-    const card = deck.cards.find(c => c.card.id === cardId)?.card;
+    const card = cards.find(c => c.card.id === cardId)?.card;
     if (!card) return;
 
     const limit = copyLimitFor(card, rules.maxCopies);
@@ -147,7 +149,7 @@ export function validateDeck(deck: Deck): DeckValidation {
 
   // Commander-style validations (commander / brawl / oathbreaker)
   if (rules.requiresCommander) {
-    const commander = deck.cards.find(card => card.is_commander)?.card;
+    const commander = cards.find(card => card.is_commander)?.card;
 
     if (!commander) {
       errors.push(
@@ -160,7 +162,7 @@ export function validateDeck(deck: Deck): DeckValidation {
     } else {
       // Check commander color identity
       const commanderColors = getCommanderColors(commander);
-      const invalidCards = deck.cards.filter(({ card, is_commander }) =>
+      const invalidCards = cards.filter(({ card, is_commander }) =>
         !is_commander && !isCardValidForCommander(card, commanderColors)
       );
 

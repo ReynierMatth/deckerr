@@ -21,7 +21,7 @@ interface PublicDeckData {
   coverCardId: string | null;
   ownerName: string | null;
   ownerHandle: string | null;
-  cards: { card: Card; quantity: number; is_commander: boolean }[];
+  cards: { card: Card; quantity: number; is_commander: boolean; is_sideboard: boolean }[];
 }
 
 const fetchPublicDeck = async (deckId: string): Promise<PublicDeckData | null> => {
@@ -53,9 +53,10 @@ const fetchPublicDeck = async (deckId: string): Promise<PublicDeckData | null> =
         card,
         quantity: entity.quantity as number,
         is_commander: Boolean(entity.is_commander),
+        is_sideboard: Boolean(entity.is_sideboard),
       };
     })
-    .filter((entry): entry is { card: Card; quantity: number; is_commander: boolean } => entry !== null);
+    .filter((entry): entry is { card: Card; quantity: number; is_commander: boolean; is_sideboard: boolean } => entry !== null);
 
   let ownerName: string | null = null;
   let ownerHandle: string | null = null;
@@ -106,11 +107,12 @@ const cloneDeck = async (deck: PublicDeckData, userId: string): Promise<string> 
   if (deckError) throw deckError;
 
   if (deck.cards.length > 0) {
-    const rows = deck.cards.map(({ card, quantity, is_commander }) => ({
+    const rows = deck.cards.map(({ card, quantity, is_commander, is_sideboard }) => ({
       deck_id: newDeckId,
       card_id: card.id,
       quantity,
       is_commander,
+      is_sideboard,
     }));
     const { error: cardsError } = await supabase.from('deck_cards').insert(rows);
     if (cardsError) {

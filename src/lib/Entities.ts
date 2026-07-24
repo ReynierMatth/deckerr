@@ -75,6 +75,7 @@ export type Database = {
                     deck_id: string
                     id: string
                     is_commander: boolean | null
+                    is_sideboard: boolean
                     quantity: number | null
                 }
                 Insert: {
@@ -82,6 +83,7 @@ export type Database = {
                     deck_id: string
                     id?: string
                     is_commander?: boolean | null
+                    is_sideboard?: boolean
                     quantity?: number | null
                 }
                 Update: {
@@ -89,6 +91,7 @@ export type Database = {
                     deck_id?: string
                     id?: string
                     is_commander?: boolean | null
+                    is_sideboard?: boolean
                     quantity?: number | null
                 }
                 Relationships: [

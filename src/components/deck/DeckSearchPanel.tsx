@@ -9,6 +9,7 @@ interface DeckCardEntry {
   card: Card;
   quantity: number;
   is_commander: boolean;
+  is_sideboard: boolean;
 }
 
 interface DeckSearchPanelProps {
@@ -28,8 +29,8 @@ interface DeckSearchPanelProps {
   getCurrentFaceIndex: (cardId: string) => number;
   toggleCardFace: (cardId: string, totalFaces: number) => void;
   addCardToDeck: (card: Card) => void;
-  removeCardFromDeck: (cardId: string) => void;
-  updateCardQuantity: (cardId: string, quantity: number) => void;
+  removeCardFromDeck: (cardId: string, isSideboard: boolean) => void;
+  updateCardQuantity: (cardId: string, quantity: number, isSideboard: boolean) => void;
   handleAddCardToCollection: (cardId: string, quantity: number) => void;
   setHoveredCard: React.Dispatch<React.SetStateAction<Card | null>>;
   setHoverSource: React.Dispatch<React.SetStateAction<'search' | 'deck' | null>>;
@@ -115,7 +116,7 @@ export default function DeckSearchPanel({
           const isMultiFaced = isDoubleFaced(card);
           const inCollection = userCollection[card.id] ?? 0;
           const isAddingThisCard = addingCardId === card.id;
-          const cardInDeck = selectedCards.find(c => c.card.id === card.id);
+          const cardInDeck = selectedCards.find(c => c.card.id === card.id && !c.is_sideboard);
           const quantityInDeck = cardInDeck?.quantity || 0;
 
           const displayName = isMultiFaced && card.card_faces
@@ -197,9 +198,9 @@ export default function DeckSearchPanel({
                   <button
                     onClick={() => {
                       if (quantityInDeck === 1) {
-                        removeCardFromDeck(card.id);
+                        removeCardFromDeck(card.id, false);
                       } else {
-                        updateCardQuantity(card.id, quantityInDeck - 1);
+                        updateCardQuantity(card.id, quantityInDeck - 1, false);
                       }
                     }}
                     className="w-8 h-8 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center transition-colors"
