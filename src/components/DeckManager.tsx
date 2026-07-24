@@ -287,10 +287,10 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     <div className="relative bg-gray-900 text-white p-3 sm:p-6 pt-6 pb-44 md:pt-20 md:pb-6 md:min-h-screen">
       <div className="max-w-7xl mx-auto">
         <div className="max-w-3xl mx-auto">
-          {/* Open the card-search drawer/modal */}
+          {/* Open the card-search drawer/modal (desktop; mobile uses the FAB) */}
           <button
             onClick={() => setShowSearch(true)}
-            className="w-full mb-4 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium text-white transition-colors"
+            className="hidden md:flex w-full mb-4 items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium text-white transition-colors"
           >
             <Search size={18} /> Add cards
           </button>
@@ -358,6 +358,15 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         isUpdate={Boolean(initialDeck)}
         onSave={saveDeck}
       />
+
+      {/* Mobile floating search button — opens the add-cards drawer, sits above the action bar */}
+      <button
+        onClick={() => setShowSearch(true)}
+        aria-label="Add cards"
+        className="md:hidden fixed right-4 bottom-48 z-30 w-14 h-14 flex items-center justify-center rounded-full bg-blue-600 active:bg-blue-700 text-white shadow-lg shadow-blue-600/30"
+      >
+        <Search size={24} />
+      </button>
 
       {/* Card search — bottom drawer on mobile, centered modal on desktop */}
       {showSearch && (
