@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, X } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { Card, Deck } from '../types';
 import { searchCards, resolveCardsByNames } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,6 +19,7 @@ import DeckCardList from './deck/DeckCardList';
 import DeckStats from './deck/DeckStats';
 import SampleHand from './deck/SampleHand';
 import DeckActionBar from './deck/DeckActionBar';
+import Modal from './Modal';
 
 interface DeckManagerProps {
   initialDeck?: Deck;
@@ -369,45 +370,35 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       </button>
 
       {/* Card search — bottom drawer on mobile, centered modal on desktop */}
-      {showSearch && (
-        <div className="fixed inset-0 z-40 flex items-end md:items-center md:justify-center">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setShowSearch(false)} />
-          <div className="relative w-full md:max-w-3xl bg-gray-900 border border-gray-700 rounded-t-2xl md:rounded-xl max-h-[90vh] md:max-h-[85vh] flex flex-col shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between p-3 border-b border-gray-700 bg-gray-900 rounded-t-2xl md:rounded-t-xl">
-              <h2 className="text-lg font-semibold text-white">Add cards</h2>
-              <button onClick={() => setShowSearch(false)} className="p-1 text-gray-400 hover:text-white">
-                <X size={20} />
-              </button>
-            </div>
-            <div className="overflow-y-auto p-3">
-              <DeckSearchPanel
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-                setSearchResults={setSearchResults}
-                handleSearch={handleSearch}
-                isSearching={isSearching}
-                searchResults={searchResults}
-                selectedCards={selectedCards}
-                userCollection={userCollection}
-                addingCardId={addingCardId}
-                deckFormat={deckFormat}
-                commander={commander}
-                commanderColors={commanderColors}
-                isCardValidForCommander={isCardValidForCommander}
-                getCurrentFaceIndex={getCurrentFaceIndex}
-                toggleCardFace={toggleCardFace}
-                addCardToDeck={addCardToDeck}
-                removeCardFromDeck={removeCardFromDeck}
-                updateCardQuantity={updateCardQuantity}
-                handleAddCardToCollection={handleAddCardToCollection}
-                setHoveredCard={setHoveredCard}
-                setHoverSource={setHoverSource}
-                setSelectedCard={setSelectedCard}
-              />
-            </div>
-          </div>
+      <Modal isOpen={showSearch} onClose={() => setShowSearch(false)} size="lg" labelledBy="add-cards-title">
+        <div className="p-3">
+          <h2 id="add-cards-title" className="text-lg font-semibold text-white mb-3 pr-8">Add cards</h2>
+          <DeckSearchPanel
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            setSearchResults={setSearchResults}
+            handleSearch={handleSearch}
+            isSearching={isSearching}
+            searchResults={searchResults}
+            selectedCards={selectedCards}
+            userCollection={userCollection}
+            addingCardId={addingCardId}
+            deckFormat={deckFormat}
+            commander={commander}
+            commanderColors={commanderColors}
+            isCardValidForCommander={isCardValidForCommander}
+            getCurrentFaceIndex={getCurrentFaceIndex}
+            toggleCardFace={toggleCardFace}
+            addCardToDeck={addCardToDeck}
+            removeCardFromDeck={removeCardFromDeck}
+            updateCardQuantity={updateCardQuantity}
+            handleAddCardToCollection={handleAddCardToCollection}
+            setHoveredCard={setHoveredCard}
+            setHoverSource={setHoverSource}
+            setSelectedCard={setSelectedCard}
+          />
         </div>
-      )}
+      </Modal>
 
       {showExport && (
         <DeckExportModal cards={selectedCards} deckName={deckName} onClose={() => setShowExport(false)} />
