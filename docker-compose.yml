@@ -1,22 +1,24 @@
-version: '3.8'
-
-# Simple deployment - Uses external Supabase (hosted or self-hosted separately)
-# For full self-hosted setup with Supabase included, use docker-compose.selfhosted.yml
+# Deckerr — static PWA served by nginx, behind Traefik.
+# Pulls the prebuilt image from GHCR (built by .github/workflows/release-image.yml
+# with the Supabase URL + anon key baked in). On the NAS you only need a .env with:
+#   DECKERR_HOST=deckerr.your-domain.tld   # the host Traefik routes to
+# then: docker compose pull && docker compose up -d
+#
+# To build locally instead of pulling, swap `image:` for a `build: .` block.
 
 services:
   deckerr:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+    image: ghcr.io/reyniermatth/deckerr:latest
     container_name: deckerr
-    ports:
-      - "${PORT:-3000}:80"
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80"]
       interval: 30s
       timeout: 10s
       retries: 3
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.deckerr.rule=(Host(`${DECKERR_HOST:-deckerr.example.com}`))
+      - traefik.http.routers.deckerr.tls=true
+      - traefik.http.routers.deckerr.tls.certresolver=myresolver
+      - traefik.http.services.deckerr.loadbalancer.server.port=80

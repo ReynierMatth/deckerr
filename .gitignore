@@ -43,3 +43,6 @@ vite.config.*.timestamp-*.mjs
 
 # Claude Code local (per-user) settings
 .claude/settings.local.json
+
+# Local MCP server config (per-developer project ref) — copy from .mcp.json.example
+.mcp.json

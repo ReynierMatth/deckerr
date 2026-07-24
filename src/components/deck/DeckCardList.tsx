@@ -1,9 +1,27 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Loader2, AlertCircle, X, Share2, Copy, Check, PackagePlus, CheckCircle } from 'lucide-react';
+import {
+  Plus, Trash2, Loader2, AlertCircle, X, Share2, Copy, Check, PackagePlus, CheckCircle,
+  Swords, Sparkles, Zap, Flame, Cog, Gem, Shield, Mountain, Layers,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Card } from '../../types';
 import { ManaSymbol } from '../ManaCost';
-import { getCardArtCrop } from '../../utils/cardFaces';
 import WishlistButton from '../WishlistButton';
+import CardRow from '../card/CardRow';
+import { groupCardsByType } from '../../utils/deckStats';
+
+/** Icon + accent colour per card-type section, Moxfield-style. */
+const TYPE_STYLES: Record<string, { icon: LucideIcon; color: string }> = {
+  Creature: { icon: Swords, color: 'text-green-400' },
+  Planeswalker: { icon: Sparkles, color: 'text-pink-400' },
+  Instant: { icon: Zap, color: 'text-cyan-400' },
+  Sorcery: { icon: Flame, color: 'text-orange-400' },
+  Artifact: { icon: Cog, color: 'text-slate-300' },
+  Enchantment: { icon: Gem, color: 'text-purple-400' },
+  Battle: { icon: Shield, color: 'text-red-400' },
+  Land: { icon: Mountain, color: 'text-amber-400' },
+  Other: { icon: Layers, color: 'text-gray-400' },
+};
 
 interface DeckCardEntry {
   card: Card;
@@ -39,7 +57,7 @@ interface DeckCardListProps {
   removeCardFromDeck: (cardId: string) => void;
   handleAddCardToCollection: (cardId: string, quantity: number) => void;
   addingCardId: string | null;
-  userCollection: Map<string, number>;
+  userCollection: Record<string, number>;
   setHoveredCard: React.Dispatch<React.SetStateAction<Card | null>>;
   setHoverSource: React.Dispatch<React.SetStateAction<'search' | 'deck' | null>>;
   setSelectedCard: React.Dispatch<React.SetStateAction<Card | null>>;
@@ -126,7 +144,10 @@ export default function DeckCardList({
         >
           <option value="standard">Standard</option>
           <option value="modern">Modern</option>
+          <option value="pioneer">Pioneer</option>
           <option value="commander">Commander</option>
+          <option value="brawl">Brawl</option>
+          <option value="oathbreaker">Oathbreaker</option>
           <option value="legacy">Legacy</option>
           <option value="vintage">Vintage</option>
           <option value="pauper">Pauper</option>
@@ -294,91 +315,93 @@ export default function DeckCardList({
           </div>
         )}
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between mb-4">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
             <h3 className="font-bold text-xl">
               Cards ({selectedCards.reduce((acc, curr) => acc + curr.quantity, 0)})
             </h3>
           </div>
 
-          {selectedCards.map(({ card, quantity }) => {
-            const isValidForCommander = deckFormat !== 'commander' || !commander || isCardValidForCommander(card, commanderColors);
-            const inCollection = userCollection.get(card.id) || 0;
-
+          {groupCardsByType(selectedCards).map(({ type, count, entries }) => {
+            const { icon: TypeIcon, color } = TYPE_STYLES[type] ?? TYPE_STYLES.Other;
             return (
-              <div
-                key={card.id}
-                className={`flex bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-750 transition-colors cursor-pointer ${
-                  !isValidForCommander ? 'ring-1 ring-yellow-500/50' : ''
-                }`}
-                onMouseEnter={() => {
-                  setHoveredCard(card);
-                  setHoverSource('deck');
-                }}
-                onMouseLeave={() => {
-                  setHoveredCard(null);
-                  setHoverSource(null);
-                }}
-                onClick={() => setSelectedCard(card)}
-              >
-                {/* Card art crop */}
-                <div className="relative w-16 h-16 flex-shrink-0">
-                  {getCardArtCrop(card) ? (
-                    <img src={getCardArtCrop(card)} alt={card.name} className="w-full h-full object-cover rounded-l-lg" />
-                  ) : (
-                    <div className="w-full h-full bg-gray-700 rounded-l-lg" />
-                  )}
+              <section key={type} className="space-y-2">
+                <div className="flex items-center gap-2 border-b border-gray-700 pb-1.5">
+                  <TypeIcon size={16} className={color} />
+                  <h4 className={`text-sm font-bold uppercase tracking-wide ${color}`}>{type}</h4>
+                  <span className="text-xs text-gray-500">({count})</span>
                 </div>
 
-                {/* Info */}
-                <div className="flex-1 p-2 flex flex-col justify-center min-w-0">
-                  <h4 className="font-bold text-sm truncate">{card.name}</h4>
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
-                    {card.prices?.usd && <span>${card.prices.usd}</span>}
-                    {inCollection > 0 && (
-                      <span className="text-green-400 flex items-center gap-0.5">
-                        <CheckCircle size={10} />
-                        x{inCollection}
-                      </span>
-                    )}
-                  </div>
-                  {!isValidForCommander && (
-                    <div className="text-xs text-yellow-400 flex items-center gap-1 mt-0.5">
-                      <AlertCircle size={10} />
-                      <span>Not in commander colors</span>
-                    </div>
-                  )}
-                </div>
+                {entries.map(({ card, quantity }) => {
+                  const isValidForCommander = deckFormat !== 'commander' || !commander || isCardValidForCommander(card, commanderColors);
+                  const inCollection = userCollection[card.id] ?? 0;
 
-                {/* Controls: quantity + remove-from-deck + wishlist + add-to-collection */}
-                <div className="flex items-center gap-1.5 p-2" onClick={(e) => e.stopPropagation()}>
-                  <input
-                    type="number"
-                    value={quantity}
-                    onChange={e => updateCardQuantity(card.id, parseInt(e.target.value))}
-                    min="1"
-                    className="w-12 px-1 py-2 bg-gray-700 border border-gray-600 rounded-lg text-center text-sm"
-                  />
-                  <button
-                    onClick={() => removeCardFromDeck(card.id)}
-                    title="Remove from deck"
-                    aria-label="Remove from deck"
-                    className="p-2.5 bg-gray-700 text-red-400 active:bg-gray-600 rounded-lg"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                  <WishlistButton cardId={card.id} variant="button" size={18} />
-                  <button
-                    onClick={() => handleAddCardToCollection(card.id, 1)}
-                    disabled={addingCardId === card.id}
-                    title="Add to collection"
-                    aria-label="Add to collection"
-                    className="p-2.5 bg-green-600 active:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg"
-                  >
-                    {addingCardId === card.id ? <Loader2 className="animate-spin" size={18} /> : <PackagePlus size={18} />}
-                  </button>
-                </div>
-              </div>
+                  return (
+                    <CardRow
+                      key={card.id}
+                      card={card}
+                      name={card.name}
+                      className={`hover:bg-gray-750 transition-colors cursor-pointer ${
+                        !isValidForCommander ? 'ring-1 ring-yellow-500/50' : ''
+                      }`}
+                      onMouseEnter={() => {
+                        setHoveredCard(card);
+                        setHoverSource('deck');
+                      }}
+                      onMouseLeave={() => {
+                        setHoveredCard(null);
+                        setHoverSource(null);
+                      }}
+                      onClick={() => setSelectedCard(card)}
+                      badges={
+                        inCollection > 0 && (
+                          <span className="text-green-400 flex items-center gap-0.5">
+                            <CheckCircle size={10} />
+                            x{inCollection}
+                          </span>
+                        )
+                      }
+                      warning={
+                        !isValidForCommander && (
+                          <>
+                            <AlertCircle size={10} />
+                            <span>Not in commander colors</span>
+                          </>
+                        )
+                      }
+                      actions={
+                        <>
+                          <input
+                            type="number"
+                            value={quantity}
+                            onChange={e => updateCardQuantity(card.id, parseInt(e.target.value))}
+                            min="1"
+                            className="w-12 px-1 py-2 bg-gray-700 border border-gray-600 rounded-lg text-center text-sm"
+                          />
+                          <button
+                            onClick={() => removeCardFromDeck(card.id)}
+                            title="Remove from deck"
+                            aria-label="Remove from deck"
+                            className="p-2.5 bg-gray-700 text-red-400 active:bg-gray-600 rounded-lg"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                          <WishlistButton cardId={card.id} variant="button" size={18} />
+                          <button
+                            onClick={() => handleAddCardToCollection(card.id, 1)}
+                            disabled={addingCardId === card.id}
+                            title="Add to collection"
+                            aria-label="Add to collection"
+                            className="p-2.5 bg-green-600 active:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg"
+                          >
+                            {addingCardId === card.id ? <Loader2 className="animate-spin" size={18} /> : <PackagePlus size={18} />}
+                          </button>
+                        </>
+                      }
+                    />
+                  );
+                })}
+              </section>
             );
           })}
         </div>

@@ -67,6 +67,25 @@ describe('validateDeck — standard', () => {
   });
 });
 
+describe('validateDeck — pioneer', () => {
+  it('accepts a 60-card deck with <= 4 copies each', () => {
+    const cards = Array.from({ length: 15 }, (_, i) => entry(card(`c${i}`), 4));
+    const result = validateDeck(deck({ format: 'pioneer', cards }));
+    expect(result.isValid).toBe(true);
+  });
+
+  it('rejects a deck below 60 cards', () => {
+    const result = validateDeck(deck({ format: 'pioneer', cards: [entry(card('c1'), 4)] }));
+    expect(result.errors).toContain('Deck must contain at least 60 cards');
+  });
+
+  it('rejects more than 4 copies of a non-basic card', () => {
+    const cards = [entry(card('big'), 5), ...Array.from({ length: 14 }, (_, i) => entry(card(`c${i}`), 4))];
+    const result = validateDeck(deck({ format: 'pioneer', cards }));
+    expect(result.errors).toContain('big has too many copies (max 4)');
+  });
+});
+
 describe('validateDeck — commander', () => {
   const filler = (n: number, colors?: string[]) =>
     Array.from({ length: n }, (_, i) => entry(card(`f${i}`, colors ? { colors } : {}), 1));
@@ -95,6 +114,68 @@ describe('validateDeck — commander', () => {
   it('accepts a legal mono-green commander deck', () => {
     const cards = [entry(card('cmd', { colors: ['G'] }), 1, true), ...filler(99, ['G'])];
     const result = validateDeck(deck({ format: 'commander', cards }));
+    expect(result.isValid).toBe(true);
+  });
+});
+
+describe('validateDeck — brawl', () => {
+  const filler = (n: number, colors?: string[]) =>
+    Array.from({ length: n }, (_, i) => entry(card(`f${i}`, colors ? { colors } : {}), 1));
+
+  it('requires a commander', () => {
+    const result = validateDeck(deck({ format: 'brawl', cards: filler(60) }));
+    expect(result.errors).toContain('Brawl deck must have a commander');
+  });
+
+  it('enforces the exact 60-card size', () => {
+    const over = validateDeck(deck({ format: 'brawl', cards: [entry(card('cmd', { colors: ['R'] }), 1, true), ...filler(60, ['R'])] }));
+    expect(over.errors).toContain('Deck must not contain more than 60 cards');
+    const under = validateDeck(deck({ format: 'brawl', cards: [entry(card('cmd', { colors: ['R'] }), 1, true), ...filler(30, ['R'])] }));
+    expect(under.errors).toContain('Deck must contain at least 60 cards');
+  });
+
+  it('enforces singleton copies', () => {
+    const cards = [entry(card('cmd', { colors: ['R'] }), 1, true), entry(card('dup', { colors: ['R'] }), 2), ...filler(57, ['R'])];
+    const result = validateDeck(deck({ format: 'brawl', cards }));
+    expect(result.errors).toContain('dup has too many copies (max 1)');
+  });
+
+  it('flags cards outside the commander color identity', () => {
+    const cards = [
+      entry(card('cmd', { colors: ['R'] }), 1, true),
+      entry(card('offcolor', { colors: ['U'] }), 1),
+      ...filler(58, ['R']),
+    ];
+    const result = validateDeck(deck({ format: 'brawl', cards }));
+    expect(result.errors).toContain("Some cards don't match commander's color identity");
+  });
+
+  it('accepts a legal mono-red brawl deck', () => {
+    const cards = [entry(card('cmd', { colors: ['R'] }), 1, true), ...filler(59, ['R'])];
+    const result = validateDeck(deck({ format: 'brawl', cards }));
+    expect(result.isValid).toBe(true);
+  });
+});
+
+describe('validateDeck — oathbreaker', () => {
+  const filler = (n: number, colors?: string[]) =>
+    Array.from({ length: n }, (_, i) => entry(card(`f${i}`, colors ? { colors } : {}), 1));
+
+  it('requires an oathbreaker', () => {
+    const result = validateDeck(deck({ format: 'oathbreaker', cards: filler(60) }));
+    expect(result.errors).toContain('Oathbreaker deck must have an oathbreaker');
+  });
+
+  it('enforces the exact 60-card size and singleton copies', () => {
+    const over = validateDeck(deck({ format: 'oathbreaker', cards: [entry(card('ob', { colors: ['B'] }), 1, true), ...filler(60, ['B'])] }));
+    expect(over.errors).toContain('Deck must not contain more than 60 cards');
+    const dup = validateDeck(deck({ format: 'oathbreaker', cards: [entry(card('ob', { colors: ['B'] }), 1, true), entry(card('dup', { colors: ['B'] }), 2), ...filler(57, ['B'])] }));
+    expect(dup.errors).toContain('dup has too many copies (max 1)');
+  });
+
+  it('accepts a legal mono-black oathbreaker deck', () => {
+    const cards = [entry(card('ob', { colors: ['B'] }), 1, true), ...filler(59, ['B'])];
+    const result = validateDeck(deck({ format: 'oathbreaker', cards }));
     expect(result.isValid).toBe(true);
   });
 });

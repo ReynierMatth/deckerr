@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Save } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 
 type Visibility = 'public' | 'friends' | 'private';
+
+interface ProfileRow {
+  username: string | null;
+  collection_visibility: Visibility | null;
+}
 
 const VISIBILITY_OPTIONS = [
   { value: 'public', label: 'Public', description: 'Anyone can view' },
@@ -16,46 +22,55 @@ const VISIBILITY_OPTIONS = [
 export default function ProfileSettings() {
   const { user } = useAuth();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const [username, setUsername] = useState('');
   const [collectionVisibility, setCollectionVisibility] = useState<Visibility>('private');
-  const [savingProfile, setSavingProfile] = useState(false);
 
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    (async () => {
+  const { data: profile } = useQuery({
+    queryKey: ['profile', user?.id],
+    enabled: !!user,
+    queryFn: async (): Promise<ProfileRow | null> => {
       const { data } = await supabase
         .from('profiles')
         .select('username, collection_visibility')
-        .eq('id', user.id)
+        .eq('id', user!.id)
         .single();
-      if (data && !cancelled) {
-        setUsername(data.username || '');
-        setCollectionVisibility(data.collection_visibility || 'private');
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
+      return data;
+    },
+  });
 
-  const handleSaveProfile = async () => {
-    if (!user) return;
-    setSavingProfile(true);
-    try {
+  // Seed the editable form fields once the profile loads.
+  useEffect(() => {
+    if (!profile) return;
+    setUsername(profile.username || '');
+    setCollectionVisibility(profile.collection_visibility || 'private');
+  }, [profile]);
+
+  const saveProfile = useMutation({
+    mutationFn: async () => {
       const { error } = await supabase.from('profiles').upsert({
-        id: user.id,
+        id: user!.id,
         username,
         collection_visibility: collectionVisibility,
         updated_at: new Date(),
       });
       if (error) throw error;
+    },
+    onSuccess: () => {
+      // Prefix invalidation also refreshes ['profile', 'username', userId] in Navigation.
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
       toast.success('Profile updated!');
-    } catch {
+    },
+    onError: () => {
       toast.error('Failed to update profile');
-    } finally {
-      setSavingProfile(false);
-    }
+    },
+  });
+
+  const savingProfile = saveProfile.isPending;
+
+  const handleSaveProfile = () => {
+    if (!user) return;
+    saveProfile.mutate();
   };
 
   return (

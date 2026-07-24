@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Library, LogOut, ChevronDown, Search, Heart, HeartPulse, Users, Bell, MoreHorizontal, X } from 'lucide-react';
+import { Library, LogOut, ChevronDown, Compass, Search, Heart, HeartPulse, Users, Bell, MoreHorizontal, ScanLine, X } from 'lucide-react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
@@ -43,7 +43,9 @@ export default function Navigation() {
     { to: '/collection', label: 'Collection', icon: Library },
     { to: '/wishlist', label: 'Wishlist', icon: Heart },
     { to: '/community', label: 'Community', icon: Users },
+    { to: '/discover', label: 'Discover', icon: Compass },
     { to: '/search', label: 'Search', icon: Search },
+    { to: '/scan', label: 'Scan', icon: ScanLine },
     { to: '/life-counter', label: 'Life', icon: HeartPulse },
     { to: '/alerts', label: 'Alerts', icon: Bell },
   ] as const;
@@ -170,7 +172,11 @@ export default function Navigation() {
           <div className="absolute bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 rounded-t-2xl p-4 pb-8 safe-area-bottom animate-slide-in-up">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-semibold text-gray-300">More</span>
-              <button onClick={() => setShowMore(false)} className="p-1 text-gray-400 hover:text-white">
+              <button
+                onClick={() => setShowMore(false)}
+                aria-label="Close menu"
+                className="p-2.5 -m-1.5 text-gray-400 hover:text-white"
+              >
                 <X size={20} />
               </button>
             </div>
