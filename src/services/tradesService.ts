@@ -18,13 +18,15 @@ export interface Trade {
   id: string;
   user1_id: string;
   user2_id: string;
-  status: 'pending' | 'accepted' | 'declined' | 'cancelled';
+  status: 'pending' | 'completed' | 'declined' | 'cancelled';
   message: string | null;
   created_at: string | null;
   updated_at: string | null;
   version: number;
   editor_id: string | null;
   is_valid: boolean;
+  user1_confirmed: boolean;
+  user2_confirmed: boolean;
   user1?: ProfileNames;
   user2?: ProfileNames;
   items?: TradeItem[];
@@ -165,33 +167,16 @@ export async function createTrade(params: CreateTradeParams): Promise<Trade> {
   return trade;
 }
 
-// Accept a trade (executes the card transfer)
-export async function acceptTrade(tradeId: string): Promise<boolean> {
-  // First check if the trade is valid
-  const { data: trade, error: tradeError } = await supabase
-    .from('trades')
-    .select('is_valid, status')
-    .eq('id', tradeId)
-    .single();
-
-  if (tradeError) throw tradeError;
-
-  // Prevent accepting invalid trades
-  if (!trade.is_valid) {
-    throw new Error('This trade is no longer valid. One or more cards are no longer available in the required quantities.');
-  }
-
-  // Prevent accepting non-pending trades
-  if (trade.status !== 'pending') {
-    throw new Error('This trade has already been processed.');
-  }
-
-  const { data, error } = await supabase.rpc('execute_trade', {
-    trade_id: tradeId,
+// Confirm your side of a physical exchange. The RPC removes the cards you give
+// and adds the cards you receive to YOUR OWN collection (clamped), flips your
+// confirmed flag, and marks the trade 'completed' once both sides confirm.
+// Idempotent server-side.
+export async function confirmTrade(tradeId: string): Promise<void> {
+  const { error } = await supabase.rpc('confirm_trade', {
+    p_trade_id: tradeId,
   });
 
   if (error) throw error;
-  return data as boolean;
 }
 
 // Decline a trade
@@ -231,7 +216,7 @@ export async function getTradeHistory(userId: string): Promise<Trade[]> {
       items:trade_items(*)
     `)
     .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
-    .in('status', ['accepted', 'declined', 'cancelled'])
+    .in('status', ['completed', 'declined', 'cancelled'])
     .order('updated_at', { ascending: false })
     .limit(50);
 
@@ -246,11 +231,16 @@ export async function updateTrade(params: UpdateTradeParams): Promise<Trade> {
   // Get current trade info
   const { data: currentTrade, error: tradeError } = await supabase
     .from('trades')
-    .select('version, user1_id, user2_id')
+    .select('version, user1_id, user2_id, user1_confirmed, user2_confirmed')
     .eq('id', tradeId)
     .single();
 
   if (tradeError) throw tradeError;
+
+  // Terms lock once anyone has confirmed the physical exchange.
+  if (currentTrade.user1_confirmed || currentTrade.user2_confirmed) {
+    throw new Error('Cannot change terms after a confirmation');
+  }
 
   const newVersion = (currentTrade.version || 1) + 1;
 

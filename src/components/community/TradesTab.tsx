@@ -8,8 +8,6 @@ import { supabase } from '../../lib/supabase';
 import {
   getTrades,
   getTradeHistory,
-  acceptTrade,
-  declineTrade,
   cancelTrade,
   Trade,
   TradeItem,
@@ -117,38 +115,6 @@ export default function TradesTab() {
     };
   }, [user, queryClient]);
 
-  const handleAcceptTrade = async (tradeId: string) => {
-    setProcessingTradeId(tradeId);
-    try {
-      const success = await acceptTrade(tradeId);
-      if (success) {
-        queryClient.invalidateQueries({ queryKey: ['trades', user?.id] });
-        // Cards changed hands: refresh any cached collection data.
-        queryClient.invalidateQueries({ queryKey: ['collection'] });
-        toast.success('Trade accepted! Cards exchanged.');
-      } else {
-        toast.error('Failed. Check your collection.');
-      }
-    } catch {
-      toast.error('Error accepting trade');
-    } finally {
-      setProcessingTradeId(null);
-    }
-  };
-
-  const handleDeclineTrade = async (tradeId: string) => {
-    setProcessingTradeId(tradeId);
-    try {
-      await declineTrade(tradeId);
-      queryClient.invalidateQueries({ queryKey: ['trades', user?.id] });
-      toast.info('Trade declined');
-    } catch {
-      toast.error('Error declining trade');
-    } finally {
-      setProcessingTradeId(null);
-    }
-  };
-
   const handleCancelTrade = (tradeId: string) => {
     setConfirmModal({
       isOpen: true,
@@ -250,12 +216,29 @@ export default function TradesTab() {
             const myUserId = user?.id || '';
             const otherUserId = isUser1 ? trade.user2_id : trade.user1_id;
             const otherUser = isUser1 ? trade.user2 : trade.user1;
+            const myConfirmed = isUser1 ? trade.user1_confirmed : trade.user2_confirmed;
+            const theirConfirmed = isUser1 ? trade.user2_confirmed : trade.user1_confirmed;
+            const someoneConfirmed = trade.user1_confirmed || trade.user2_confirmed;
             const statusColors: Record<string, string> = {
-              accepted: 'text-green-400',
+              completed: 'text-green-400',
               declined: 'text-red-400',
               cancelled: 'text-gray-400',
               pending: 'text-yellow-400',
             };
+
+            // Compact status + confirmation summary.
+            let statusLabel: string = trade.status;
+            if (trade.status === 'pending') {
+              const marks = [
+                myConfirmed ? 'you ✓' : null,
+                theirConfirmed ? 'them ✓' : null,
+              ].filter(Boolean);
+              statusLabel = marks.length
+                ? `Awaiting · ${marks.join(' ')}`
+                : 'Awaiting confirmations';
+            } else if (trade.status === 'completed') {
+              statusLabel = 'Completed';
+            }
 
             // Both users can view details for pending trades
             const canViewDetails = trade.status === 'pending';
@@ -282,8 +265,8 @@ export default function TradesTab() {
                         <AlertTriangle size={14} className="text-red-400" />
                       </span>
                     )}
-                    <span className={`text-xs capitalize ${statusColors[trade.status]}`}>
-                      {trade.status}
+                    <span className={`text-xs ${statusColors[trade.status]}`}>
+                      {statusLabel}
                     </span>
                   </div>
                 </div>
@@ -300,13 +283,13 @@ export default function TradesTab() {
                   </p>
                 )}
 
-                {/* Actions - Allow any user to cancel pending trade */}
-                {tradesSubTab === 'pending' && (
+                {/* Cancel only while neither side has confirmed — terms lock on first confirmation. */}
+                {tradesSubTab === 'pending' && !someoneConfirmed && (
                   <div className="flex gap-2 pt-2 border-t border-gray-700" onClick={(e) => e.stopPropagation()}>
                     <button
                       onClick={() => handleCancelTrade(trade.id)}
                       disabled={processingTradeId === trade.id}
-                      className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-gray-700 rounded-lg text-sm"
+                      className="flex-1 flex items-center justify-center gap-1 px-3 py-2 min-h-[44px] bg-gray-700 rounded-lg text-sm"
                     >
                       <X size={14} /> Cancel
                     </button>
@@ -323,8 +306,6 @@ export default function TradesTab() {
         <TradeDetail
           trade={selectedTrade}
           onClose={() => setSelectedTrade(null)}
-          onAccept={handleAcceptTrade}
-          onDecline={handleDeclineTrade}
           onTradeUpdated={() => {
             setSelectedTrade(null);
             queryClient.invalidateQueries({ queryKey: ['trades', user?.id] });
