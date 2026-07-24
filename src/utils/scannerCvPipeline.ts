@@ -12,7 +12,7 @@
  * bundle. On first use transformers.js downloads the DINOv2 weights from the
  * Hugging Face CDN (network required once; cached by the browser afterwards).
  */
-import type { ImageFeatureExtractionPipeline } from '@xenova/transformers';
+import type { ImageFeatureExtractionPipeline } from '@huggingface/transformers';
 import { loadArtIndex, matchTopK, type ArtIndex, type ArtMatch } from './artIndex';
 
 /** Full type of the OpenCV.js module namespace (all functions/classes typed). */
@@ -118,18 +118,38 @@ function loadCv(): Promise<CvModule> {
   return cvPromise;
 }
 
-/** Lazy-load transformers.js (its own chunk) and build the DINOv2 extractor. */
+/**
+ * Lazy-load transformers.js (its own chunk) and build the DINOv2 extractor.
+ * Prefers the WebGPU backend (runs on the GPU — dramatically faster than the
+ * CPU-bound WASM backend for a ViT); falls back to WASM when the browser has no
+ * WebGPU (older Firefox, etc.) so scanning still works, just slower. dtype is
+ * fp32 on both backends to stay bit-for-bit aligned with the offline index,
+ * which scripts/build-art-index.mjs builds at fp32.
+ */
 function loadEmbedder(): Promise<ImageFeatureExtractionPipeline> {
   if (!embedderPromise) {
-    embedderPromise = import('@xenova/transformers').then(({ pipeline, env }) => {
+    embedderPromise = import('@huggingface/transformers').then(async ({ pipeline, env }) => {
       // Fetch the model straight from the HF CDN — don't probe our own origin
       // for a local copy first (it would 404).
       env.allowLocalModels = false;
-      console.info('[scan-cv] loading DINOv2 (transformers.js WASM)…');
-      return pipeline('image-feature-extraction', 'Xenova/dinov2-small').then((p) => {
-        console.info('[scan-cv] embedder ready');
-        return p;
-      });
+      const build = (device: 'webgpu' | 'wasm') =>
+        pipeline('image-feature-extraction', 'Xenova/dinov2-small', { device, dtype: 'fp32' });
+      const hasWebGpu = typeof navigator !== 'undefined' && 'gpu' in navigator;
+      if (hasWebGpu) {
+        try {
+          console.info('[scan-cv] loading DINOv2 on WebGPU…');
+          const p = await build('webgpu');
+          console.info('[scan-cv] embedder ready (WebGPU)');
+          return p;
+        } catch (err) {
+          console.warn('[scan-cv] WebGPU init failed, falling back to WASM:', err);
+        }
+      } else {
+        console.info('[scan-cv] no WebGPU in this browser — using WASM (slower)');
+      }
+      const p = await build('wasm');
+      console.info('[scan-cv] embedder ready (WASM)');
+      return p;
     });
   }
   return embedderPromise;
@@ -306,9 +326,8 @@ export async function runScan(video: HTMLVideoElement): Promise<ScanOutcome> {
 
   // 2. Embed the art crop with DINOv2 (mean-pooled, L2-normalized).
   const embedStart = performance.now();
-  const { RawImage } = await import('@xenova/transformers');
+  const { RawImage } = await import('@huggingface/transformers');
   const image = new RawImage(artData.data, artData.width, artData.height, 4);
-  console.info('[scan-cv] embedding… (first run on WASM can be very slow; WebGPU is much faster)');
   const output = await embedder(image);
   const query = poolEmbedding(output.data as Float32Array, output.dims);
   const embedMs = performance.now() - embedStart;
