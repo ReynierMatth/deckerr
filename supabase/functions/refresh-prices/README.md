@@ -9,7 +9,7 @@ runs server-side as a Supabase Edge Function — not from the app.
 ```bash
 # one-time
 supabase login
-supabase link --project-ref rcuszbcptinrhuznnsvo
+supabase link --project-ref <your-project-ref>
 
 # deploy the function
 supabase functions deploy refresh-prices
@@ -29,7 +29,7 @@ select cron.schedule(
   '0 6 * * *',
   $$
   select net.http_post(
-    url    := 'https://rcuszbcptinrhuznnsvo.supabase.co/functions/v1/refresh-prices',
+    url    := 'https://<your-project-ref>.supabase.co/functions/v1/refresh-prices',
     headers:= jsonb_build_object(
       'Content-Type','application/json',
       'Authorization','Bearer ' || current_setting('app.settings.service_role_key', true)
