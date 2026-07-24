@@ -75,7 +75,7 @@ export default defineConfig({
         // The experimental CV scanner's OpenCV.js (~15 MB) and transformers.js
         // chunks are dynamically imported only on /scan-cv — keep them out of
         // the precache (OpenCV also exceeds the size cap); they load on demand.
-        globIgnores: ['**/config.js', '**/opencv-*.js', '**/transformers-*.js'],
+        globIgnores: ['**/config.js', '**/opencv-*.js', '**/transformers*.js', '**/ort-*.js', '**/*.wasm'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/api\.scryfall\.com\/.*/i,

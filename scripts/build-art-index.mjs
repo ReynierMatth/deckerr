@@ -22,7 +22,7 @@
  * every 500. FRESH=1 to start over.
  */
 import { writeFile, readFile } from 'node:fs/promises';
-import { pipeline, RawImage } from '@xenova/transformers';
+import { pipeline, RawImage } from '@huggingface/transformers';
 
 const MODEL = process.env.MODEL || 'Xenova/dinov2-small';
 const DIM = 384;
@@ -31,8 +31,11 @@ const OUTBASE = process.env.OUTBASE || 'public/card-art-index';
 const UA = 'Deckerr/1.0 (scanner art index)';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// fp32 to match the browser pipeline (scannerCvPipeline.ts) so on-device query
+// vectors align with these index vectors. The backend (CPU here, WebGPU in the
+// browser) doesn't change the output; the dtype does.
 let extractorP;
-const extractor = () => (extractorP ??= pipeline('image-feature-extraction', MODEL));
+const extractor = () => (extractorP ??= pipeline('image-feature-extraction', MODEL, { dtype: 'fp32' }));
 
 async function embed(src) {
   const img = await RawImage.read(src);
