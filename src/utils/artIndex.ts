@@ -43,6 +43,7 @@ let indexPromise: Promise<ArtIndex> | null = null;
 export function loadArtIndex(): Promise<ArtIndex> {
   if (!indexPromise) {
     indexPromise = (async () => {
+      console.info('[scan-cv] loading art index (.json + .bin)…');
       const [metaRes, binRes] = await Promise.all([
         fetch('/card-art-index.json'),
         fetch('/card-art-index.bin'),
@@ -52,6 +53,7 @@ export function loadArtIndex(): Promise<ArtIndex> {
       }
       const meta = (await metaRes.json()) as ArtIndexMeta;
       const rows = new Int8Array(await binRes.arrayBuffer());
+      console.info(`[scan-cv] art index loaded (${meta.count} vecs)`);
       return { model: meta.model, dim: meta.dim, scale: meta.scale, ids: meta.ids, rows };
     })();
   }
