@@ -98,8 +98,8 @@ export default function ScannerCV() {
   }, [busy]);
 
   return (
-    <div className="min-h-full bg-gray-900 text-white p-4 pb-24 space-y-4 animate-fade-in">
-      <header className="flex items-center gap-2">
+    <div className="min-h-full bg-gray-900 text-white p-4 pb-24 animate-fade-in">
+      <header className="flex items-center gap-2 mb-4">
         <ScanEye className="text-blue-400" size={24} />
         <div>
           <h1 className="text-xl font-bold">Scan CV (beta)</h1>
@@ -109,8 +109,13 @@ export default function ScannerCV() {
         </div>
       </header>
 
+      {/* 3-column debug layout on wide screens: camera | pipeline images |
+          results. Stacks vertically on mobile. */}
+      <div className="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-3 lg:gap-6 lg:items-start">
+      {/* Column 1 — camera + capture */}
+      <div className="space-y-4">
       {/* Camera preview */}
-      <div className="relative w-full max-w-md mx-auto aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-gray-700">
+      <div className="relative w-full max-w-md mx-auto lg:max-w-none lg:mx-0 aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-gray-700">
         <video
           ref={videoRef}
           playsInline
@@ -158,7 +163,7 @@ export default function ScannerCV() {
       <button
         onClick={handleCapture}
         disabled={cameraState !== 'ready' || busy}
-        className="w-full max-w-md mx-auto flex items-center justify-center gap-2 h-14 rounded-xl bg-blue-600 active:bg-blue-700 disabled:opacity-50 font-semibold text-lg shadow-lg shadow-blue-600/30"
+        className="w-full max-w-md mx-auto lg:max-w-none lg:mx-0 flex items-center justify-center gap-2 h-14 rounded-xl bg-blue-600 active:bg-blue-700 disabled:opacity-50 font-semibold text-lg shadow-lg shadow-blue-600/30"
       >
         {busy ? (
           <>
@@ -173,20 +178,71 @@ export default function ScannerCV() {
       </button>
 
       {error && (
-        <div className="max-w-md mx-auto rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
+        <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
           {error}
         </div>
       )}
 
       {noCard && (
-        <div className="max-w-md mx-auto rounded-xl border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm text-yellow-200">
+        <div className="rounded-xl border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm text-yellow-200">
           No card outline found. Fill the frame with a single card on a contrasting
           surface, hold steady, and capture again.
         </div>
       )}
+      </div>
+      {/* End column 1 */}
 
-      {result && (
-        <div className="max-w-md mx-auto space-y-4">
+      {/* Column 2 — pipeline images */}
+      <div>
+        {result ? (
+          <section>
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-gray-300 mb-2">
+              <Sparkles size={16} /> What OpenCV extracted
+            </h2>
+            <figure className="mb-3">
+              <img
+                src={result.frameUrl}
+                alt="Original frame with detected outline"
+                className="w-full rounded-lg border border-gray-700"
+              />
+              <figcaption className="mt-1 text-center text-[11px] text-gray-400">
+                Original input (cyan = detected card)
+              </figcaption>
+            </figure>
+            <div className="flex gap-3">
+              <figure className="flex-1">
+                <img
+                  src={result.rectifiedUrl}
+                  alt="Rectified card"
+                  className="w-full rounded-lg border border-gray-700"
+                />
+                <figcaption className="mt-1 text-center text-[11px] text-gray-400">
+                  Rectified card
+                </figcaption>
+              </figure>
+              <figure className="flex-1">
+                <img
+                  src={result.artUrl}
+                  alt="Cropped art region"
+                  className="w-full rounded-lg border border-gray-700"
+                />
+                <figcaption className="mt-1 text-center text-[11px] text-gray-400">
+                  Art crop (embedded)
+                </figcaption>
+              </figure>
+            </div>
+          </section>
+        ) : (
+          <div className="hidden lg:flex h-full min-h-[12rem] items-center justify-center rounded-lg border border-dashed border-gray-700 text-sm text-gray-500">
+            Pipeline images appear here after a capture
+          </div>
+        )}
+      </div>
+
+      {/* Column 3 — results */}
+      <div>
+      {result ? (
+        <div className="space-y-4">
           {/* Top-5 matches */}
           <section>
             <h2 className="text-sm font-semibold text-gray-300 mb-2">Top 5 matches</h2>
@@ -243,37 +299,16 @@ export default function ScannerCV() {
               ))}
             </dl>
           </section>
-
-          {/* Debug thumbnails */}
-          <section>
-            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-gray-300 mb-2">
-              <Sparkles size={16} /> What OpenCV extracted
-            </h2>
-            <div className="flex gap-3">
-              <figure className="flex-1">
-                <img
-                  src={result.rectifiedUrl}
-                  alt="Rectified card"
-                  className="w-full rounded-lg border border-gray-700"
-                />
-                <figcaption className="mt-1 text-center text-[11px] text-gray-400">
-                  Rectified card
-                </figcaption>
-              </figure>
-              <figure className="flex-1">
-                <img
-                  src={result.artUrl}
-                  alt="Cropped art region"
-                  className="w-full rounded-lg border border-gray-700"
-                />
-                <figcaption className="mt-1 text-center text-[11px] text-gray-400">
-                  Art crop (embedded)
-                </figcaption>
-              </figure>
-            </div>
-          </section>
+        </div>
+      ) : (
+        <div className="hidden lg:flex h-full min-h-[12rem] items-center justify-center rounded-lg border border-dashed border-gray-700 text-sm text-gray-500">
+          Matches appear here after a capture
         </div>
       )}
+      </div>
+      {/* End column 3 */}
+      </div>
+      {/* End 3-column layout */}
     </div>
   );
 }
