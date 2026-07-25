@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, ScanEye, Sparkles, Timer } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Camera, ScanEye, Sparkles, Timer, Type } from 'lucide-react';
 import type { Card } from '../types';
 import { getCardsByIds } from '../services/api';
 import { preloadScannerCv, runScan, type ScanSuccess } from '../utils/scannerCvPipeline';
+import { sharedTokenCount } from '../utils/nameMatch';
 
 type CameraState = 'starting' | 'ready' | 'denied' | 'unavailable';
 
@@ -96,6 +97,21 @@ export default function ScannerCV() {
       setBusy(false);
     }
   }, [busy]);
+
+  // Reconcile the noisy art-embedding ranking with the OCR'd title: re-rank
+  // candidates by how many title words they share, breaking ties by embedding
+  // score. A card the title agrees with jumps ahead of a near-tie art match.
+  const ranked = useMemo(() => {
+    if (!result) return [];
+    const ocr = result.ocrTitle ?? '';
+    return result.matches
+      .map((m) => {
+        const card = cardsById.get(m.id);
+        const ocrHits = ocr && card ? sharedTokenCount(ocr, card.name) : 0;
+        return { ...m, card, ocrHits };
+      })
+      .sort((a, b) => b.ocrHits - a.ocrHits || b.score - a.score);
+  }, [result, cardsById]);
 
   return (
     <div className="min-h-full bg-gray-900 text-white p-4 pb-24 animate-fade-in">
@@ -243,12 +259,21 @@ export default function ScannerCV() {
       <div>
       {result ? (
         <div className="space-y-4">
-          {/* Top-5 matches */}
+          {/* OCR title read from the rectified card */}
+          {result.ocrTitle && (
+            <div className="flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm">
+              <Type size={16} className="flex-shrink-0 text-emerald-400" />
+              <span className="text-gray-400">OCR&nbsp;title:</span>
+              <span className="truncate font-medium text-emerald-200">{result.ocrTitle}</span>
+            </div>
+          )}
+
+          {/* Top-5 matches (re-ranked by OCR title agreement) */}
           <section>
             <h2 className="text-sm font-semibold text-gray-300 mb-2">Top 5 matches</h2>
             <ol className="space-y-2">
-              {result.matches.map((match, i) => {
-                const card = cardsById.get(match.id);
+              {ranked.map((match, i) => {
+                const card = match.card;
                 return (
                   <li
                     key={match.id}
@@ -270,6 +295,11 @@ export default function ScannerCV() {
                         </p>
                       )}
                     </div>
+                    {match.ocrHits > 0 && (
+                      <span className="flex-shrink-0 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
+                        OCR
+                      </span>
+                    )}
                     <span className="flex-shrink-0 font-mono text-sm text-blue-200">
                       {match.score.toFixed(3)}
                     </span>
