@@ -13,6 +13,7 @@
  * Hugging Face CDN (network required once; cached by the browser afterwards).
  */
 import type { ImageFeatureExtractionPipeline } from '@huggingface/transformers';
+import type { Worker as TesseractWorker } from 'tesseract.js';
 import { loadArtIndex, matchTopK, type ArtIndex, type ArtMatch } from './artIndex';
 
 /** Full type of the OpenCV.js module namespace (all functions/classes typed). */
@@ -32,6 +33,12 @@ const ART_CROP_H = 457;
 // A detected quad whose height >= width * this is treated as a full (portrait)
 // card; otherwise it's the (landscape) art window and is embedded whole.
 const PORTRAIT_RATIO = 1.15;
+// Title strip of a rectified card (fraction of CARD_W x CARD_H): the name sits
+// in the top band. Cropped and upscaled for OCR.
+const TITLE_X = 0.05;
+const TITLE_Y = 0.03;
+const TITLE_W = 0.78;
+const TITLE_H = 0.075;
 // Downscale the captured frame so its longest side is ~1100px before detection.
 const MAX_FRAME_WIDTH = 1100;
 const EMBED_DIM = 384;
@@ -57,6 +64,8 @@ export interface ScanSuccess {
   rectifiedUrl: string;
   /** data: URL of the cropped art region (debug thumbnail). */
   artUrl: string;
+  /** OCR read of the card's title strip (null if not a full-card detection). */
+  ocrTitle: string | null;
 }
 
 export interface ScanFailure {
@@ -105,6 +114,15 @@ const boxCorners = (rr: {
 
 let cvPromise: Promise<CvModule> | null = null;
 let embedderPromise: Promise<ImageFeatureExtractionPipeline> | null = null;
+let ocrWorkerPromise: Promise<TesseractWorker> | null = null;
+
+/** Lazy-load the tesseract.js worker used to OCR the card title strip. */
+function loadOcr(): Promise<TesseractWorker> {
+  if (!ocrWorkerPromise) {
+    ocrWorkerPromise = import('tesseract.js').then(({ createWorker }) => createWorker('eng'));
+  }
+  return ocrWorkerPromise;
+}
 
 /**
  * Lazy-load OpenCV.js (its own chunk) and wait for the WASM runtime to be
@@ -357,6 +375,7 @@ export async function runScan(video: HTMLVideoElement): Promise<ScanOutcome> {
   let rectifiedUrl: string;
   let artUrl: string;
   let frameUrl: string;
+  let titleCanvas: HTMLCanvasElement | null = null;
   try {
     const quad = findCardQuad(cv, src);
     if (!quad) {
@@ -414,6 +433,14 @@ export async function runScan(video: HTMLVideoElement): Promise<ScanOutcome> {
       const ah = Math.round(ART_H * CARD_H);
       artCanvas = drawToCanvas(rectCanvas, aw, ah, aw, ah, ax, ay);
       rectifiedUrl = rectCanvas.toDataURL('image/jpeg', 0.8);
+
+      // Title strip (top band), upscaled 2x — OCR'd below to reconcile with the
+      // art-embedding matches. Only available on a full-card detection.
+      const tx = Math.round(TITLE_X * CARD_W);
+      const ty = Math.round(TITLE_Y * CARD_H);
+      const tw = Math.round(TITLE_W * CARD_W);
+      const th = Math.round(TITLE_H * CARD_H);
+      titleCanvas = drawToCanvas(rectCanvas, tw, th, tw * 2, th * 2, tx, ty);
     } else {
       const rect = warpCard(cv, src, quad, ART_CROP_W, ART_CROP_H);
       artCanvas = document.createElement('canvas');
@@ -450,5 +477,23 @@ export async function runScan(video: HTMLVideoElement): Promise<ScanOutcome> {
   const matches = matchTopK(query, index, 5);
   const matchMs = performance.now() - matchStart;
 
-  return { ok: true, matches, timings: { detectMs, embedMs, matchMs }, frameUrl, rectifiedUrl, artUrl };
+  // 4. OCR the title strip (full-card detections only) so the caller can
+  // reconcile the noisy art-embedding ranking with the actual card name.
+  let ocrTitle: string | null = null;
+  if (titleCanvas) {
+    try {
+      const worker = await loadOcr();
+      const { data } = await worker.recognize(titleCanvas);
+      const cleaned = (data.text ?? '')
+        .replace(/[^A-Za-zÀ-ÿ'\- ]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      ocrTitle = cleaned || null;
+      console.info(`[scan-cv] OCR title: "${ocrTitle ?? ''}"`);
+    } catch (err) {
+      console.warn('[scan-cv] title OCR failed:', err);
+    }
+  }
+
+  return { ok: true, matches, timings: { detectMs, embedMs, matchMs }, frameUrl, rectifiedUrl, artUrl, ocrTitle };
 }
