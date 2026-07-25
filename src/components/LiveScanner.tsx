@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, ScanEye, Zap, ZapOff, Trash2, Plus, Minus, X, Layers, ShoppingCart } from 'lucide-react';
+import { Camera, ScanEye, Zap, ZapOff, Trash2, Plus, Minus, X, Layers, ShoppingCart, Library, Check } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import type { Card } from '../types';
-import { getCardsByIds, createDeckFromCards } from '../services/api';
+import { getCardsByIds, createDeckFromCards, addCardToCollection } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
+import { useCollectionCounts } from '../hooks/useCollectionCounts';
 import { preloadScannerCv, detectQuad, runScan, type Pt } from '../utils/scannerCvPipeline';
 import { sharedTokenCount } from '../utils/nameMatch';
 
@@ -40,6 +43,10 @@ const quadMetrics = (q: Pt[]) => {
 export default function LiveScanner() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const notify = useToast();
+  const { data: collectionCounts } = useCollectionCounts(user?.id);
+  const owned = collectionCounts ?? {};
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -273,6 +280,32 @@ export default function LiveScanner() {
     }
   }, [torchOn]);
 
+  // Add one copy of a scanned card to the collection — mirrors the Search card:
+  // optimistic count bump, then invalidate the shared collection caches.
+  const addToCollection = useCallback(
+    async (card: Card) => {
+      if (!user) {
+        notify.error('Connecte-toi pour ajouter à ta collection');
+        return;
+      }
+      try {
+        const priceUsd = card.prices?.usd ? Number(card.prices.usd) : 0;
+        await addCardToCollection(user.id, card.id, 1, priceUsd, card.name);
+        queryClient.setQueryData<Record<string, number>>(
+          ['collection', user.id, 'counts'],
+          (prev) => ({ ...(prev ?? {}), [card.id]: (prev?.[card.id] ?? 0) + 1 }),
+        );
+        queryClient.invalidateQueries({ queryKey: ['collection'] });
+        queryClient.invalidateQueries({ queryKey: ['myCollection'] });
+        notify.success(`${card.name} ajoutée à la collection`);
+      } catch (err) {
+        console.error('add to collection failed:', err);
+        notify.error("Échec de l'ajout à la collection");
+      }
+    },
+    [user, queryClient, notify],
+  );
+
   const changeQty = useCallback((id: string, delta: number) => {
     setBasket((prev) => {
       const next = new Map(prev);
@@ -407,32 +440,50 @@ export default function LiveScanner() {
               {basketEntries.length === 0 && (
                 <p className="text-center text-sm text-gray-500 py-8">Aucune carte scannée pour l'instant.</p>
               )}
-              {basketEntries.map((e) => (
-                <div key={e.card.id} className="flex items-center gap-3 rounded-lg border border-gray-700 bg-gray-900 p-2">
-                  {e.card.image_uris?.art_crop && (
-                    <img src={e.card.image_uris.art_crop} alt="" className="w-12 h-9 rounded object-cover flex-shrink-0" loading="lazy" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{e.card.name}</p>
-                    <p className="text-xs text-gray-400 truncate">
-                      {e.card.set_name}
-                      {e.card.set ? ` · ${e.card.set.toUpperCase()}` : ''} · {e.score.toFixed(2)}
-                    </p>
+              {basketEntries.map((e) => {
+                const ownedQty = owned[e.card.id] ?? 0;
+                return (
+                  <div key={e.card.id} className="rounded-lg border border-gray-700 bg-gray-900 p-2 space-y-2">
+                    <div className="flex items-center gap-3">
+                      {e.card.image_uris?.art_crop && (
+                        <img src={e.card.image_uris.art_crop} alt="" className="w-12 h-9 rounded object-cover flex-shrink-0" loading="lazy" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{e.card.name}</p>
+                        <p className="text-xs text-gray-400 truncate">
+                          {e.card.set_name}
+                          {e.card.set ? ` · ${e.card.set.toUpperCase()}` : ''} · {e.score.toFixed(2)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <button onClick={() => changeQty(e.card.id, -1)} aria-label="Moins" className="p-1.5 rounded bg-gray-700 hover:bg-gray-600">
+                          <Minus size={14} />
+                        </button>
+                        <span className="w-6 text-center font-mono">{e.qty}</span>
+                        <button onClick={() => changeQty(e.card.id, 1)} aria-label="Plus" className="p-1.5 rounded bg-gray-700 hover:bg-gray-600">
+                          <Plus size={14} />
+                        </button>
+                        <button onClick={() => changeQty(e.card.id, -e.qty)} aria-label="Retirer" className="p-1.5 rounded text-red-300 hover:bg-red-500/20">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                    {/* Per-card add-to-collection (like the Search card) */}
+                    <button
+                      onClick={() => addToCollection(e.card)}
+                      className="w-full flex items-center justify-center gap-2 h-9 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm font-medium"
+                    >
+                      <Library size={16} />
+                      Ajouter à la collection
+                      {ownedQty > 0 && (
+                        <span className="inline-flex items-center gap-0.5 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-300">
+                          <Check size={11} /> x{ownedQty}
+                        </span>
+                      )}
+                    </button>
                   </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <button onClick={() => changeQty(e.card.id, -1)} aria-label="Moins" className="p-1.5 rounded bg-gray-700 hover:bg-gray-600">
-                      <Minus size={14} />
-                    </button>
-                    <span className="w-6 text-center font-mono">{e.qty}</span>
-                    <button onClick={() => changeQty(e.card.id, 1)} aria-label="Plus" className="p-1.5 rounded bg-gray-700 hover:bg-gray-600">
-                      <Plus size={14} />
-                    </button>
-                    <button onClick={() => changeQty(e.card.id, -e.qty)} aria-label="Retirer" className="p-1.5 rounded text-red-300 hover:bg-red-500/20">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="p-3 border-t border-gray-700">
