@@ -25,6 +25,13 @@ const ART_X = 0.075;
 const ART_Y = 0.11;
 const ART_W = 0.85;
 const ART_H = 0.45;
+// Landscape target for the art window itself (Scryfall art_crop aspect ~1.37:1).
+// Used when detection locks onto the illustration rather than the whole card.
+const ART_CROP_W = 626;
+const ART_CROP_H = 457;
+// A detected quad whose height >= width * this is treated as a full (portrait)
+// card; otherwise it's the (landscape) art window and is embedded whole.
+const PORTRAIT_RATIO = 1.15;
 // Downscale the captured frame so its longest side is ~1100px before detection.
 const MAX_FRAME_WIDTH = 1100;
 const EMBED_DIM = 384;
@@ -44,6 +51,8 @@ export interface ScanSuccess {
   ok: true;
   matches: ArtMatch[];
   timings: ScanTimings;
+  /** data: URL of the original captured frame fed to OpenCV (debug thumbnail). */
+  frameUrl: string;
   /** data: URL of the rectified 488x680 card (debug thumbnail). */
   rectifiedUrl: string;
   /** data: URL of the cropped art region (debug thumbnail). */
@@ -165,67 +174,114 @@ export async function preloadScannerCv(): Promise<void> {
   await Promise.all([loadCv(), loadEmbedder(), loadArtIndex()]);
 }
 
+const dist = (a: Pt, b: Pt): number => Math.hypot(a.x - b.x, a.y - b.y);
+
 /**
- * Detect the largest plausible card quad in the frame via an Otsu foreground
- * mask + contours, returning its 4 ordered-later corners. Mirrors the spike's
- * findCardQuad exactly. Returns null when no contour is card-sized.
+ * Detect the card by its straight rectangular border (edge-based, à la ManaBox /
+ * document scanners), NOT by brightness segmentation — so it ignores a cluttered
+ * background (face, body, ceiling) that has no card-shaped edges.
+ *
+ * Pipeline: grayscale -> blur -> Canny edges -> dilate (close small gaps so the
+ * border is one closed loop) -> contours -> approxPolyDP. Keep only convex
+ * 4-corner polygons whose side lengths give a ~5:7 aspect and whose area is a
+ * sensible fraction of the frame; return the largest such quad's TRUE corners
+ * (so the perspective warp is accurate). Returns null when no card-like quad is
+ * found — better an honest "no card" than embedding whatever blob was largest.
  */
 function findCardQuad(cv: CvModule, src: InstanceType<CvModule['Mat']>): Pt[] | null {
   const gray = new cv.Mat();
   const blur = new cv.Mat();
-  const mask = new cv.Mat();
+  const edges = new cv.Mat();
   const contours = new cv.MatVector();
   const hier = new cv.Mat();
-  const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(15, 15));
+  const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5, 5));
   try {
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-    cv.GaussianBlur(gray, blur, new cv.Size(7, 7), 0);
-    cv.threshold(blur, mask, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
-    cv.morphologyEx(mask, mask, cv.MORPH_CLOSE, kernel);
-    cv.morphologyEx(mask, mask, cv.MORPH_OPEN, kernel);
-    cv.findContours(mask, contours, hier, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+    cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0);
+    cv.Canny(blur, edges, 40, 120);
+    // Dilate so a card border broken by glare/soft focus still closes into one
+    // loop that findContours can trace.
+    cv.dilate(edges, edges, kernel);
+    cv.findContours(edges, contours, hier, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
 
-    const imgArea = src.cols * src.rows;
-    let best: InstanceType<CvModule['Mat']> | null = null;
+    const W = src.cols;
+    const H = src.rows;
+    const imgArea = W * H;
+    let best: Pt[] | null = null;
     let bestArea = 0;
     for (let i = 0; i < contours.size(); i++) {
       const c = contours.get(i);
       const area = cv.contourArea(c);
-      if (area > bestArea && area > 0.15 * imgArea && area < 0.99 * imgArea) {
-        best?.delete();
-        best = c;
-        bestArea = area;
-      } else {
+      if (area < 0.05 * imgArea || area > 0.97 * imgArea) {
         c.delete();
+        continue;
+      }
+      const rr = cv.minAreaRect(c);
+      const rectArea = rr.size.width * rr.size.height;
+      const aspect = Math.min(rr.size.width, rr.size.height) / Math.max(rr.size.width, rr.size.height);
+      // How completely the contour fills its rotated bounding box: a card is a
+      // solid rectangle (~1), a face/hand blob is not. Combined with the 5:7
+      // aspect this reliably isolates the card without a perfect 4-gon.
+      const rectangularity = rectArea > 0 ? area / rectArea : 0;
+      if (!(rectangularity > 0.7 && aspect > 0.5 && aspect < 0.9 && area > bestArea)) {
+        c.delete();
+        continue;
+      }
+      // Prefer the contour's true 4 corners (crisp warp); fall back to the
+      // rotated bounding box when the polygon isn't a clean quad.
+      const approx = new cv.Mat();
+      cv.approxPolyDP(c, approx, 0.02 * cv.arcLength(c, true), true);
+      let corners: Pt[];
+      if (approx.rows === 4 && cv.isContourConvex(approx)) {
+        corners = [];
+        for (let k = 0; k < 4; k++) {
+          corners.push({ x: approx.data32S[k * 2], y: approx.data32S[k * 2 + 1] });
+        }
+      } else {
+        corners = boxCorners(rr);
+      }
+      approx.delete();
+      c.delete();
+      // Reject the whole-frame rectangle (edges of the image itself): a real
+      // card floats inside the frame, its corners aren't all on the borders.
+      const xs = corners.map((p) => p.x);
+      const ys = corners.map((p) => p.y);
+      const spansFrame =
+        Math.min(...xs) < 0.02 * W &&
+        Math.max(...xs) > 0.98 * W &&
+        Math.min(...ys) < 0.02 * H &&
+        Math.max(...ys) > 0.98 * H;
+      if (!spansFrame) {
+        best = corners;
+        bestArea = area;
       }
     }
-    if (!best) return null;
-    const rr = cv.minAreaRect(best);
-    best.delete();
-    return boxCorners(rr);
+    return best;
   } finally {
     gray.delete();
     blur.delete();
-    mask.delete();
+    edges.delete();
     contours.delete();
     hier.delete();
     kernel.delete();
   }
 }
 
-/** Warp the detected quad to a flat CARD_W x CARD_H card. */
+/** Warp the detected quad to a flat dstW x dstH rectangle. */
 function warpCard(
   cv: CvModule,
   src: InstanceType<CvModule['Mat']>,
   quad: Pt[],
+  dstW: number,
+  dstH: number,
 ): InstanceType<CvModule['Mat']> {
   const { tl, tr, br, bl } = orderCorners(quad);
   const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y]);
-  const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, CARD_W, 0, CARD_W, CARD_H, 0, CARD_H]);
+  const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, dstW, 0, dstW, dstH, 0, dstH]);
   const M = cv.getPerspectiveTransform(srcTri, dstTri);
   const dst = new cv.Mat();
   try {
-    cv.warpPerspective(src, dst, M, new cv.Size(CARD_W, CARD_H));
+    cv.warpPerspective(src, dst, M, new cv.Size(dstW, dstH));
     return dst;
   } finally {
     srcTri.delete();
@@ -300,30 +356,77 @@ export async function runScan(video: HTMLVideoElement): Promise<ScanOutcome> {
   let artData: ImageData;
   let rectifiedUrl: string;
   let artUrl: string;
+  let frameUrl: string;
   try {
     const quad = findCardQuad(cv, src);
     if (!quad) {
       return { ok: false, reason: 'no-card', detectMs: performance.now() - detectStart };
     }
-    const rect = warpCard(cv, src, quad);
-    // Render the rectified Mat to a canvas (cv.imshow), then crop the art rect
-    // with a second canvas — a direct cv.roi() view is non-contiguous and
-    // exports corrupt, so we go through the canvas as the spike does.
-    const rectCanvas = document.createElement('canvas');
-    rectCanvas.width = CARD_W;
-    rectCanvas.height = CARD_H;
-    cv.imshow(rectCanvas, rect);
-    rect.delete();
 
-    const ax = Math.round(ART_X * CARD_W);
-    const ay = Math.round(ART_Y * CARD_H);
-    const aw = Math.round(ART_W * CARD_W);
-    const ah = Math.round(ART_H * CARD_H);
-    const artCanvas = drawToCanvas(rectCanvas, aw, ah, aw, ah, ax, ay);
+    // Debug: the original frame with the detected quad drawn on top, so we can
+    // see exactly what OpenCV locked onto (the corner order is the same one fed
+    // to the perspective warp).
+    const { tl, tr, br, bl } = orderCorners(quad);
+    const overlay = drawToCanvas(frameCanvas, frameCanvas.width, frameCanvas.height, frameCanvas.width, frameCanvas.height);
+    const octx = overlay.getContext('2d');
+    if (octx) {
+      octx.lineWidth = Math.max(2, Math.round(frameCanvas.width / 200));
+      octx.strokeStyle = '#22d3ee';
+      octx.beginPath();
+      octx.moveTo(tl.x, tl.y);
+      octx.lineTo(tr.x, tr.y);
+      octx.lineTo(br.x, br.y);
+      octx.lineTo(bl.x, bl.y);
+      octx.closePath();
+      octx.stroke();
+    }
+    frameUrl = overlay.toDataURL('image/jpeg', 0.8);
+
+    // Is the detected quad a whole (portrait) card, or just the (landscape)
+    // art window? Edge detection often locks onto the crisp illustration frame
+    // rather than the low-contrast outer card border, so handle both: a
+    // portrait quad -> warp to a full card and crop the art region by %; a
+    // landscape quad IS the art window -> warp it straight to the art-crop
+    // aspect and embed the whole thing. Either way the embedded pixels match
+    // how the offline index encoded Scryfall's art_crop (the full illustration).
+    const wLen = (dist(tl, tr) + dist(bl, br)) / 2;
+    const hLen = (dist(tl, bl) + dist(tr, br)) / 2;
+    const isFullCard = hLen >= wLen * PORTRAIT_RATIO;
+    console.info(
+      `[scan-cv] detected ${isFullCard ? 'full card (portrait)' : 'art window (landscape)'} ${Math.round(wLen)}x${Math.round(hLen)}`,
+    );
+
+    let artCanvas: HTMLCanvasElement;
+    if (isFullCard) {
+      const rect = warpCard(cv, src, quad, CARD_W, CARD_H);
+      // Render the rectified Mat to a canvas (cv.imshow), then crop the art rect
+      // with a second canvas — a direct cv.roi() view is non-contiguous and
+      // exports corrupt, so we go through the canvas as the spike does.
+      const rectCanvas = document.createElement('canvas');
+      rectCanvas.width = CARD_W;
+      rectCanvas.height = CARD_H;
+      cv.imshow(rectCanvas, rect);
+      rect.delete();
+
+      const ax = Math.round(ART_X * CARD_W);
+      const ay = Math.round(ART_Y * CARD_H);
+      const aw = Math.round(ART_W * CARD_W);
+      const ah = Math.round(ART_H * CARD_H);
+      artCanvas = drawToCanvas(rectCanvas, aw, ah, aw, ah, ax, ay);
+      rectifiedUrl = rectCanvas.toDataURL('image/jpeg', 0.8);
+    } else {
+      const rect = warpCard(cv, src, quad, ART_CROP_W, ART_CROP_H);
+      artCanvas = document.createElement('canvas');
+      artCanvas.width = ART_CROP_W;
+      artCanvas.height = ART_CROP_H;
+      cv.imshow(artCanvas, rect);
+      rect.delete();
+      rectifiedUrl = artCanvas.toDataURL('image/jpeg', 0.8);
+    }
+
     const artCtx = artCanvas.getContext('2d');
     if (!artCtx) throw new Error('2D canvas context unavailable');
-    artData = artCtx.getImageData(0, 0, aw, ah);
-    rectifiedUrl = rectCanvas.toDataURL('image/jpeg', 0.8);
+    artData = artCtx.getImageData(0, 0, artCanvas.width, artCanvas.height);
     artUrl = artCanvas.toDataURL('image/jpeg', 0.85);
   } finally {
     src.delete();
@@ -347,5 +450,5 @@ export async function runScan(video: HTMLVideoElement): Promise<ScanOutcome> {
   const matches = matchTopK(query, index, 5);
   const matchMs = performance.now() - matchStart;
 
-  return { ok: true, matches, timings: { detectMs, embedMs, matchMs }, rectifiedUrl, artUrl };
+  return { ok: true, matches, timings: { detectMs, embedMs, matchMs }, frameUrl, rectifiedUrl, artUrl };
 }
