@@ -43,7 +43,7 @@ const TITLE_H = 0.075;
 const MAX_FRAME_WIDTH = 1100;
 const EMBED_DIM = 384;
 
-interface Pt {
+export interface Pt {
   x: number;
   y: number;
 }
@@ -347,6 +347,40 @@ function drawToCanvas(
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(source, sx, sy, sw, sh, 0, 0, dw, dh);
   return canvas;
+}
+
+export interface DetectResult {
+  /** Ordered [tl, tr, br, bl] card corners in frame pixels, or null. */
+  quad: Pt[] | null;
+  /** Frame dimensions the quad is expressed in (downscaled video). */
+  frameW: number;
+  frameH: number;
+}
+
+/**
+ * Detect-only pass for the live loop: find the card quad on the current video
+ * frame and return its ordered corners plus the frame size they're in. Cheap
+ * (OpenCV only, no embed/OCR), so it can run continuously to drive the on-screen
+ * outline. Only OpenCV needs to be loaded.
+ */
+export async function detectQuad(video: HTMLVideoElement): Promise<DetectResult> {
+  const cv = await loadCv();
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  if (vw === 0 || vh === 0) return { quad: null, frameW: 0, frameH: 0 };
+  const scale = Math.min(1, MAX_FRAME_WIDTH / vw);
+  const frameW = Math.round(vw * scale);
+  const frameH = Math.round(vh * scale);
+  const frameCanvas = drawToCanvas(video, vw, vh, frameW, frameH);
+  const src = cv.imread(frameCanvas);
+  try {
+    const quad = findCardQuad(cv, src);
+    if (!quad) return { quad: null, frameW, frameH };
+    const { tl, tr, br, bl } = orderCorners(quad);
+    return { quad: [tl, tr, br, bl], frameW, frameH };
+  } finally {
+    src.delete();
+  }
 }
 
 /**
