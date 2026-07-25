@@ -106,12 +106,17 @@ let embedderPromise: Promise<ImageFeatureExtractionPipeline> | null = null;
 function loadCv(): Promise<CvModule> {
   if (!cvPromise) {
     cvPromise = import('@techstark/opencv-js').then(async (mod) => {
-      const cv: CvModule = (mod as unknown as { default?: CvModule }).default ?? mod;
-      if (!cv.Mat) {
-        await new Promise<void>((resolve) => {
-          (cv as unknown as { onRuntimeInitialized: () => void }).onRuntimeInitialized = resolve;
-        });
+      console.info('[scan-cv] opencv module imported, initializing WASM runtime…');
+      // @techstark/opencv-js v5 uses the Emscripten MODULARIZE pattern: its
+      // default export is a Promise that resolves to the fully-initialized
+      // OpenCV module (with Mat/imread/etc.). There is no onRuntimeInitialized
+      // handshake — just await the exported promise.
+      const exported = (mod as unknown as { default?: unknown }).default ?? mod;
+      const cv = (await exported) as CvModule;
+      if (typeof (cv as unknown as { Mat?: unknown }).Mat !== 'function') {
+        throw new Error('OpenCV.js loaded but the runtime API is missing (unexpected build)');
       }
+      console.info('[scan-cv] opencv runtime ready');
       return cv;
     });
   }
@@ -276,8 +281,10 @@ function drawToCanvas(
  * no card quad is found, returns { ok: false }.
  */
 export async function runScan(video: HTMLVideoElement): Promise<ScanOutcome> {
+  console.info('[scan-cv] runScan: awaiting deps (cv/embedder/index)…');
   const [cv, embedder, index]: [CvModule, ImageFeatureExtractionPipeline, ArtIndex] =
     await Promise.all([loadCv(), loadEmbedder(), loadArtIndex()]);
+  console.info(`[scan-cv] deps ready (index: ${index.ids.length} vecs)`);
 
   const vw = video.videoWidth;
   const vh = video.videoHeight;
@@ -285,6 +292,7 @@ export async function runScan(video: HTMLVideoElement): Promise<ScanOutcome> {
 
   const scale = Math.min(1, MAX_FRAME_WIDTH / vw);
   const frameCanvas = drawToCanvas(video, vw, vh, Math.round(vw * scale), Math.round(vh * scale));
+  console.info(`[scan-cv] frame drawn ${frameCanvas.width}x${frameCanvas.height}, detecting card…`);
 
   // 1. Detect + rectify + crop the art region.
   const detectStart = performance.now();
@@ -328,6 +336,7 @@ export async function runScan(video: HTMLVideoElement): Promise<ScanOutcome> {
   const embedStart = performance.now();
   const { RawImage } = await import('@huggingface/transformers');
   const image = new RawImage(artData.data, artData.width, artData.height, 4);
+  console.info('[scan-cv] running embedder on art crop…');
   const output = await embedder(image);
   const query = poolEmbedding(output.data as Float32Array, output.dims);
   const embedMs = performance.now() - embedStart;
