@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Library, LogOut, ChevronDown, Compass, Search, Heart, HeartPulse, Users, Bell, MoreHorizontal, ScanLine, ScanEye, X } from 'lucide-react';
+import { Library, LogOut, ChevronDown, Compass, Search, Heart, HeartPulse, Users, Bell, MoreHorizontal, ScanLine, X } from 'lucide-react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
@@ -47,7 +47,6 @@ export default function Navigation() {
     { to: '/discover', label: 'Discover', icon: Compass },
     { to: '/search', label: 'Search', icon: Search },
     { to: '/scan', label: 'Scan', icon: ScanLine },
-    { to: '/scan-cv', label: 'Scan CV (beta)', icon: ScanEye },
     { to: '/life-counter', label: 'Life', icon: HeartPulse },
     { to: '/alerts', label: 'Alerts', icon: Bell },
   ] as const;

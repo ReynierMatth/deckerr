@@ -484,3 +484,50 @@ export const runPriceAlertCheck = async (userId: string): Promise<void> => {
   const { error } = await supabase.rpc('check_price_alerts', { prices });
   if (error) throw error;
 };
+
+/**
+ * Create a new deck from a flat list of cards (e.g. a scanner basket). Mirrors
+ * PublicDeck's clone: one `decks` row + a `deck_cards` row per entry, with a
+ * best-effort rollback if the card insert fails. Cards go in as maindeck
+ * non-commander; the user refines commander/sideboard in the editor. Returns
+ * the new deck id.
+ */
+export const createDeckFromCards = async (
+  userId: string,
+  name: string,
+  format: string,
+  cards: { cardId: string; quantity: number }[]
+): Promise<string> => {
+  const newDeckId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const cardCount = cards.reduce((n, c) => n + c.quantity, 0);
+
+  const { error: deckError } = await supabase.from('decks').insert({
+    id: newDeckId,
+    name,
+    format,
+    user_id: userId,
+    created_at: now,
+    updated_at: now,
+    card_count: cardCount,
+    is_public: false,
+  });
+  if (deckError) throw deckError;
+
+  if (cards.length > 0) {
+    const rows = cards.map(({ cardId, quantity }) => ({
+      deck_id: newDeckId,
+      card_id: cardId,
+      quantity,
+      is_commander: false,
+      is_sideboard: false,
+    }));
+    const { error: cardsError } = await supabase.from('deck_cards').insert(rows);
+    if (cardsError) {
+      await supabase.from('decks').delete().eq('id', newDeckId);
+      throw cardsError;
+    }
+  }
+
+  return newDeckId;
+};

@@ -139,7 +139,7 @@ const searchRoute = createRoute({
 const scanRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/scan',
-  component: lazyRouteComponent(() => import('./components/Scanner')),
+  component: lazyRouteComponent(() => import('./components/LiveScanner')),
 });
 const scanCvRoute = createRoute({
   getParentRoute: () => rootRoute,
