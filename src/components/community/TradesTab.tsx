@@ -4,6 +4,7 @@ import { ArrowLeftRight, Clock, History, X, AlertTriangle } from 'lucide-react';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { useBackDismiss } from '../../hooks/useBackDismiss';
 import { supabase } from '../../lib/supabase';
 import {
   getTrades,
@@ -44,6 +45,8 @@ export default function TradesTab() {
   const [tradesSubTab, setTradesSubTab] = useState<TradesSubTab>('pending');
   const [processingTradeId, setProcessingTradeId] = useState<string | null>(null);
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
+  // Back / back-gesture closes the trade detail → returns to the trades list.
+  useBackDismiss(!!selectedTrade, () => setSelectedTrade(null));
 
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;

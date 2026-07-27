@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, Check, ArrowLeftRight, DollarSign, Loader2, Edit, RefreshCcw, History, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { useBackDismiss } from '../hooks/useBackDismiss';
 import {
   Trade,
   TradeHistoryEntry,
@@ -59,6 +60,8 @@ export default function TradeDetail({
   const [processing, setProcessing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showEditMode, setShowEditMode] = useState(false);
+  // Back exits edit mode back to the trade detail (not the whole page).
+  useBackDismiss(showEditMode, () => setShowEditMode(false));
   const [editReceiverCollection, setEditReceiverCollection] = useState<CollectionItem[]>([]);
 
   const isUser1 = trade.user1_id === user?.id;
