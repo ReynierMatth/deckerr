@@ -72,8 +72,38 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         // Runtime config is written per-container; never precache it or the SW
         // would serve the empty build-time placeholder instead of live values.
-        globIgnores: ['**/config.js'],
+        // The experimental CV scanner's OpenCV.js (~15 MB) and transformers.js
+        // chunks are dynamically imported only on /scan-cv — keep them out of
+        // the precache (OpenCV also exceeds the size cap); they load on demand.
+        globIgnores: [
+          '**/config.js',
+          '**/opencv-*.js',
+          '**/transformers*.js',
+          '**/ort-*.js',
+          '**/*.wasm',
+          // The ~20 MB art-embedding index is too big to precache; it's fetched
+          // on demand by the CV scanner and runtime-cached (see runtimeCaching).
+          '**/card-art-index.*',
+        ],
         runtimeCaching: [
+          {
+            // The CV scanner's art-embedding index (~20 MB, fixed path). Cache
+            // it after the first fetch so it's instant afterwards and works
+            // offline; a 30-day TTL picks up a rebuilt index without a manual
+            // cache bump. Downloaded once, not on every visit.
+            urlPattern: /\/card-art-index\.(bin|json)$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'card-art-index',
+              expiration: {
+                maxEntries: 4,
+                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
           {
             urlPattern: /^https:\/\/api\.scryfall\.com\/.*/i,
             handler: 'CacheFirst',
