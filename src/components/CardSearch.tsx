@@ -15,6 +15,7 @@ import { useCardFaces } from '../hooks/useCardFaces';
 import { useCollectionCounts } from '../hooks/useCollectionCounts';
 import SearchForm from './search/SearchForm';
 import SearchResults from './search/SearchResults';
+import CardDetail from './card/CardDetail';
 import { SearchFormState, initialSearchForm, searchFormReducer } from './search/searchFormState';
 
 const CardSearch = () => {
@@ -22,6 +23,7 @@ const CardSearch = () => {
   const toast = useToast();
   const queryClient = useQueryClient();
   const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
+  const [detailCard, setDetailCard] = useState<Card | null>(null);
 
   // Wishlist membership (Set of card ids)
   const { data: wishlist } = useQuery<string[]>({
@@ -149,9 +151,12 @@ const CardSearch = () => {
             onAddToCollection={handleAddCardToCollection}
             getCurrentFaceIndex={getCurrentFaceIndex}
             toggleCardFace={toggleCardFace}
+            onCardClick={setDetailCard}
           />
         )}
       </div>
+
+      <CardDetail card={detailCard} onClose={() => setDetailCard(null)} />
     </div>
   );
 };

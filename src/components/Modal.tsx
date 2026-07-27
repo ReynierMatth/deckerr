@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
+import { useBackDismiss } from '../hooks/useBackDismiss';
 
 interface ModalProps {
   isOpen: boolean;
@@ -33,6 +34,9 @@ export default function Modal({
   const dragStartRef = useRef<{ y: number; time: number } | null>(null);
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Browser Back / mobile back gesture closes the modal instead of leaving.
+  useBackDismiss(isOpen, onClose);
 
   // Close modal on ESC key
   useEffect(() => {

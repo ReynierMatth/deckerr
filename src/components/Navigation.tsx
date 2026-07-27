@@ -3,6 +3,7 @@ import { Library, LogOut, ChevronDown, Compass, Search, Heart, HeartPulse, Users
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
+import { useBackDismiss } from '../hooks/useBackDismiss';
 import { supabase } from '../lib/supabase';
 import { profileDisplayName } from '../utils/profileName';
 import NotificationBell from './NotificationBell';
@@ -14,6 +15,9 @@ export default function Navigation() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Back / back-gesture closes the mobile "More" sheet.
+  useBackDismiss(showMore, () => setShowMore(false));
 
   const { data: profileName } = useQuery({
     queryKey: ['profile', 'name', user?.id],
