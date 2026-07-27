@@ -16,8 +16,9 @@ export default function Navigation() {
   const [showMore, setShowMore] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Back / back-gesture closes the mobile "More" sheet.
+  // Back / back-gesture closes the mobile "More" sheet + the desktop user menu.
   useBackDismiss(showMore, () => setShowMore(false));
+  useBackDismiss(showDropdown, () => setShowDropdown(false));
 
   const { data: profileName } = useQuery({
     queryKey: ['profile', 'name', user?.id],

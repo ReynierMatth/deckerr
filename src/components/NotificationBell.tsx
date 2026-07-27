@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, Check, CheckCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useBackDismiss } from '../hooks/useBackDismiss';
 import { supabase } from '../lib/supabase';
 import {
   getNotifications,
@@ -36,6 +37,8 @@ export default function NotificationBell() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  // Back / back-gesture closes the notifications panel (large overlay on mobile).
+  useBackDismiss(open, () => setOpen(false));
   const containerRef = useRef<HTMLDivElement>(null);
 
   const { data: notifications } = useQuery({

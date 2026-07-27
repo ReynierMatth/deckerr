@@ -14,6 +14,7 @@ import {
   Users,
 } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
+import { useBackDismiss } from '../hooks/useBackDismiss';
 
 type StartingLife = 20 | 30 | 40;
 
@@ -395,6 +396,8 @@ export default function LifeCounter() {
     activePlayerId: null,
   }));
   const [started, setStarted] = useState(false);
+  // Back returns to the setup screen instead of leaving the /life-counter page.
+  useBackDismiss(started, () => setStarted(false));
   const [setupCount, setSetupCount] = useState(4);
   const [setupLife, setSetupLife] = useState<StartingLife>(40);
   const [diceResult, setDiceResult] = useState<string | null>(null);
