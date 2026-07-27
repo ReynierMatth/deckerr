@@ -14,6 +14,8 @@ interface SearchResultsProps {
   onAddToCollection: (cardId: string) => void;
   getCurrentFaceIndex: (cardId: string) => number;
   toggleCardFace: (cardId: string, totalFaces: number) => void;
+  /** Open the card's detail view (tap on the row/tile body). */
+  onCardClick?: (card: Card) => void;
 }
 
 /** Search results: horizontal list on mobile, card grid on desktop. */
@@ -26,6 +28,7 @@ export default function SearchResults({
   onAddToCollection,
   getCurrentFaceIndex,
   toggleCardFace,
+  onCardClick,
 }: SearchResultsProps) {
   return (
     <>
@@ -42,6 +45,8 @@ export default function SearchResults({
               key={card.id}
               card={card}
               faceIndex={currentFaceIndex}
+              onClick={onCardClick ? () => onCardClick(card) : undefined}
+              className={onCardClick ? 'cursor-pointer active:bg-gray-700' : undefined}
               imageOverlay={
                 isMultiFaced && (
                   <button
@@ -114,7 +119,8 @@ export default function SearchResults({
               key={card.id}
               card={card}
               faceIndex={currentFaceIndex}
-              className="bg-gray-800 rounded-lg overflow-hidden hover:ring-2 hover:ring-blue-500 transition-all"
+              onClick={onCardClick ? () => onCardClick(card) : undefined}
+              className={`bg-gray-800 rounded-lg overflow-hidden hover:ring-2 hover:ring-blue-500 transition-all${onCardClick ? ' cursor-pointer' : ''}`}
               fallback={<MagicCard card={card} />}
               topLeft={
                 <button
@@ -168,7 +174,10 @@ export default function SearchResults({
                     <div className="text-xs text-gray-400 mb-2">${card.prices.usd}</div>
                   )}
                   <button
-                    onClick={() => onAddToCollection(card.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAddToCollection(card.id);
+                    }}
                     disabled={isAddingThisCard}
                     className="w-full px-3 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 text-sm"
                     title="Add to collection"

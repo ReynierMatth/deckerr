@@ -7,6 +7,7 @@ import CollectionValueChart from './CollectionValueChart';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useCardFaces } from '../hooks/useCardFaces';
+import { useBackDismiss } from '../hooks/useBackDismiss';
 import { useMyCollection } from '../hooks/useMyCollection';
 import { supabase } from '../lib/supabase';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
@@ -34,6 +35,7 @@ export default function Collection() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const [selectedCard, setSelectedCard] = useState<CollectionItem | null>(null);
+  useBackDismiss(!!selectedCard, () => setSelectedCard(null));
   const [isUpdating, setIsUpdating] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{

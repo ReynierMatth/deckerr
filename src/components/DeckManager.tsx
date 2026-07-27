@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { getCardLargeImageUri } from '../utils/cardFaces';
 import { useCardFaces } from '../hooks/useCardFaces';
+import { useBackDismiss } from '../hooks/useBackDismiss';
 import { useDeckSave } from '../hooks/useDeckSave';
 import { useDeckCollectionActions } from '../hooks/useDeckCollectionActions';
 import { validateDeck } from '../utils/deckValidation';
@@ -58,6 +59,11 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null);
   const [hoverSource, setHoverSource] = useState<'search' | 'deck' | null>(null);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
+
+  // Back / back-gesture closes the ad-hoc overlays (the Modal-based drawers —
+  // settings, share, add-cards — already handle this via the shared Modal).
+  useBackDismiss(!!selectedCard, () => setSelectedCard(null));
+  useBackDismiss(showExport, () => setShowExport(false));
 
   // Deck persistence: current deck id, visibility and the save/update flow.
   const { currentDeckId, visibility, setVisibilityPersisted, isSaving, saveDeck } = useDeckSave({

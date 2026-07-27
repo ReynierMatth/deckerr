@@ -4,6 +4,7 @@ import { Search, Globe, Users, Eye, Loader2 } from 'lucide-react';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { useAuth } from '../contexts/AuthContext';
 import { useCardFaces } from '../hooks/useCardFaces';
+import { useBackDismiss } from '../hooks/useBackDismiss';
 import { supabase } from '../lib/supabase';
 import ProfileSettings from './community/ProfileSettings';
 import FriendsTab from './community/FriendsTab';
@@ -42,6 +43,9 @@ export default function Community() {
   // Browse state (local UI only — server data lives in queries below)
   const [browseSearch, setBrowseSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+
+  // Back / back-gesture returns to the Community tabs instead of leaving the page.
+  useBackDismiss(!!selectedUser, () => setSelectedUser(null));
 
   // Friends list + pending trades owned by Community so the tab badges are
   // correct on arrival and stay fresh even when those tabs aren't open.

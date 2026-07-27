@@ -9,6 +9,8 @@ import { useToast } from '../contexts/ToastContext';
 import { useCollectionCounts } from '../hooks/useCollectionCounts';
 import { preloadScannerCv, detectQuad, runScan, type Pt } from '../utils/scannerCvPipeline';
 import { sharedTokenCount } from '../utils/nameMatch';
+import CardDetail from './card/CardDetail';
+import { useBackDismiss } from '../hooks/useBackDismiss';
 
 type CameraState = 'starting' | 'ready' | 'denied' | 'unavailable';
 
@@ -70,6 +72,7 @@ export default function LiveScanner() {
   const [basketOpen, setBasketOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [detailCard, setDetailCard] = useState<Card | null>(null);
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flashToast = useCallback((msg: string) => {
@@ -321,6 +324,10 @@ export default function LiveScanner() {
   const basketEntries = Array.from(basket.values());
   const basketCount = basketEntries.reduce((n, e) => n + e.qty, 0);
 
+  // Back / back-gesture closes the basket sheet (it's an ad-hoc overlay, not the
+  // shared Modal, so it opts in directly).
+  useBackDismiss(basketOpen, () => setBasketOpen(false));
+
   const createDeck = useCallback(async () => {
     if (!user || basketEntries.length === 0 || creating) return;
     setCreating(true);
@@ -445,16 +452,22 @@ export default function LiveScanner() {
                 return (
                   <div key={e.card.id} className="rounded-lg border border-gray-700 bg-gray-900 p-2 space-y-2">
                     <div className="flex items-center gap-3">
-                      {e.card.image_uris?.art_crop && (
-                        <img src={e.card.image_uris.art_crop} alt="" className="w-12 h-9 rounded object-cover flex-shrink-0" loading="lazy" />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">{e.card.name}</p>
-                        <p className="text-xs text-gray-400 truncate">
-                          {e.card.set_name}
-                          {e.card.set ? ` · ${e.card.set.toUpperCase()}` : ''} · {e.score.toFixed(2)}
-                        </p>
-                      </div>
+                      <button
+                        onClick={() => setDetailCard(e.card)}
+                        className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                        aria-label={`Détails de ${e.card.name}`}
+                      >
+                        {e.card.image_uris?.art_crop && (
+                          <img src={e.card.image_uris.art_crop} alt="" className="w-12 h-9 rounded object-cover flex-shrink-0" loading="lazy" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">{e.card.name}</p>
+                          <p className="text-xs text-gray-400 truncate">
+                            {e.card.set_name}
+                            {e.card.set ? ` · ${e.card.set.toUpperCase()}` : ''} · {e.score.toFixed(2)}
+                          </p>
+                        </div>
+                      </button>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         <button onClick={() => changeQty(e.card.id, -1)} aria-label="Moins" className="p-1.5 rounded bg-gray-700 hover:bg-gray-600">
                           <Minus size={14} />
@@ -499,6 +512,8 @@ export default function LiveScanner() {
           </div>
         </div>
       )}
+
+      <CardDetail card={detailCard} onClose={() => setDetailCard(null)} />
     </div>
   );
 }

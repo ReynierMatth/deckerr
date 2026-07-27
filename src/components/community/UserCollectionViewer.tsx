@@ -4,6 +4,7 @@ import { Search, ArrowLeftRight, Loader2, ChevronLeft, RefreshCw } from 'lucide-
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { useBackDismiss } from '../../hooks/useBackDismiss';
 import { isDoubleFaced, getCardImageUri } from '../../utils/cardFaces';
 import WishlistButton from '../WishlistButton';
 import HoverCardPreview from '../card/HoverCardPreview';
@@ -75,6 +76,10 @@ export default function UserCollectionViewer({
   const [hoveredUserCard, setHoveredUserCard] = useState<Card | null>(null);
   const [selectedUserCard, setSelectedUserCard] = useState<CollectionItem | null>(null);
   const userCollectionObserverTarget = useRef<HTMLDivElement>(null);
+
+  // Back closes the innermost sub-view first (card detail, then trade creator).
+  useBackDismiss(!!selectedUserCard, () => setSelectedUserCard(null));
+  useBackDismiss(showTradeCreator, () => setShowTradeCreator(false));
 
   // Selected user's collection, paginated for infinite scroll.
   const selectedUserId = selectedUser.id;
