@@ -356,7 +356,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   return (
     <div className="relative bg-gray-900 text-white p-3 sm:p-6 pt-6 pb-44 md:pt-20 md:pb-6 md:min-h-screen">
       <div className="max-w-7xl mx-auto">
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-3xl lg:max-w-none mx-auto">
           {/* Cards-first header: inline-editable deck name, meta line, drawers */}
           <div className="mb-4 flex items-start gap-2">
             <div className="min-w-0 flex-1">
@@ -423,16 +423,16 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
             addSuggestedLandsToDeck={addSuggestedLandsToDeck}
           />
 
-          {/* Deck Stats */}
-          <div className="mt-6 bg-gray-800 border border-gray-700 rounded-lg p-4">
-            <h2 className="text-lg font-semibold text-white mb-3">Deck Stats</h2>
-            <DeckStats cards={mainboardCards} />
-          </div>
-
-          {/* Sample Hand */}
-          <div className="mt-4 bg-gray-800 border border-gray-700 rounded-lg p-4">
-            <h2 className="text-lg font-semibold text-white mb-3">Sample Hand</h2>
-            <SampleHand cards={mainboardCards} />
+          {/* Stats + sample hand: stacked on mobile, side by side on desktop */}
+          <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+              <h2 className="text-lg font-semibold text-white mb-3">Deck Stats</h2>
+              <DeckStats cards={mainboardCards} />
+            </div>
+            <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+              <h2 className="text-lg font-semibold text-white mb-3">Sample Hand</h2>
+              <SampleHand cards={mainboardCards} />
+            </div>
           </div>
         </div>
       </div>
@@ -462,34 +462,55 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         <Search size={24} />
       </button>
 
-      {/* Card search — bottom drawer on mobile, centered modal on desktop */}
-      <Modal isOpen={showSearch} onClose={() => setShowSearch(false)} size="lg" labelledBy="add-cards-title">
+      {/* Card search — bottom drawer on mobile, wide two-pane modal on desktop
+          (results on the left, hover preview on the right, inside the modal). */}
+      <Modal isOpen={showSearch} onClose={() => setShowSearch(false)} size="xl" labelledBy="add-cards-title">
         <div className="p-3">
           <h2 id="add-cards-title" className="text-lg font-semibold text-white mb-3 pr-8">Add cards</h2>
-          <DeckSearchPanel
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            setSearchResults={setSearchResults}
-            handleSearch={handleSearch}
-            isSearching={isSearching}
-            searchResults={searchResults}
-            selectedCards={selectedCards}
-            userCollection={userCollection}
-            addingCardId={addingCardId}
-            deckFormat={deckFormat}
-            commander={commander}
-            commanderColors={commanderColors}
-            isCardValidForCommander={isCardValidForCommander}
-            getCurrentFaceIndex={getCurrentFaceIndex}
-            toggleCardFace={toggleCardFace}
-            addCardToDeck={addCardToDeck}
-            removeCardFromDeck={removeCardFromDeck}
-            updateCardQuantity={updateCardQuantity}
-            handleAddCardToCollection={handleAddCardToCollection}
-            setHoveredCard={setHoveredCard}
-            setHoverSource={setHoverSource}
-            setSelectedCard={setSelectedCard}
-          />
+          <div className="lg:flex lg:gap-4">
+            <div className="lg:flex-1 lg:min-w-0">
+              <DeckSearchPanel
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                setSearchResults={setSearchResults}
+                handleSearch={handleSearch}
+                isSearching={isSearching}
+                searchResults={searchResults}
+                selectedCards={selectedCards}
+                userCollection={userCollection}
+                addingCardId={addingCardId}
+                deckFormat={deckFormat}
+                commander={commander}
+                commanderColors={commanderColors}
+                isCardValidForCommander={isCardValidForCommander}
+                getCurrentFaceIndex={getCurrentFaceIndex}
+                toggleCardFace={toggleCardFace}
+                addCardToDeck={addCardToDeck}
+                removeCardFromDeck={removeCardFromDeck}
+                updateCardQuantity={updateCardQuantity}
+                handleAddCardToCollection={handleAddCardToCollection}
+                setHoveredCard={setHoveredCard}
+                setHoverSource={setHoverSource}
+                setSelectedCard={setSelectedCard}
+              />
+            </div>
+            {/* Hover preview — desktop only, lives inside the modal */}
+            <div className="hidden lg:block lg:w-60 shrink-0">
+              <div className="sticky top-0">
+                {hoveredCard && getCardLargeImageUri(hoveredCard, getCurrentFaceIndex(hoveredCard.id)) ? (
+                  <img
+                    src={getCardLargeImageUri(hoveredCard, getCurrentFaceIndex(hoveredCard.id))}
+                    alt={hoveredCard.name}
+                    className="w-full rounded-xl shadow-lg"
+                  />
+                ) : (
+                  <div className="aspect-[5/7] w-full rounded-xl border border-dashed border-gray-600 flex items-center justify-center p-4 text-center text-sm text-gray-500">
+                    Survole une carte pour l'aperçu
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </Modal>
 
@@ -523,8 +544,9 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         <DeckExportModal cards={selectedCards} deckName={deckName} onClose={() => setShowExport(false)} />
       )}
 
-      {/* Hover Card Preview - only show if no card is selected */}
-      {hoveredCard && !selectedCard && (
+      {/* Floating hover preview for the deck list. Suppressed while the search
+          modal is open — that has its own in-modal preview pane. */}
+      {hoveredCard && !selectedCard && !showSearch && (
         <HoverCardPreview
           card={hoveredCard}
           hoverSource={hoverSource}

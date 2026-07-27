@@ -6,7 +6,7 @@ interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   children: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   showCloseButton?: boolean;
   /** id of the element that labels the dialog (aria-labelledby) */
   labelledBy?: string;
@@ -90,6 +90,7 @@ export default function Modal({
     sm: 'max-w-md',
     md: 'max-w-lg',
     lg: 'max-w-2xl',
+    xl: 'max-w-5xl',
   };
 
   // Simple focus trap: keep Tab/Shift+Tab cycling inside the dialog

@@ -192,20 +192,25 @@ export default function DeckCardList({
             </h3>
           </div>
 
-          {groupCardsByType(mainboard).map(({ type, count, entries }) => {
-            const { icon: TypeIcon, color } = TYPE_STYLES[type] ?? TYPE_STYLES.Other;
-            return (
-              <section key={type} className="space-y-2">
-                <div className="flex items-center gap-2 border-b border-gray-700 pb-1.5">
-                  <TypeIcon size={16} className={color} />
-                  <h4 className={`text-sm font-bold uppercase tracking-wide ${color}`}>{type}</h4>
-                  <span className="text-xs text-gray-500">({count})</span>
-                </div>
+          {/* Type sections flow into columns on desktop (Moxfield-style) so the
+              deck uses the width instead of one tall stack; single column on
+              mobile. Each section stays whole (break-inside-avoid). */}
+          <div className="lg:columns-2 lg:gap-4">
+            {groupCardsByType(mainboard).map(({ type, count, entries }) => {
+              const { icon: TypeIcon, color } = TYPE_STYLES[type] ?? TYPE_STYLES.Other;
+              return (
+                <section key={type} className="space-y-2 mb-4 break-inside-avoid">
+                  <div className="flex items-center gap-2 border-b border-gray-700 pb-1.5">
+                    <TypeIcon size={16} className={color} />
+                    <h4 className={`text-sm font-bold uppercase tracking-wide ${color}`}>{type}</h4>
+                    <span className="text-xs text-gray-500">({count})</span>
+                  </div>
 
-                {entries.map((entry) => renderRow(entry))}
-              </section>
-            );
-          })}
+                  {entries.map((entry) => renderRow(entry))}
+                </section>
+              );
+            })}
+          </div>
         </div>
 
         {/* Sideboard — a flat list below the mainboard. No format rules apply. */}
