@@ -531,3 +531,14 @@ export const createDeckFromCards = async (
 
   return newDeckId;
 };
+
+/**
+ * Delete a deck and its cards. Removes deck_cards first (explicit, in case the
+ * FK isn't ON DELETE CASCADE), then the deck row itself.
+ */
+export const deleteDeck = async (deckId: string): Promise<void> => {
+  const { error: cardsError } = await supabase.from('deck_cards').delete().eq('deck_id', deckId);
+  if (cardsError) throw cardsError;
+  const { error } = await supabase.from('decks').delete().eq('id', deckId);
+  if (error) throw error;
+};

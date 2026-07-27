@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Loader2, X } from 'lucide-react';
+import { Loader2, X, Trash2 } from 'lucide-react';
 import { Card } from '../../types';
 import { ManaSymbol } from '../ManaCost';
 import Modal from '../Modal';
@@ -25,6 +25,8 @@ interface DeckSettingsDrawerProps {
   isImporting: boolean;
   isOpen: boolean;
   onClose: () => void;
+  /** Provided only for an already-saved deck; renders the delete action. */
+  onDeleteDeck?: () => void;
 }
 
 /**
@@ -45,6 +47,7 @@ export default function DeckSettingsDrawer({
   isImporting,
   isOpen,
   onClose,
+  onDeleteDeck,
 }: DeckSettingsDrawerProps) {
   const [tagInput, setTagInput] = useState('');
 
@@ -170,6 +173,20 @@ export default function DeckSettingsDrawer({
             </div>
           )}
         </div>
+
+        {/* Danger zone — only for an already-saved deck */}
+        {onDeleteDeck && (
+          <div className="border-t border-gray-700 pt-4">
+            <button
+              type="button"
+              onClick={onDeleteDeck}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20 transition-colors text-sm font-medium"
+            >
+              <Trash2 size={18} />
+              Supprimer le deck
+            </button>
+          </div>
+        )}
       </div>
     </Modal>
   );

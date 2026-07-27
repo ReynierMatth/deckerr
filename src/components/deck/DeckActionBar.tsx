@@ -39,42 +39,45 @@ export default function DeckActionBar({
           <span className="text-xl font-bold text-green-400">${totalPrice.toFixed(2)}</span>
         </div>
 
-        {/* Action Buttons */}
+        {/* Missing-cards actions on their own row so 4 buttons never overflow
+            the narrow desktop bar (they wrap under Total Price instead). */}
+        {showMissingActions && (
+          <div className="flex gap-2">
+            <button
+              onClick={onAddAllMissing}
+              disabled={isAddingAll}
+              className="flex-1 min-w-0 px-3 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors"
+              title="Add missing cards to your collection"
+            >
+              {isAddingAll ? (
+                <Loader2 className="animate-spin" size={18} />
+              ) : (
+                <>
+                  <PackagePlus size={18} className="shrink-0" />
+                  <span className="hidden sm:inline truncate">Missing to collection</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={onAddMissingToWishlist}
+              disabled={isAddingToWishlist}
+              className="flex-1 min-w-0 px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors"
+              title="Add missing cards to your wishlist"
+            >
+              {isAddingToWishlist ? (
+                <Loader2 className="animate-spin" size={18} />
+              ) : (
+                <>
+                  <Heart size={18} className="shrink-0" />
+                  <span className="hidden sm:inline truncate">Missing to wishlist</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Export + Save */}
         <div className="flex gap-2">
-          {showMissingActions && (
-            <>
-              <button
-                onClick={onAddAllMissing}
-                disabled={isAddingAll}
-                className="flex-1 px-3 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors"
-                title="Add missing cards to your collection"
-              >
-                {isAddingAll ? (
-                  <Loader2 className="animate-spin" size={18} />
-                ) : (
-                  <>
-                    <PackagePlus size={18} />
-                    <span className="hidden sm:inline">Missing to collection</span>
-                  </>
-                )}
-              </button>
-              <button
-                onClick={onAddMissingToWishlist}
-                disabled={isAddingToWishlist}
-                className="flex-1 px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors"
-                title="Add missing cards to your wishlist"
-              >
-                {isAddingToWishlist ? (
-                  <Loader2 className="animate-spin" size={18} />
-                ) : (
-                  <>
-                    <Heart size={18} />
-                    <span className="hidden sm:inline">Missing to wishlist</span>
-                  </>
-                )}
-              </button>
-            </>
-          )}
           <button
             onClick={onExport}
             disabled={exportDisabled}
@@ -86,7 +89,7 @@ export default function DeckActionBar({
           <button
             onClick={onSave}
             disabled={saveDisabled}
-            className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 text-sm font-medium relative transition-colors"
+            className="flex-1 min-w-0 px-3 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 text-sm font-medium relative transition-colors"
           >
             {isSaving ? (
               <>

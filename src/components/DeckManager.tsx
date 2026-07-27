@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { Search, SlidersHorizontal, Share2 } from 'lucide-react';
+import { useNavigate } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, Deck } from '../types';
-import { searchCards, resolveCardsByNames } from '../services/api';
+import { searchCards, resolveCardsByNames, deleteDeck } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import ConfirmModal from './ConfirmModal';
 import { getCardLargeImageUri } from '../utils/cardFaces';
 import { useCardFaces } from '../hooks/useCardFaces';
 import { useBackDismiss } from '../hooks/useBackDismiss';
@@ -31,6 +34,10 @@ interface DeckManagerProps {
 
 export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const toast = useToast();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Card[]>([]);
@@ -75,6 +82,21 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     tags,
     commander,
   });
+
+  const confirmDeleteDeck = async () => {
+    if (!currentDeckId) return;
+    setIsDeleting(true);
+    try {
+      await deleteDeck(currentDeckId);
+      await queryClient.invalidateQueries({ queryKey: ['decks', user?.id] });
+      toast.success('Deck supprimé');
+      navigate({ to: '/' });
+    } catch (err) {
+      console.error('delete deck failed:', err);
+      toast.error('Échec de la suppression du deck');
+      setIsDeleting(false);
+    }
+  };
 
   // Collection state + "add missing" flows (shared cache key with CardSearch).
   const {
@@ -529,6 +551,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
         isImporting={isImporting}
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
+        onDeleteDeck={currentDeckId ? () => { setShowSettings(false); setShowDeleteConfirm(true); } : undefined}
       />
 
       {/* Share deck — 3-level visibility + shareable link */}
@@ -543,6 +566,18 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       {showExport && (
         <DeckExportModal cards={selectedCards} deckName={deckName} onClose={() => setShowExport(false)} />
       )}
+
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={confirmDeleteDeck}
+        title="Supprimer le deck ?"
+        message={`« ${deckName || 'Ce deck'} » sera définitivement supprimé.`}
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        variant="danger"
+        isLoading={isDeleting}
+      />
 
       {/* Floating hover preview for the deck list. Suppressed while the search
           modal is open — that has its own in-modal preview pane. */}

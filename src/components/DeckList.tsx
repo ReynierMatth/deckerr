@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getCardsByIds } from '../services/api';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getCardsByIds, deleteDeck } from '../services/api';
 import { Deck } from '../types';
 import { supabase } from "../lib/supabase";
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import DeckCard from "./DeckCard";
+import ConfirmModal from './ConfirmModal';
 import { PlusCircle } from 'lucide-react';
 
 interface DeckListProps {
@@ -42,6 +44,8 @@ const fetchDecks = async (userId: string): Promise<Deck[]> => {
 
 const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const toast = useToast();
   const { data: decks = [], isLoading } = useQuery({
     queryKey: ['decks', user?.id],
     enabled: !!user,
@@ -50,6 +54,24 @@ const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
   });
 
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [pendingDelete, setPendingDelete] = useState<Deck | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await deleteDeck(pendingDelete.id);
+      await queryClient.invalidateQueries({ queryKey: ['decks', user?.id] });
+      toast.success('Deck supprimé');
+      setPendingDelete(null);
+    } catch (err) {
+      console.error('delete deck failed:', err);
+      toast.error('Échec de la suppression du deck');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   // Distinct tags across all of the user's decks, sorted for stable order.
   const allTags = useMemo(() => {
@@ -115,7 +137,7 @@ const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
         {visibleDecks.map((deck) => (
-          <DeckCard key={deck.id} deck={deck} onEdit={onDeckEdit} />
+          <DeckCard key={deck.id} deck={deck} onEdit={onDeckEdit} onDelete={setPendingDelete} />
         ))}
 
         {/* Create New Deck Card */}
@@ -134,6 +156,18 @@ const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
         </div>
         </button>
       </div>
+
+      <ConfirmModal
+        isOpen={pendingDelete !== null}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={confirmDelete}
+        title="Supprimer le deck ?"
+        message={pendingDelete ? `« ${pendingDelete.name} » sera définitivement supprimé.` : ''}
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        variant="danger"
+        isLoading={deleting}
+      />
     </div>
   );
 };

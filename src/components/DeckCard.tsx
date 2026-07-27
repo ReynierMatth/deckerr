@@ -1,12 +1,13 @@
-import { AlertTriangle, Check, Edit } from 'lucide-react';
+import { AlertTriangle, Check, Edit, Trash2 } from 'lucide-react';
 import { Deck } from '../types';
 
 interface DeckCardProps {
   deck: Deck;
   onEdit?: (deckId: string) => void;
+  onDelete?: (deck: Deck) => void;
 }
 
-export default function DeckCard({ deck, onEdit }: DeckCardProps) {
+export default function DeckCard({ deck, onEdit, onDelete }: DeckCardProps) {
   // Use pre-calculated validation data
   const isValid = deck.isValid ?? true;
   const validationErrors = deck.validationErrors || [];
@@ -34,6 +35,21 @@ export default function DeckCard({ deck, onEdit }: DeckCardProps) {
         )}
         {/* Overlay for text readability */}
         <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/60 to-transparent" />
+
+        {/* Delete button */}
+        {onDelete && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(deck);
+            }}
+            aria-label={`Delete ${deck.name}`}
+            title="Delete deck"
+            className="absolute top-2 right-2 p-2 rounded-full bg-gray-900/70 text-gray-200 hover:bg-red-600 hover:text-white transition-colors backdrop-blur-sm"
+          >
+            <Trash2 size={16} />
+          </button>
+        )}
 
         {/* Deck info overlay */}
         <div className="absolute bottom-0 left-0 right-0 p-3">
