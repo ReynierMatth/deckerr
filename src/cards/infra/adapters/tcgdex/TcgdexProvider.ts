@@ -46,13 +46,21 @@ export class TcgdexProvider implements CardProvider {
     return { cards: (briefs ?? []).map(tcgdexToUnified), hasMore: false };
   }
 
-  async getCardById(rawId: string, signal?: AbortSignal): Promise<UnifiedCard | null> {
+  private async fetchCard(rawId: string, signal?: AbortSignal, lang?: string): Promise<UnifiedCard | null> {
     try {
-      const card = await this.get<TcgdexCard>(`/cards/${encodeURIComponent(rawId)}`, signal);
+      const card = await this.get<TcgdexCard>(`/cards/${encodeURIComponent(rawId)}`, signal, lang);
       return card?.id ? tcgdexToUnified(card) : null;
     } catch {
       return null;
     }
+  }
+
+  async getCardById(rawId: string, signal?: AbortSignal): Promise<UnifiedCard | null> {
+    // Cards found via an English-name search carry ids that may not exist in
+    // the default locale; fall back to English so hydration still resolves.
+    const card = await this.fetchCard(rawId, signal);
+    if (card || this.lang === 'en') return card;
+    return this.fetchCard(rawId, signal, 'en');
   }
 
   async getCardsByIds(rawIds: string[], signal?: AbortSignal): Promise<UnifiedCard[]> {
