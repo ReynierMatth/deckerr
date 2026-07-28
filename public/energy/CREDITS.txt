@@ -1,0 +1,5 @@
+Pokémon energy/type symbols (white pictograms) from:
+  duiker101/pokemon-type-svg-icons  —  https://github.com/duiker101/pokemon-type-svg-icons
+Licensed MIT (© duiker101). Renamed to Deckerr's energy keys:
+  electric -> lightning, dark -> darkness, steel -> metal, normal -> colorless.
+Pokémon and the type symbols are trademarks of Nintendo / Creatures / GAME FREAK.

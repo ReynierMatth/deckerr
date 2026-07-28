@@ -3,34 +3,31 @@ import { UnifiedCard } from '../../cards/domain/UnifiedCard';
 import { canonicalEnergy, energyColor } from '../../utils/pokemonEnergy';
 
 /**
- * A single energy symbol. Uses an icon from /energy/<key>.svg when present
- * (drop the files in public/energy/), otherwise falls back to a colored pip.
- * The localized name is kept as a tooltip either way.
+ * A single energy symbol: a colored disc (the energy's color) with the white
+ * pictogram from /energy/<key>.svg on top. If the icon is missing the disc
+ * alone stands in. The localized name is kept as a tooltip.
  */
-function EnergyPip({ name, size = 14 }: { name: string; size?: number }) {
+function EnergyPip({ name, size = 16 }: { name: string; size?: number }) {
   const [imgFailed, setImgFailed] = useState(false);
   const key = canonicalEnergy(name);
-
-  if (key && !imgFailed) {
-    return (
-      <img
-        src={`/energy/${key.toLowerCase()}.svg`}
-        alt={name}
-        title={name}
-        className="inline-block align-middle"
-        style={{ width: size, height: size }}
-        onError={() => setImgFailed(true)}
-      />
-    );
-  }
 
   return (
     <span
       title={name}
       aria-label={name}
-      className="inline-block rounded-full border border-black/25 align-middle"
+      className="inline-flex items-center justify-center rounded-full align-middle border border-black/20"
       style={{ width: size, height: size, backgroundColor: energyColor(name) }}
-    />
+    >
+      {key && !imgFailed && (
+        <img
+          src={`/energy/${key.toLowerCase()}.svg`}
+          alt=""
+          aria-hidden
+          style={{ width: size * 0.68, height: size * 0.68 }}
+          onError={() => setImgFailed(true)}
+        />
+      )}
+    </span>
   );
 }
 

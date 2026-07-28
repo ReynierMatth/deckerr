@@ -42,7 +42,7 @@ export const ENERGY_COLOR: Record<EnergyKey, string> = {
   Metal: '#9AA6B2',
   Fairy: '#E27EA6',
   Dragon: '#C9A227',
-  Colorless: '#CFC9BC',
+  Colorless: '#A8A29E', // mid gray so the white symbol stays visible
 };
 
 export const canonicalEnergy = (name: string): EnergyKey | null => CANON[normalize(name)] ?? null;
