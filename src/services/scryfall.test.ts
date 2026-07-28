@@ -59,7 +59,7 @@ describe('scryfall client', () => {
 
     const result = await getCardsByIds(['batch-a', 'batch-b', 'batch-a']);
 
-    expect(result.map((c) => c.id)).toEqual(['batch-a', 'batch-b', 'batch-a']);
+    expect(result.map((c) => c.rawId)).toEqual(['batch-a', 'batch-b', 'batch-a']);
     expect(fetchMock).toHaveBeenCalledTimes(1); // single /cards/collection chunk
 
     // Both ids are now cached — a second call makes no request.
@@ -82,9 +82,9 @@ describe('scryfall client', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1); // one batched /cards/collection call
     // case-insensitive lookup by full name
-    expect(byName.get('lightning bolt')?.id).toBe('n1');
+    expect(byName.get('lightning bolt')?.rawId).toBe('n1');
     // double-faced card resolvable by its front-face name
-    expect(byName.get('fable of the mirror-breaker')?.id).toBe('n2');
+    expect(byName.get('fable of the mirror-breaker')?.rawId).toBe('n2');
   });
 
   it('resolveCardsByNames falls back to fuzzy for names the batch misses', async () => {
@@ -101,7 +101,7 @@ describe('scryfall client', () => {
 
     const byName = await resolveCardsByNames(['Lightning Bolt', 'Dol Amroth']);
 
-    expect(byName.get('lightning bolt')?.id).toBe('r1'); // exact batch hit
-    expect(byName.get('dol amroth')?.id).toBe('r2'); // fuzzy fallback for flavor name
+    expect(byName.get('lightning bolt')?.rawId).toBe('r1'); // exact batch hit
+    expect(byName.get('dol amroth')?.rawId).toBe('r2'); // fuzzy fallback for flavor name
   });
 });

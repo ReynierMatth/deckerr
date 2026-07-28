@@ -71,6 +71,7 @@ export async function migrateExistingDecks() {
       const deckToValidate: Deck = {
         id: deck.id,
         name: deck.name,
+        game: cards[0]?.card.game ?? 'mtg',
         format: deck.format,
         cards,
         userId: deck.user_id,

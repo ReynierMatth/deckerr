@@ -2,7 +2,14 @@ import { describe, it, expect } from 'vitest';
 import { computeDeckStats, groupCardsByType } from './deckStats';
 import { Card } from '../types';
 
-const card = (over: Partial<Card>): Card => ({ id: over.name ?? 'x', name: 'x', ...over });
+const card = (over: { name?: string; type_line?: string; cmc?: number; colors?: string[] } = {}): Card => ({
+  id: over.name ?? 'x',
+  rawId: over.name ?? 'x',
+  game: 'mtg',
+  providerId: 'test',
+  name: over.name ?? 'x',
+  mtg: { typeLine: over.type_line, cmc: over.cmc, colors: over.colors },
+});
 const entry = (c: Card, quantity: number) => ({ card: c, quantity });
 
 describe('computeDeckStats', () => {

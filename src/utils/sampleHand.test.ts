@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { expandDeck, drawSampleHand } from './sampleHand';
 import { Card } from '../types';
 
-const card = (name: string): Card => ({ id: name, name });
+const card = (name: string): Card => ({ id: name, rawId: name, game: 'mtg', providerId: 'test', name });
 
 describe('expandDeck', () => {
   it('expands entries by quantity', () => {

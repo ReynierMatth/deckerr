@@ -2,15 +2,26 @@ import { describe, it, expect } from 'vitest';
 import { validateDeck } from './deckValidation';
 import { Card, Deck } from '../types';
 
-const card = (id: string, overrides: Partial<Card> = {}): Card => ({
+const card = (
+  id: string,
+  overrides: { name?: string; oracle_text?: string; colors?: string[]; type_line?: string } = {},
+): Card => ({
   id,
-  name: id,
-  ...overrides,
+  rawId: id,
+  game: 'mtg',
+  providerId: 'test',
+  name: overrides.name ?? id,
+  mtg: {
+    oracleText: overrides.oracle_text,
+    colors: overrides.colors,
+    typeLine: overrides.type_line,
+  },
 });
 
 const deck = (overrides: Partial<Deck>): Deck => ({
   id: 'd1',
   name: 'Test',
+  game: 'mtg',
   format: 'standard',
   cards: [],
   userId: 'u1',

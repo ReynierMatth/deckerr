@@ -132,7 +132,7 @@ export default function DeckSettingsDrawer({
               <option value="">Select Commander</option>
               {selectedCards
                 .filter(c =>
-                  !c.is_sideboard && c.card.type_line?.toLowerCase().includes('legendary')
+                  !c.is_sideboard && c.card.mtg?.typeLine?.toLowerCase().includes('legendary')
                 )
                 .map(({ card }) => (
                   <option key={card.id} value={card.id}>

@@ -288,10 +288,10 @@ export default function ScannerCV() {
                       <p className="font-semibold text-sm truncate">
                         {card?.name ?? `Unknown (${match.id.slice(0, 8)}…)`}
                       </p>
-                      {card?.set_name && (
+                      {card?.setName && (
                         <p className="text-xs text-gray-400 truncate">
-                          {card.set_name}
-                          {card.set ? ` · ${card.set.toUpperCase()}` : ''}
+                          {card.setName}
+                          {card.setCode ? ` · ${card.setCode.toUpperCase()}` : ''}
                         </p>
                       )}
                     </div>

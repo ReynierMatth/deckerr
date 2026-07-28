@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { Loader2, RefreshCw, Download, Upload } from 'lucide-react';
 import { CollectionItem } from './types';
+import { getPrice } from '../../cards/domain/accessors/price';
 
 interface CollectionHeaderProps {
   searchQuery: string;
@@ -47,7 +48,7 @@ export default function CollectionHeader({
             ) : searchQuery ? (
               // For search results, best-effort sum over currently-loaded results
               `$${items.reduce((total, { card, quantity }) => {
-                const price = card.prices?.usd ? parseFloat(card.prices.usd) : 0;
+                const price = getPrice(card, 'tcgplayer');
                 return total + (price * quantity);
               }, 0).toFixed(2)}`
             ) : (

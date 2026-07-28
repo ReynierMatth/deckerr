@@ -15,30 +15,66 @@
 import type { ImageFeatureExtractionPipeline } from '@huggingface/transformers';
 import type { Worker as TesseractWorker } from 'tesseract.js';
 import { loadArtIndex, matchTopK, type ArtIndex, type ArtMatch } from './artIndex';
+import type { GameId } from '../cards/domain/game';
 
 /** Full type of the OpenCV.js module namespace (all functions/classes typed). */
 type CvModule = typeof import('@techstark/opencv-js');
 
-// Rectified card + art-crop geometry, identical to the spike.
-const CARD_W = 488;
-const CARD_H = 680;
-const ART_X = 0.075;
-const ART_Y = 0.11;
-const ART_W = 0.85;
-const ART_H = 0.45;
-// Landscape target for the art window itself (Scryfall art_crop aspect ~1.37:1).
-// Used when detection locks onto the illustration rather than the whole card.
-const ART_CROP_W = 626;
-const ART_CROP_H = 457;
-// A detected quad whose height >= width * this is treated as a full (portrait)
-// card; otherwise it's the (landscape) art window and is embedded whole.
-const PORTRAIT_RATIO = 1.15;
-// Title strip of a rectified card (fraction of CARD_W x CARD_H): the name sits
-// in the top band. Cropped and upscaled for OCR.
-const TITLE_X = 0.05;
-const TITLE_Y = 0.03;
-const TITLE_W = 0.78;
-const TITLE_H = 0.075;
+/**
+ * Rectified-card + embed-crop geometry, per game. The embedded pixels must match
+ * how that game's offline index encoded its images (build-art-index.mjs):
+ * - MTG embeds Scryfall's `art_crop` (illustration only) -> ART_* selects the
+ *   art box of a rectified card; the landscape branch targets the art_crop aspect.
+ * - Pokémon embeds the FULL card image (no art crop) -> ART_* is the whole card
+ *   and ART_CROP matches the card aspect, so both detection branches embed the
+ *   full rectified card.
+ */
+interface ScanGeometry {
+  CARD_W: number;
+  CARD_H: number;
+  ART_X: number;
+  ART_Y: number;
+  ART_W: number;
+  ART_H: number;
+  ART_CROP_W: number;
+  ART_CROP_H: number;
+  PORTRAIT_RATIO: number;
+  TITLE_X: number;
+  TITLE_Y: number;
+  TITLE_W: number;
+  TITLE_H: number;
+}
+
+const GEOMETRY: Record<GameId, ScanGeometry> = {
+  mtg: {
+    CARD_W: 488, CARD_H: 680,
+    ART_X: 0.075, ART_Y: 0.11, ART_W: 0.85, ART_H: 0.45,
+    ART_CROP_W: 626, ART_CROP_H: 457, // Scryfall art_crop aspect ~1.37:1
+    PORTRAIT_RATIO: 1.15,
+    TITLE_X: 0.05, TITLE_Y: 0.03, TITLE_W: 0.78, TITLE_H: 0.075,
+  },
+  // Pokémon: embed the whole card (index stores full card images). Same physical
+  // card ratio as MTG; the name sits in a top band too.
+  pokemon: {
+    CARD_W: 488, CARD_H: 680,
+    ART_X: 0, ART_Y: 0, ART_W: 1, ART_H: 1,
+    ART_CROP_W: 488, ART_CROP_H: 680,
+    PORTRAIT_RATIO: 1.15,
+    TITLE_X: 0.08, TITLE_Y: 0.04, TITLE_W: 0.7, TITLE_H: 0.07,
+  },
+  // Lorcana / One Piece (Phase 2) — placeholder full-card geometry.
+  lorcana: {
+    CARD_W: 488, CARD_H: 680, ART_X: 0, ART_Y: 0, ART_W: 1, ART_H: 1,
+    ART_CROP_W: 488, ART_CROP_H: 680, PORTRAIT_RATIO: 1.15,
+    TITLE_X: 0.08, TITLE_Y: 0.04, TITLE_W: 0.7, TITLE_H: 0.07,
+  },
+  onepiece: {
+    CARD_W: 488, CARD_H: 680, ART_X: 0, ART_Y: 0, ART_W: 1, ART_H: 1,
+    ART_CROP_W: 488, ART_CROP_H: 680, PORTRAIT_RATIO: 1.15,
+    TITLE_X: 0.08, TITLE_Y: 0.04, TITLE_W: 0.7, TITLE_H: 0.07,
+  },
+};
+
 // Downscale the captured frame so its longest side is ~1100px before detection.
 const MAX_FRAME_WIDTH = 1100;
 const EMBED_DIM = 384;
@@ -188,8 +224,8 @@ function loadEmbedder(): Promise<ImageFeatureExtractionPipeline> {
 }
 
 /** Warm up every heavy dependency so the first capture is responsive. */
-export async function preloadScannerCv(): Promise<void> {
-  await Promise.all([loadCv(), loadEmbedder(), loadArtIndex()]);
+export async function preloadScannerCv(game: GameId = 'mtg'): Promise<void> {
+  await Promise.all([loadCv(), loadEmbedder(), loadArtIndex(game)]);
 }
 
 const dist = (a: Pt, b: Pt): number => Math.hypot(a.x - b.x, a.y - b.y);
@@ -388,11 +424,15 @@ export async function detectQuad(video: HTMLVideoElement): Promise<DetectResult>
  * embed the art, cosine-match the top-5. Timings are measured per stage. When
  * no card quad is found, returns { ok: false }.
  */
-export async function runScan(video: HTMLVideoElement): Promise<ScanOutcome> {
-  console.info('[scan-cv] runScan: awaiting deps (cv/embedder/index)…');
+export async function runScan(video: HTMLVideoElement, game: GameId = 'mtg'): Promise<ScanOutcome> {
+  console.info(`[scan-cv] runScan (${game}): awaiting deps (cv/embedder/index)…`);
   const [cv, embedder, index]: [CvModule, ImageFeatureExtractionPipeline, ArtIndex] =
-    await Promise.all([loadCv(), loadEmbedder(), loadArtIndex()]);
+    await Promise.all([loadCv(), loadEmbedder(), loadArtIndex(game)]);
   console.info(`[scan-cv] deps ready (index: ${index.ids.length} vecs)`);
+  const {
+    CARD_W, CARD_H, ART_X, ART_Y, ART_W, ART_H,
+    ART_CROP_W, ART_CROP_H, PORTRAIT_RATIO, TITLE_X, TITLE_Y, TITLE_W, TITLE_H,
+  } = GEOMETRY[game];
 
   const vw = video.videoWidth;
   const vh = video.videoHeight;

@@ -1,6 +1,7 @@
 import { Search, X, Minus } from 'lucide-react';
 import { Card } from '../../types';
 import { CollectionItem, SelectedCard } from './types';
+import { getPrice, hasPrice } from '../../cards/domain/accessors/price';
 
 interface CollectionGridProps {
   items: CollectionItem[];
@@ -72,16 +73,16 @@ export default function CollectionGrid({
                 onClick={() => remainingQty > 0 && onAdd(card, quantity)}
               >
                 <img
-                  src={card.image_uris?.small || card.image_uris?.normal}
+                  src={card.images?.small || card.images?.normal}
                   alt={card.name}
                   className={`w-full h-auto ${remainingQty === 0 ? 'opacity-50' : ''}`}
                 />
                 <div className="absolute top-1 right-1 bg-gray-900/80 text-white text-[10px] px-1 py-0.5 rounded">
                   {remainingQty}/{quantity}
                 </div>
-                {card.prices?.usd && (
+                {hasPrice(card, 'tcgplayer') && (
                   <div className="absolute top-1 left-1 bg-gray-900/80 text-green-400 text-[10px] px-1 py-0.5 rounded font-semibold">
-                    ${card.prices.usd}
+                    ${getPrice(card, 'tcgplayer')}
                   </div>
                 )}
                 {selected && (

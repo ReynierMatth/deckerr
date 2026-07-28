@@ -14,6 +14,7 @@ import { getUserCollectionPaginated, getCardsByIds, getCollectionTotalValue } fr
 import { Card } from '../../types';
 import { profileDisplayName } from '../../utils/profileName';
 import TradeCreator from '../TradeCreator';
+import { getPrice, hasPrice } from '../../cards/domain/accessors/price';
 
 export interface UserProfile {
   id: string;
@@ -275,7 +276,7 @@ export default function UserCollectionViewer({
                 ) : userCollectionSearch ? (
                   // For search results, calculate from filtered collection
                   `$${filteredUserCollection.reduce((total, { card, quantity }) => {
-                    const price = card.prices?.usd ? parseFloat(card.prices.usd) : 0;
+                    const price = getPrice(card, 'tcgplayer');
                     return total + (price * quantity);
                   }, 0).toFixed(2)}`
                 ) : (
@@ -304,8 +305,8 @@ export default function UserCollectionViewer({
               {filteredUserCollection.map(({ card, quantity }) => {
                 const currentFaceIndex = getCurrentFaceIndex(card.id);
                 const isMultiFaced = isDoubleFaced(card);
-                const displayName = isMultiFaced && card.card_faces
-                  ? card.card_faces[currentFaceIndex]?.name || card.name
+                const displayName = isMultiFaced && card.faces
+                  ? card.faces[currentFaceIndex]?.name || card.name
                   : card.name;
 
                 return (
@@ -329,9 +330,9 @@ export default function UserCollectionViewer({
                         x{quantity}
                       </div>
                       {/* Price badge */}
-                      {card.prices?.usd && (
+                      {hasPrice(card, 'tcgplayer') && (
                         <div className="absolute bottom-1 left-1 bg-green-600 text-white text-[10px] sm:text-xs font-bold px-1.5 py-0.5 rounded shadow-lg">
-                          ${card.prices.usd}
+                          ${getPrice(card, 'tcgplayer')}
                         </div>
                       )}
                       {/* Flip button for double-faced cards */}
@@ -339,7 +340,7 @@ export default function UserCollectionViewer({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            toggleCardFace(card.id, card.card_faces!.length);
+                            toggleCardFace(card.id, card.faces!.length);
                           }}
                           className="absolute bottom-1 right-1 bg-purple-600 hover:bg-purple-700 text-white p-1 rounded-full shadow-lg transition-all"
                           title="Flip card"

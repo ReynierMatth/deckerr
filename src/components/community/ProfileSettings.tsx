@@ -2,9 +2,15 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Save } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePriceSource } from '../../contexts/PriceSourceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 import { HANDLE_PATTERN } from '../../utils/profileName';
+
+const PRICE_SOURCE_OPTIONS = [
+  { value: 'tcgplayer', label: 'TCGplayer', description: 'US market (USD)' },
+  { value: 'cardmarket', label: 'Cardmarket', description: 'EU market (EUR)' },
+] as const;
 
 type Visibility = 'public' | 'friends' | 'private';
 
@@ -27,6 +33,7 @@ const UNIQUE_VIOLATION = '23505';
 /** Profile settings tab: display name, @handle + collection visibility. Self-contained. */
 export default function ProfileSettings() {
   const { user } = useAuth();
+  const { source: priceSource, setSource: setPriceSource } = usePriceSource();
   const toast = useToast();
   const queryClient = useQueryClient();
   const [displayName, setDisplayName] = useState('');
@@ -157,6 +164,30 @@ export default function ProfileSettings() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Preferred price source */}
+      <div>
+        <label className="block text-sm text-gray-400 mb-1.5">Price source</label>
+        <div className="grid grid-cols-2 gap-2">
+          {PRICE_SOURCE_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => setPriceSource(option.value)}
+              className={`p-3 rounded-lg border-2 transition text-center ${
+                priceSource === option.value
+                  ? 'border-blue-500 bg-blue-500/10'
+                  : 'border-gray-700 bg-gray-800 active:border-gray-600'
+              }`}
+            >
+              <div className="font-medium text-sm">{option.label}</div>
+              <div className="text-xs text-gray-400 mt-0.5">{option.description}</div>
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-xs text-gray-500">
+          Cardmarket prices are available for Magic and Pokémon; other games fall back to TCGplayer.
+        </p>
       </div>
 
       {/* Save */}

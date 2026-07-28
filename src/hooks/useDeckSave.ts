@@ -62,9 +62,13 @@ export function useDeckSave({
     setIsSaving(true);
     try {
       const deckId = currentDeckId || crypto.randomUUID();
+      // A deck is single-game; take it from its cards (fall back to the
+      // existing deck's game, then MTG).
+      const deckGame = selectedCards[0]?.card.game ?? initialDeck?.game ?? 'mtg';
       const deckToSave: Deck = {
         id: deckId,
         name: deckName,
+        game: deckGame,
         format: deckFormat,
         cards: selectedCards,
         userId: user.id,
@@ -87,6 +91,7 @@ export function useDeckSave({
       const deckData = {
         id: deckToSave.id,
         name: deckToSave.name,
+        game: deckToSave.game,
         format: deckToSave.format,
         user_id: deckToSave.userId,
         created_at: deckToSave.createdAt,
@@ -122,6 +127,7 @@ export function useDeckSave({
       const deckCards = selectedCards.map(card => ({
         deck_id: deckToSave.id,
         card_id: card.card.id,
+        game: card.card.game,
         quantity: card.quantity,
         // Commanders live on the mainboard only.
         is_commander: !card.is_sideboard && card.card.id === commander?.id,

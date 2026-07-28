@@ -15,6 +15,7 @@ import {
 import { getUserCollection, getCardsByIds } from '../services/api';
 import { Card } from '../types';
 import { profileDisplayName, profileHandleLabel } from '../utils/profileName';
+import { getPrice, hasPrice } from '../cards/domain/accessors/price';
 import TradeCreator from './TradeCreator';
 import CardTile from './card/CardTile';
 
@@ -44,7 +45,7 @@ const EMPTY_TRADE_ITEMS: TradeCardItem[] = [];
 
 function calculateTotalPrice(items: TradeCardItem[]): number {
   return items.reduce((total, { card, quantity }) => {
-    const price = card.prices?.usd ? parseFloat(card.prices.usd) : 0;
+    const price = getPrice(card, 'tcgplayer');
     return total + (price * quantity);
   }, 0);
 }
@@ -322,9 +323,9 @@ export default function TradeDetail({
                             )
                           }
                           bottomLeft={
-                            item.card.prices?.usd && (
+                            hasPrice(item.card, 'tcgplayer') && (
                               <div className="absolute bottom-1 left-1 bg-gray-900/90 text-white text-[10px] px-1 py-0.5 rounded">
-                                ${item.card.prices.usd}
+                                ${getPrice(item.card, 'tcgplayer')}
                               </div>
                             )
                           }
@@ -364,9 +365,9 @@ export default function TradeDetail({
                             )
                           }
                           bottomLeft={
-                            item.card.prices?.usd && (
+                            hasPrice(item.card, 'tcgplayer') && (
                               <div className="absolute bottom-1 left-1 bg-gray-900/90 text-white text-[10px] px-1 py-0.5 rounded">
-                                ${item.card.prices.usd}
+                                ${getPrice(item.card, 'tcgplayer')}
                               </div>
                             )
                           }

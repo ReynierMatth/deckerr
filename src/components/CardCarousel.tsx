@@ -33,7 +33,7 @@ export default function CardCarousel() {
             key={card.id}
             className="min-w-full h-full transform transition-transform duration-1000"
             style={{
-              backgroundImage: `url(${card.image_uris?.normal})`,
+              backgroundImage: `url(${card.images?.normal})`,
               backgroundSize: 'cover',
               backgroundPosition: 'center',
               filter: 'blur(8px)',

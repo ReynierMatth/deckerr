@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { Card } from '../../types';
 import { isDoubleFaced, getCardArtCrop } from '../../utils/cardFaces';
+import { getPrice, hasPrice } from '../../cards/domain/accessors/price';
 
 interface CardRowProps {
   card: Card;
@@ -52,10 +53,15 @@ export default function CardRow({
   const artCrop = getCardArtCrop(card, faceIndex);
   const displayName =
     name ??
-    (isDoubleFaced(card) && card.card_faces
-      ? card.card_faces[faceIndex]?.name || card.name
+    (isDoubleFaced(card) && card.faces
+      ? card.faces[faceIndex]?.name || card.name
       : card.name);
-  const displayPrice = price === undefined ? card.prices?.usd : price;
+  const displayPrice =
+    price === undefined
+      ? hasPrice(card, 'tcgplayer')
+        ? getPrice(card, 'tcgplayer').toFixed(2)
+        : null
+      : price;
 
   return (
     <div

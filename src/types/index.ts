@@ -7,52 +7,14 @@ export interface User {
   themeColor: 'red' | 'green' | 'blue' | 'yellow' | 'grey' | 'purple';
 }
 
-export interface CardImageUris {
-  small?: string;
-  normal?: string;
-  large?: string;
-  art_crop?: string;
-  border_crop?: string;
-  png?: string;
-}
-
-export interface CardFace {
-  name?: string;
-  mana_cost?: string;
-  type_line?: string;
-  oracle_text?: string;
-  flavor_text?: string;
-  colors?: string[];
-  image_uris?: CardImageUris;
-}
-
-export interface Card {
-  id: string;
-  name: string;
-  layout?: string;
-  image_uris?: CardImageUris;
-  card_faces?: CardFace[];
-  mana_cost?: string;
-  cmc?: number;
-  type_line?: string;
-  oracle_text?: string;
-  flavor_text?: string;
-  colors?: string[];
-  color_identity?: string[];
-  set?: string;
-  set_name?: string;
-  rarity?: string;
-  collector_number?: string;
-  lang?: string;
-  artist?: string;
-  /** Scryfall search URI listing every printing of this card. */
-  prints_search_uri?: string;
-  prices?: {
-    usd?: string;
-    usd_foil?: string;
-    eur?: string;
-  };
-}
+// The app's card model is now the game-neutral `UnifiedCard`. `Card` is kept as
+// an alias so existing imports keep working; read cards through the domain
+// accessors (`src/cards/domain/accessors/*`), not raw provider fields.
+import type { UnifiedCard } from '../cards/domain/UnifiedCard';
+import type { GameId } from '../cards/domain/game';
+export type { UnifiedCard } from '../cards/domain/UnifiedCard';
+export type { GameId } from '../cards/domain/game';
+export type Card = UnifiedCard;
 
 export interface Collection {
   id: string;
@@ -66,6 +28,8 @@ export interface Collection {
 export interface Deck {
   id: string;
   name: string;
+  /** Which TCG this deck belongs to (a deck is single-game). */
+  game: GameId;
   format: string;
   cards: { card: Card; quantity: number, is_commander: boolean, is_sideboard: boolean }[];
   userId: string;

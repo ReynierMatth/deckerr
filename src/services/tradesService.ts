@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { parseCardRef } from '../cards/domain/accessors/identity';
 
 interface ProfileNames {
   username: string | null;
@@ -143,6 +144,7 @@ export async function createTrade(params: CreateTradeParams): Promise<Trade> {
     trade_id: trade.id,
     owner_id: user1Id,
     card_id: card.cardId,
+    game: parseCardRef(card.cardId).game,
     quantity: card.quantity,
   }));
 
@@ -151,6 +153,7 @@ export async function createTrade(params: CreateTradeParams): Promise<Trade> {
     trade_id: trade.id,
     owner_id: user2Id,
     card_id: card.cardId,
+    game: parseCardRef(card.cardId).game,
     quantity: card.quantity,
   }));
 
@@ -303,6 +306,7 @@ export async function updateTrade(params: UpdateTradeParams): Promise<Trade> {
     trade_id: tradeId,
     owner_id: editorId,
     card_id: card.cardId,
+    game: parseCardRef(card.cardId).game,
     quantity: card.quantity,
   }));
 
@@ -310,6 +314,7 @@ export async function updateTrade(params: UpdateTradeParams): Promise<Trade> {
     trade_id: tradeId,
     owner_id: otherUserId,
     card_id: card.cardId,
+    game: parseCardRef(card.cardId).game,
     quantity: card.quantity,
   }));
 

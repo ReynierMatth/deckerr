@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { User as UserIcon, Layers, Copy } from 'lucide-react';
-import { Card } from '../types';
+import { Card, GameId } from '../types';
 import { supabase } from '../lib/supabase';
 import { getCardsByIds } from '../services/api';
 import { getCardImageUri } from '../utils/cardFaces';
@@ -15,6 +15,7 @@ interface PublicDeckProps {
 
 interface PublicDeckData {
   name: string;
+  game: GameId;
   format: string;
   tags: string[];
   cardCount: number;
@@ -74,6 +75,7 @@ const fetchPublicDeck = async (deckId: string): Promise<PublicDeckData | null> =
 
   return {
     name: deckData.name as string,
+    game: (deckData.game as GameId | null) ?? 'mtg',
     format: deckData.format as string,
     tags: (deckData.tags as string[] | null) ?? [],
     cardCount: (deckData.card_count as number | null) ?? 0,
@@ -95,6 +97,7 @@ const cloneDeck = async (deck: PublicDeckData, userId: string): Promise<string> 
   const { error: deckError } = await supabase.from('decks').insert({
     id: newDeckId,
     name: `${deck.name} (copy)`,
+    game: deck.game,
     format: deck.format,
     user_id: userId,
     created_at: now,
@@ -110,6 +113,7 @@ const cloneDeck = async (deck: PublicDeckData, userId: string): Promise<string> 
     const rows = deck.cards.map(({ card, quantity, is_commander, is_sideboard }) => ({
       deck_id: newDeckId,
       card_id: card.id,
+      game: card.game,
       quantity,
       is_commander,
       is_sideboard,

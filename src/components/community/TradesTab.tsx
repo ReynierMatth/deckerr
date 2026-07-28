@@ -16,6 +16,7 @@ import {
 import { getCardsByIds } from '../../services/api';
 import { Card } from '../../types';
 import { profileDisplayName } from '../../utils/profileName';
+import { getPrice } from '../../cards/domain/accessors/price';
 import TradeDetail from '../TradeDetail';
 import ConfirmModal from '../ConfirmModal';
 
@@ -144,7 +145,7 @@ export default function TradesTab() {
     const ownerItems = items?.filter((i) => i.owner_id === ownerId) || [];
     return ownerItems.reduce((total, item) => {
       const card = tradeCardDetails[item.card_id];
-      const price = card?.prices?.usd ? parseFloat(card.prices.usd) : 0;
+      const price = card ? getPrice(card, 'tcgplayer') : 0;
       return total + (price * item.quantity);
     }, 0);
   };
