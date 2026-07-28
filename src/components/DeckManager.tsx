@@ -414,6 +414,13 @@ export default function DeckManager({ initialDeck, newDeckGame, onSave }: DeckMa
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <button
+                onClick={() => setShowSearch(true)}
+                aria-label="Add cards"
+                className="hidden md:flex h-11 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+              >
+                <Search size={18} /> Add cards
+              </button>
+              <button
                 onClick={() => setShowSettings(true)}
                 aria-label="Deck settings"
                 className="flex h-11 min-w-[44px] items-center justify-center gap-1.5 rounded-lg bg-gray-800 px-3 text-sm font-medium text-white active:bg-gray-700 hover:bg-gray-700 transition-colors"
@@ -432,13 +439,6 @@ export default function DeckManager({ initialDeck, newDeckGame, onSave }: DeckMa
             </div>
           </div>
 
-          {/* Open the card-search drawer/modal (desktop; mobile uses the FAB) */}
-          <button
-            onClick={() => setShowSearch(true)}
-            className="hidden md:flex w-full mb-4 items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium text-white transition-colors"
-          >
-            <Search size={18} /> Add cards
-          </button>
 
           {/* Deck Builder Section */}
           <DeckCardList

@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from 'react';
+
 export interface PricePoint {
   date: string;
   value: number;
@@ -6,20 +8,37 @@ export interface PricePoint {
 interface PriceLineChartProps {
   points: PricePoint[];
   ariaLabel: string;
+  /** Fixed pixel height of the chart (mobile-first: compact on every screen). */
+  height?: number;
 }
 
-const W = 320;
-const H = 120;
 const PAD = { top: 12, right: 8, bottom: 18, left: 8 };
 
 /**
- * Small single-series dollar-value line chart (SVG, scales to its container
- * width). Callers must guard for at least 2 points — this renders nothing
- * meaningful below that.
+ * Small single-series dollar-value line chart. Fills its container's WIDTH (via
+ * a ResizeObserver so the viewBox matches the pixel box 1:1 — no distortion) at
+ * a FIXED height, so it stays compact on desktop instead of ballooning with the
+ * viewport. Callers must guard for at least 2 points.
  */
-export default function PriceLineChart({ points, ariaLabel }: PriceLineChartProps) {
+export default function PriceLineChart({ points, ariaLabel, height = 140 }: PriceLineChartProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(320);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w && w > 0) setWidth(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   if (points.length < 2) return null;
 
+  const W = width;
+  const H = height;
   const values = points.map((p) => p.value);
   const min = Math.min(...values);
   const max = Math.max(...values);
@@ -37,17 +56,19 @@ export default function PriceLineChart({ points, ariaLabel }: PriceLineChartProp
   const last = points[points.length - 1];
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label={ariaLabel}>
-      <path d={areaPath} fill="#3B82F6" fillOpacity={0.15} />
-      <path d={linePath} fill="none" stroke="#3B82F6" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-      {points.map((p, i) => (
-        <circle key={p.date} cx={x(i)} cy={y(p.value)} r={2.5} fill="#3B82F6">
-          <title>{`${p.date}: $${p.value.toFixed(2)}`}</title>
-        </circle>
-      ))}
-      {/* endpoint labels */}
-      <text x={PAD.left} y={H - 4} className="fill-gray-500" fontSize={9}>{first.date.slice(5)}</text>
-      <text x={W - PAD.right} y={H - 4} textAnchor="end" className="fill-gray-500" fontSize={9}>{last.date.slice(5)}</text>
-    </svg>
+    <div ref={containerRef} className="w-full">
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={ariaLabel}>
+        <path d={areaPath} fill="#3B82F6" fillOpacity={0.15} />
+        <path d={linePath} fill="none" stroke="#3B82F6" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        {points.map((p, i) => (
+          <circle key={p.date} cx={x(i)} cy={y(p.value)} r={2.5} fill="#3B82F6">
+            <title>{`${p.date}: $${p.value.toFixed(2)}`}</title>
+          </circle>
+        ))}
+        {/* endpoint labels */}
+        <text x={PAD.left} y={H - 4} className="fill-gray-500" fontSize={9}>{first.date.slice(5)}</text>
+        <text x={W - PAD.right} y={H - 4} textAnchor="end" className="fill-gray-500" fontSize={9}>{last.date.slice(5)}</text>
+      </svg>
+    </div>
   );
 }
