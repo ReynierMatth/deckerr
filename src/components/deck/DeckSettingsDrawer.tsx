@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Loader2, X, Trash2 } from 'lucide-react';
 import { Card } from '../../types';
+import { GameId } from '../../cards/domain/game';
+import { getDeckRules } from '../../cards/infra/rules';
 import { ManaSymbol } from '../ManaCost';
 import Modal from '../Modal';
 
@@ -12,6 +14,7 @@ interface DeckCardEntry {
 }
 
 interface DeckSettingsDrawerProps {
+  game: GameId;
   deckFormat: string;
   setDeckFormat: React.Dispatch<React.SetStateAction<string>>;
   tags: string[];
@@ -34,6 +37,7 @@ interface DeckSettingsDrawerProps {
  * import. Presentational — all state lives in DeckManager and is passed in.
  */
 export default function DeckSettingsDrawer({
+  game,
   deckFormat,
   setDeckFormat,
   tags,
@@ -68,15 +72,9 @@ export default function DeckSettingsDrawer({
           onChange={e => setDeckFormat(e.target.value)}
           className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
         >
-          <option value="commander">Commander</option>
-          <option value="standard">Standard</option>
-          <option value="modern">Modern</option>
-          <option value="pioneer">Pioneer</option>
-          <option value="brawl">Brawl</option>
-          <option value="oathbreaker">Oathbreaker</option>
-          <option value="legacy">Legacy</option>
-          <option value="vintage">Vintage</option>
-          <option value="pauper">Pauper</option>
+          {getDeckRules(game).formats().map((f) => (
+            <option key={f.id} value={f.id}>{f.label}</option>
+          ))}
         </select>
 
         {/* Tags editor: add on Enter, removable chips */}

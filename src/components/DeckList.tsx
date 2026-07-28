@@ -2,16 +2,19 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getCardsByIds, deleteDeck } from '../services/api';
 import { Deck } from '../types';
+import { GameId, enabledGames } from '../cards/domain/game';
 import { supabase } from "../lib/supabase";
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import DeckCard from "./DeckCard";
 import ConfirmModal from './ConfirmModal';
+import Modal from './Modal';
 import { PlusCircle } from 'lucide-react';
 
 interface DeckListProps {
   onDeckEdit?: (deckId: string) => void;
-  onCreateDeck?: () => void;
+  /** Called with the game chosen for the new deck (fixed for its life). */
+  onCreateDeck?: (game: GameId) => void;
 }
 
 const fetchDecks = async (userId: string): Promise<Deck[]> => {
@@ -46,6 +49,7 @@ const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const toast = useToast();
+  const [choosingGame, setChoosingGame] = useState(false);
   const { data: decks = [], isLoading } = useQuery({
     queryKey: ['decks', user?.id],
     enabled: !!user,
@@ -142,7 +146,11 @@ const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
 
         {/* Create New Deck Card */}
       <button
-        onClick={onCreateDeck}
+        onClick={() => {
+          const games = enabledGames();
+          if (games.length <= 1) onCreateDeck?.(games[0]?.id ?? 'mtg');
+          else setChoosingGame(true);
+        }}
         className="bg-gray-800 rounded-lg overflow-hidden shadow-lg hover:shadow-xl border-2 border-dashed border-gray-600 hover:border-blue-500 transition-all duration-300 hover:scale-105 cursor-pointer group aspect-[5/7] flex flex-col items-center justify-center gap-3 p-4"
       >
         <PlusCircle size={48} className="text-gray-600 group-hover:text-blue-500 transition-colors" />
@@ -156,6 +164,27 @@ const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
         </div>
         </button>
       </div>
+
+      <Modal isOpen={choosingGame} onClose={() => setChoosingGame(false)} labelledBy="choose-game-title">
+        <div className="p-4 space-y-3">
+          <h2 id="choose-game-title" className="text-lg font-semibold text-white">New deck — choose a game</h2>
+          <p className="text-sm text-gray-400">A deck belongs to one game; this can't be changed later.</p>
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            {enabledGames().map((g) => (
+              <button
+                key={g.id}
+                onClick={() => {
+                  setChoosingGame(false);
+                  onCreateDeck?.(g.id);
+                }}
+                className="p-4 rounded-lg border-2 border-gray-700 bg-gray-800 hover:border-blue-500 transition font-medium"
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Modal>
 
       <ConfirmModal
         isOpen={pendingDelete !== null}

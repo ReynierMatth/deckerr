@@ -9,6 +9,7 @@ import {
 } from '@tanstack/react-router';
 import { lazy, Suspense } from 'react';
 import { useAuth } from './contexts/AuthContext';
+import { GameId, isGameId } from './cards/domain/game';
 import Navigation from './components/Navigation';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import LoginForm from './components/LoginForm';
@@ -18,6 +19,7 @@ import DeckList from './components/DeckList';
 
 const DeckEditor = lazy(() => import('./components/DeckEditor'));
 const PublicDeck = lazy(() => import('./components/PublicDeck'));
+const DeckManagerLazy = lazy(() => import('./components/DeckManager'));
 
 const PageSpinner = () => (
   <div className="flex items-center justify-center h-64">
@@ -79,7 +81,7 @@ function HomePage() {
         <h1 className="text-2xl md:text-3xl font-bold mb-4 md:mb-6 animate-slide-in-left">My Decks</h1>
         <DeckList
           onDeckEdit={(deckId) => navigate({ to: '/decks/$deckId/edit', params: { deckId } })}
-          onCreateDeck={() => navigate({ to: '/deck' })}
+          onCreateDeck={(game) => navigate({ to: '/deck', search: { game } })}
         />
       </div>
     </div>
@@ -106,10 +108,23 @@ function ViewDeckPage() {
 }
 
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: HomePage });
+// New-deck route: the game is chosen at creation (?game=…) and is then fixed
+// for the deck's life — you can't switch TCG while editing.
+function NewDeckPage() {
+  const { game } = deckRoute.useSearch();
+  return (
+    <Suspense fallback={<PageSpinner />}>
+      <DeckManagerLazy newDeckGame={game} />
+    </Suspense>
+  );
+}
 const deckRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/deck',
-  component: lazyRouteComponent(() => import('./components/DeckManager')),
+  validateSearch: (search: Record<string, unknown>): { game?: GameId } => ({
+    game: isGameId(search.game) ? search.game : undefined,
+  }),
+  component: NewDeckPage,
 });
 const collectionRoute = createRoute({
   getParentRoute: () => rootRoute,

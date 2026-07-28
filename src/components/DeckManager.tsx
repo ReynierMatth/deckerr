@@ -4,8 +4,9 @@ import { useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, Deck } from '../types';
 import { searchCards, resolveCardsByNames, deleteDeck } from '../services/api';
-import { GameId, enabledGames } from '../cards/domain/game';
+import { GameId } from '../cards/domain/game';
 import { cardData } from '../cards/infra/facade';
+import { getDeckRules } from '../cards/infra/rules';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import ConfirmModal from './ConfirmModal';
@@ -32,13 +33,18 @@ import Modal from './Modal';
 
 interface DeckManagerProps {
   initialDeck?: Deck;
+  /** Game for a NEW deck (from the create flow). Ignored when editing. */
+  newDeckGame?: GameId;
   onSave?: () => void;
 }
 
-export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
+export default function DeckManager({ initialDeck, newDeckGame, onSave }: DeckManagerProps) {
   const toast = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  // A deck belongs to one game, fixed at creation and immutable while editing.
+  const game: GameId = initialDeck?.game ?? newDeckGame ?? 'mtg';
+  const rules = getDeckRules(game);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
@@ -52,7 +58,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     is_sideboard: boolean;
   }[]>(initialDeck?.cards || []);
   const [deckName, setDeckName] = useState(initialDeck?.name || '');
-  const [deckFormat, setDeckFormat] = useState(initialDeck?.format || 'commander');
+  const [deckFormat, setDeckFormat] = useState(initialDeck?.format || rules.formats()[0]?.id || 'standard');
   const [tags, setTags] = useState<string[]>(initialDeck?.tags ?? []);
   const [commander, setCommander] = useState<Card | null>(
       initialDeck?.cards.find(card =>
@@ -79,6 +85,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const { currentDeckId, visibility, setVisibilityPersisted, isSaving, saveDeck } = useDeckSave({
     initialDeck,
     onSave,
+    game,
     deckName,
     deckFormat,
     selectedCards,
@@ -114,12 +121,6 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     handleAddMissingToWishlist,
   } = useDeckCollectionActions(selectedCards);
 
-  // A deck is single-game: once it has cards (or when editing an existing deck)
-  // the search is locked to that game; a fresh empty deck lets the user pick.
-  const deckGameFixed: GameId | undefined = selectedCards[0]?.card.game ?? initialDeck?.game;
-  const [chosenGame, setChosenGame] = useState<GameId>('mtg');
-  const searchGame: GameId = deckGameFixed ?? chosenGame;
-
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
@@ -127,8 +128,8 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     setIsSearching(true);
     try {
       const result = await cardData.search(
-        searchGame,
-        searchGame === 'mtg' ? { raw: { scryfall: searchQuery } } : { text: searchQuery },
+        game,
+        game === 'mtg' ? { raw: { scryfall: searchQuery } } : { text: searchQuery },
       );
       const cards = result.cards;
       setSearchResults(cards || []);
@@ -252,7 +253,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const currentDeck: Deck = {
     id: initialDeck?.id || '',
     name: deckName,
-    game: selectedCards[0]?.card.game ?? initialDeck?.game ?? 'mtg',
+    game,
     format: deckFormat,
     cards: selectedCards,
     userId: user?.id || '',
@@ -266,10 +267,13 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const commanderColors = deckFormat === 'commander' ? getCommanderColors(commander) : [];
 
   const deckSize = mainboardCards.reduce((acc, curr) => acc + curr.quantity, 0);
+  // Land suggestions are MTG-only (mana/colour based).
   const {
     landCount: suggestedLandCountValue,
     landDistribution: suggestedLands,
-  } = suggestLandCountAndDistribution(mainboardCards, deckFormat, commanderColors);
+  } = game === 'mtg'
+    ? suggestLandCountAndDistribution(mainboardCards, deckFormat, commanderColors)
+    : { landCount: 0, landDistribution: {} as Record<string, number> };
 
   const totalPrice = selectedCards.reduce((acc, { card, quantity }) => {
     const isBasicLand =
@@ -461,10 +465,13 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
           {/* Stats + sample hand: stacked on mobile, side by side on desktop */}
           <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-              <h2 className="text-lg font-semibold text-white mb-3">Deck Stats</h2>
-              <DeckStats cards={mainboardCards} />
-            </div>
+            {/* Deck Stats are MTG-specific (mana curve / colours). */}
+            {game === 'mtg' && (
+              <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+                <h2 className="text-lg font-semibold text-white mb-3">Deck Stats</h2>
+                <DeckStats cards={mainboardCards} />
+              </div>
+            )}
             <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
               <h2 className="text-lg font-semibold text-white mb-3">Sample Hand</h2>
               <SampleHand cards={mainboardCards} />
@@ -503,21 +510,6 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       <Modal isOpen={showSearch} onClose={() => setShowSearch(false)} size="xl" labelledBy="add-cards-title">
         <div className="p-3">
           <h2 id="add-cards-title" className="text-lg font-semibold text-white mb-3 pr-8">Add cards</h2>
-          {!deckGameFixed && enabledGames().length > 1 && (
-            <div className="flex gap-2 mb-3">
-              {enabledGames().map((g) => (
-                <button
-                  key={g.id}
-                  onClick={() => setChosenGame(g.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                    searchGame === g.id ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                  }`}
-                >
-                  {g.label}
-                </button>
-              ))}
-            </div>
-          )}
           <div className="lg:flex lg:gap-4">
             <div className="lg:flex-1 lg:min-w-0">
               <DeckSearchPanel
@@ -567,6 +559,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
 
       {/* Deck settings — format, tags, commander, decklist import */}
       <DeckSettingsDrawer
+        game={game}
         deckFormat={deckFormat}
         setDeckFormat={setDeckFormat}
         tags={tags}

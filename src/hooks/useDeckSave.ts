@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, Deck, DeckVisibility } from '../types';
+import { Card, Deck, DeckVisibility, GameId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
@@ -8,6 +8,8 @@ import { validateDeck } from '../utils/deckValidation';
 interface UseDeckSaveParams {
   initialDeck?: Deck;
   onSave?: () => void;
+  /** The deck's game (fixed at creation). */
+  game: GameId;
   deckName: string;
   deckFormat: string;
   selectedCards: { card: Card; quantity: number; is_commander: boolean; is_sideboard: boolean }[];
@@ -22,6 +24,7 @@ interface UseDeckSaveParams {
 export function useDeckSave({
   initialDeck,
   onSave,
+  game,
   deckName,
   deckFormat,
   selectedCards,
@@ -62,13 +65,10 @@ export function useDeckSave({
     setIsSaving(true);
     try {
       const deckId = currentDeckId || crypto.randomUUID();
-      // A deck is single-game; take it from its cards (fall back to the
-      // existing deck's game, then MTG).
-      const deckGame = selectedCards[0]?.card.game ?? initialDeck?.game ?? 'mtg';
       const deckToSave: Deck = {
         id: deckId,
         name: deckName,
-        game: deckGame,
+        game,
         format: deckFormat,
         cards: selectedCards,
         userId: user.id,
