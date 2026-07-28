@@ -20,6 +20,18 @@ import CardDetail from './card/CardDetail';
 import { SearchFormState, initialSearchForm, searchFormReducer } from './search/searchFormState';
 import { getPrice } from '../cards/domain/accessors/price';
 
+// Languages TCGdex serves for Pokémon ('' = follow the browser default).
+const POKEMON_LANGS: { code: string; label: string }[] = [
+  { code: '', label: 'Auto' },
+  { code: 'fr', label: 'Français' },
+  { code: 'en', label: 'English' },
+  { code: 'es', label: 'Español' },
+  { code: 'de', label: 'Deutsch' },
+  { code: 'it', label: 'Italiano' },
+  { code: 'pt', label: 'Português' },
+  { code: 'ja', label: '日本語' },
+];
+
 const CardSearch = () => {
   const { user } = useAuth();
   const toast = useToast();
@@ -63,6 +75,7 @@ const CardSearch = () => {
   // Search targets one game at a time (each has its own provider/syntax).
   const [game, setGame] = useState<GameId>('mtg');
   const [pokemonQuery, setPokemonQuery] = useState('');
+  const [pokemonLang, setPokemonLang] = useState(''); // '' = browser default
   const games = enabledGames();
 
   // Collection state (card_id -> quantity), same cache entry as DeckManager.
@@ -117,7 +130,7 @@ const CardSearch = () => {
     const query =
       game === 'mtg'
         ? { raw: { scryfall: buildScryfallQuery(form) } }
-        : { text: pokemonQuery };
+        : { text: pokemonQuery, raw: pokemonLang ? { lang: pokemonLang } : undefined };
 
     try {
       const result = await cardData.search(game, query, controller.signal);
@@ -162,14 +175,24 @@ const CardSearch = () => {
         {game === 'mtg' ? (
           <SearchForm form={form} setField={setField} onSubmit={handleSearch} />
         ) : (
-          <form onSubmit={handleSearch} className="mb-6 flex gap-2">
+          <form onSubmit={handleSearch} className="mb-6 flex flex-wrap gap-2">
             <input
               type="text"
               value={pokemonQuery}
               onChange={(e) => setPokemonQuery(e.target.value)}
               placeholder="Search Pokémon cards by name…"
-              className="flex-1 px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm"
+              className="flex-1 min-w-0 px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm"
             />
+            <select
+              value={pokemonLang}
+              onChange={(e) => setPokemonLang(e.target.value)}
+              aria-label="Search language"
+              className="px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm"
+            >
+              {POKEMON_LANGS.map((l) => (
+                <option key={l.code} value={l.code}>{l.label}</option>
+              ))}
+            </select>
             <button type="submit" className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium">
               Search
             </button>

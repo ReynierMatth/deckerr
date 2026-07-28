@@ -6,6 +6,7 @@ import { isDoubleFaced, getCardLargeImageUri } from '../../utils/cardFaces';
 import { getPrice, hasPrice } from '../../cards/domain/accessors/price';
 import { isPokemon } from '../../cards/domain/UnifiedCard';
 import { usePriceSource } from '../../contexts/PriceSourceContext';
+import { useFullCard } from '../../hooks/useFullCard';
 import PokemonCardInfo from './PokemonCardInfo';
 
 interface CardDetailProps {
@@ -20,9 +21,11 @@ interface CardDetailProps {
  * free). Reachable from search results and the scanner basket. For a plain Card,
  * not a collection/deck item; the richer collection/deck panels stay as-is.
  */
-export default function CardDetail({ card, onClose }: CardDetailProps) {
+export default function CardDetail({ card: cardProp, onClose }: CardDetailProps) {
   const [faceIndex, setFaceIndex] = useState(0);
   const { source } = usePriceSource();
+  // Search may hand us a "brief" (image-only) card; hydrate the full details.
+  const card = useFullCard(cardProp) ?? cardProp;
 
   // Reset the shown face whenever the card changes.
   useEffect(() => {

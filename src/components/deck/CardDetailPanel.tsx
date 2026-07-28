@@ -8,6 +8,7 @@ import { useToast } from '../../contexts/ToastContext';
 import PrintingPickerModal from '../card/PrintingPickerModal';
 import PokemonCardInfo from '../card/PokemonCardInfo';
 import WishlistButton from '../WishlistButton';
+import { useFullCard } from '../../hooks/useFullCard';
 import { isPokemon } from '../../cards/domain/UnifiedCard';
 import { getPrice, hasPrice } from '../../cards/domain/accessors/price';
 import { usePriceSource } from '../../contexts/PriceSourceContext';
@@ -34,7 +35,7 @@ interface CardDetailPanelProps {
  * backdrop + sliding panel and delegates all mutations back through callbacks.
  */
 export default function CardDetailPanel({
-  card,
+  card: cardProp,
   quantityInDeck,
   inDeck,
   collectionQuantity,
@@ -49,6 +50,8 @@ export default function CardDetailPanel({
   const { user } = useAuth();
   const { success, error: toastError } = useToast();
   const { source } = usePriceSource();
+  // A card just added from search may be a "brief"; hydrate its full details.
+  const card = useFullCard(cardProp) ?? cardProp;
 
   const [showPrintingPicker, setShowPrintingPicker] = useState(false);
   const [alertDirection, setAlertDirection] = useState<AlertDirection>('below');

@@ -15,15 +15,16 @@ import { tcgdexToUnified, TCGDEX_PROVIDER_ID } from './tcgdexMapper';
 export class TcgdexProvider implements CardProvider {
   readonly game = 'pokemon' as const;
   readonly id = TCGDEX_PROVIDER_ID;
-  /** TCGdex localizes everything (names, text, images) by URL locale. */
-  private readonly api: string;
+  /** Default locale (from config); a search can override it per request. */
+  constructor(private readonly lang = 'fr') {}
 
-  constructor(lang = 'fr') {
-    this.api = `https://api.tcgdex.net/v2/${lang}`;
+  // TCGdex localizes everything (names, text, images) by URL locale.
+  private base(lang?: string): string {
+    return `https://api.tcgdex.net/v2/${lang ?? this.lang}`;
   }
 
-  private async get<T>(path: string, signal?: AbortSignal): Promise<T> {
-    const res = await fetch(`${this.api}${path}`, { headers: { Accept: 'application/json' }, signal });
+  private async get<T>(path: string, signal?: AbortSignal, lang?: string): Promise<T> {
+    const res = await fetch(`${this.base(lang)}${path}`, { headers: { Accept: 'application/json' }, signal });
     if (!res.ok) throw new Error(`tcgdex request failed (${res.status})`);
     return (await res.json()) as T;
   }
@@ -31,7 +32,9 @@ export class TcgdexProvider implements CardProvider {
   async search(query: SearchQuery, signal?: AbortSignal): Promise<SearchResult> {
     const text = (typeof query.raw?.tcgdex === 'string' ? query.raw.tcgdex : query.text)?.trim();
     if (!text) return { cards: [], hasMore: false };
-    const briefs = await this.get<TcgdexBrief[]>(`/cards?name=${encodeURIComponent(text)}`, signal);
+    // Optional per-search language override (from the search UI).
+    const lang = typeof query.raw?.lang === 'string' ? query.raw.lang : undefined;
+    const briefs = await this.get<TcgdexBrief[]>(`/cards?name=${encodeURIComponent(text)}`, signal, lang);
     return { cards: (briefs ?? []).map(tcgdexToUnified), hasMore: false };
   }
 
