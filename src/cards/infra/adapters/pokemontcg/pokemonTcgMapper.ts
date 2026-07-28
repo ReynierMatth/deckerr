@@ -78,7 +78,24 @@ export const pokemonToUnified = (raw: PokemonTcgCard): UnifiedCard => ({
     subtypes: raw.subtypes,
     hp: raw.hp != null && raw.hp !== '' ? Number(raw.hp) : undefined,
     types: raw.types,
+    stage: raw.subtypes?.find((s) => /^(Basic|Stage \d|VMAX|VSTAR|V|ex|GX|Mega|BREAK)$/i.test(s)),
     evolvesFrom: raw.evolvesFrom,
+    abilities: raw.abilities?.map((a) => ({ name: a.name ?? '', type: a.type, text: a.text })),
+    attacks: raw.attacks?.map((a) => ({
+      name: a.name ?? '',
+      cost: a.cost,
+      damage: a.damage || undefined,
+      text: a.text,
+    })),
+    weaknesses: raw.weaknesses
+      ?.filter((w) => w.type)
+      .map((w) => ({ type: w.type as string, value: w.value ?? '' })),
+    resistances: raw.resistances
+      ?.filter((r) => r.type)
+      .map((r) => ({ type: r.type as string, value: r.value ?? '' })),
+    retreatCost: raw.convertedRetreatCost ?? raw.retreatCost?.length,
+    flavorText: raw.flavorText,
+    rules: raw.rules,
     regulationMark: raw.regulationMark,
     nationalPokedexNumbers: raw.nationalPokedexNumbers,
   },

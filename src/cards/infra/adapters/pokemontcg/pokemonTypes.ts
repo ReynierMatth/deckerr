@@ -11,6 +11,25 @@ export interface PokemonTcgPriceBlock {
   directLow?: number | null;
 }
 
+export interface PokemonTcgAttack {
+  name?: string;
+  cost?: string[];
+  convertedEnergyCost?: number;
+  damage?: string;
+  text?: string;
+}
+
+export interface PokemonTcgAbility {
+  name?: string;
+  type?: string;
+  text?: string;
+}
+
+export interface PokemonTcgTypeModifier {
+  type?: string;
+  value?: string;
+}
+
 export interface PokemonTcgCard {
   id: string;
   name: string;
@@ -19,6 +38,14 @@ export interface PokemonTcgCard {
   hp?: string; // string in the API, e.g. "120"
   types?: string[];
   evolvesFrom?: string;
+  abilities?: PokemonTcgAbility[];
+  attacks?: PokemonTcgAttack[];
+  weaknesses?: PokemonTcgTypeModifier[];
+  resistances?: PokemonTcgTypeModifier[];
+  retreatCost?: string[];
+  convertedRetreatCost?: number;
+  flavorText?: string;
+  rules?: string[];
   regulationMark?: string;
   nationalPokedexNumbers?: number[];
   number?: string;

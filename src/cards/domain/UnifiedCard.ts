@@ -41,13 +41,46 @@ export interface MtgCardData {
   printsSearchUri?: string;
 }
 
+export interface PokemonAttack {
+  name: string;
+  /** Energy cost as a list of energy type names, e.g. ['Fire','Fire']. */
+  cost?: string[];
+  /** Damage as printed, e.g. "100", "30+", "" (kept as a string). */
+  damage?: string;
+  /** Attack effect text. */
+  text?: string;
+}
+
+export interface PokemonAbility {
+  name: string;
+  /** e.g. 'Ability', 'Pokémon Power', 'Poké-Body'. */
+  type?: string;
+  text?: string;
+}
+
+/** Weakness / resistance entry, e.g. { type: 'Water', value: '×2' }. */
+export interface PokemonTypeModifier {
+  type: string;
+  value: string;
+}
+
 /** Pokémon-specific fields, present iff `game === 'pokemon'`. */
 export interface PokemonCardData {
   supertype?: 'Pokémon' | 'Trainer' | 'Energy';
   subtypes?: string[];
   hp?: number;
   types?: string[];
+  stage?: string;
   evolvesFrom?: string;
+  abilities?: PokemonAbility[];
+  attacks?: PokemonAttack[];
+  weaknesses?: PokemonTypeModifier[];
+  resistances?: PokemonTypeModifier[];
+  /** Converted retreat cost (number of energy). */
+  retreatCost?: number;
+  flavorText?: string;
+  /** Rule-box text (Trainer cards, ex/V rules, …). */
+  rules?: string[];
   regulationMark?: string;
   nationalPokedexNumbers?: number[];
 }

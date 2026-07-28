@@ -6,7 +6,9 @@ import { addPriceAlert } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import PrintingPickerModal from '../card/PrintingPickerModal';
+import PokemonCardInfo from '../card/PokemonCardInfo';
 import WishlistButton from '../WishlistButton';
+import { isPokemon } from '../../cards/domain/UnifiedCard';
 import { getPrice, hasPrice } from '../../cards/domain/accessors/price';
 import { usePriceSource } from '../../contexts/PriceSourceContext';
 
@@ -135,6 +137,12 @@ export default function CardDetailPanel({
             {displayOracleText && (
               <div className="border-t border-gray-700 pt-3">
                 <p className="text-sm text-gray-300">{displayOracleText}</p>
+              </div>
+            )}
+
+            {isPokemon(card) && (
+              <div className="border-t border-gray-700 pt-3">
+                <PokemonCardInfo card={card} />
               </div>
             )}
 

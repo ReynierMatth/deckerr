@@ -4,7 +4,9 @@ import type { Card } from '../../types';
 import Modal from '../Modal';
 import { isDoubleFaced, getCardLargeImageUri } from '../../utils/cardFaces';
 import { getPrice, hasPrice } from '../../cards/domain/accessors/price';
+import { isPokemon } from '../../cards/domain/UnifiedCard';
 import { usePriceSource } from '../../contexts/PriceSourceContext';
+import PokemonCardInfo from './PokemonCardInfo';
 
 interface CardDetailProps {
   /** Card to show; null closes the drawer. */
@@ -74,6 +76,12 @@ export default function CardDetail({ card, onClose }: CardDetailProps) {
 
           {oracle && (
             <p className="text-sm text-gray-300 whitespace-pre-line border-t border-gray-700 pt-3">{oracle}</p>
+          )}
+
+          {isPokemon(card) && (
+            <div className="border-t border-gray-700 pt-3">
+              <PokemonCardInfo card={card} />
+            </div>
           )}
 
           {(hasPrice(card, source) || hasPrice(card, 'cardmarket')) && (

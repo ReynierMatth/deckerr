@@ -86,6 +86,24 @@ export const tcgdexToUnified = (raw: TcgdexCard): UnifiedCard => ({
     supertype: asSupertype(raw.category),
     hp: num(raw.hp),
     types: raw.types,
+    stage: raw.stage,
+    evolvesFrom: raw.evolveFrom,
+    abilities: raw.abilities?.map((a) => ({ name: a.name ?? '', type: a.type, text: a.effect })),
+    attacks: raw.attacks?.map((a) => ({
+      name: a.name ?? '',
+      cost: a.cost,
+      damage: a.damage != null && a.damage !== '' ? String(a.damage) : undefined,
+      text: a.effect,
+    })),
+    weaknesses: raw.weaknesses
+      ?.filter((w) => w.type)
+      .map((w) => ({ type: w.type as string, value: w.value ?? '' })),
+    resistances: raw.resistances
+      ?.filter((r) => r.type)
+      .map((r) => ({ type: r.type as string, value: r.value ?? '' })),
+    retreatCost: num(raw.retreat),
+    flavorText: raw.description,
     regulationMark: raw.regulationMark,
+    nationalPokedexNumbers: raw.dexId,
   },
 });

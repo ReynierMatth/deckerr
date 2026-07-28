@@ -6,8 +6,10 @@ import { getCardPriceHistory } from '../../services/api';
 import { isDoubleFaced, getCardLargeImageUri } from '../../utils/cardFaces';
 import { CARD_CONDITIONS } from '../../utils/collectionCsv';
 import PrintingPickerModal from '../card/PrintingPickerModal';
+import PokemonCardInfo from '../card/PokemonCardInfo';
 import PriceLineChart from '../charts/PriceLineChart';
 import { CollectionItem } from './types';
+import { isPokemon } from '../../cards/domain/UnifiedCard';
 import { getPrice, hasPrice } from '../../cards/domain/accessors/price';
 import { usePriceSource } from '../../contexts/PriceSourceContext';
 
@@ -122,6 +124,12 @@ export default function CardDetailModal({
             {displayOracleText && (
               <div className="border-t border-gray-700 pt-3">
                 <p className="text-sm text-gray-300">{displayOracleText}</p>
+              </div>
+            )}
+
+            {isPokemon(item.card) && (
+              <div className="border-t border-gray-700 pt-3">
+                <PokemonCardInfo card={item.card} />
               </div>
             )}
 

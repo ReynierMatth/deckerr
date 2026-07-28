@@ -58,6 +58,7 @@ const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
   });
 
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [gameFilter, setGameFilter] = useState<GameId | 'all'>('all');
   const [pendingDelete, setPendingDelete] = useState<Deck | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -89,13 +90,12 @@ const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
 
-  // ANY-match: show decks that have at least one of the selected tags.
-  const visibleDecks =
-    selectedTags.length === 0
-      ? decks
-      : decks.filter((deck) =>
-          (deck.tags ?? []).some((tag) => selectedTags.includes(tag))
-        );
+  // Filter by game (TCG), then by tags (ANY-match on the selected tags).
+  const visibleDecks = decks
+    .filter((deck) => gameFilter === 'all' || deck.game === gameFilter)
+    .filter((deck) =>
+      selectedTags.length === 0 ? true : (deck.tags ?? []).some((tag) => selectedTags.includes(tag)),
+    );
 
   if (isLoading) {
     return (
@@ -107,6 +107,23 @@ const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
 
   return (
     <div className="space-y-4">
+      {enabledGames().length > 1 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {[{ id: 'all' as const, label: 'All' }, ...enabledGames()].map((g) => (
+            <button
+              key={g.id}
+              type="button"
+              onClick={() => setGameFilter(g.id)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                gameFilter === g.id ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {allTags.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-gray-400 mr-1">Filter (any):</span>

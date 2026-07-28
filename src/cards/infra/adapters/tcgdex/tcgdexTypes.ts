@@ -30,6 +30,24 @@ export interface TcgdexPricing {
   };
 }
 
+export interface TcgdexAttack {
+  cost?: string[];
+  name?: string;
+  effect?: string;
+  damage?: number | string;
+}
+
+export interface TcgdexAbility {
+  type?: string;
+  name?: string;
+  effect?: string;
+}
+
+export interface TcgdexTypeModifier {
+  type?: string;
+  value?: string;
+}
+
 export interface TcgdexCard {
   id: string;
   localId?: string | number;
@@ -40,6 +58,14 @@ export interface TcgdexCard {
   hp?: number;
   types?: string[];
   stage?: string;
+  evolveFrom?: string;
+  abilities?: TcgdexAbility[];
+  attacks?: TcgdexAttack[];
+  weaknesses?: TcgdexTypeModifier[];
+  resistances?: TcgdexTypeModifier[];
+  retreat?: number;
+  description?: string;
+  dexId?: number[];
   regulationMark?: string;
   illustrator?: string;
   set?: { id?: string; name?: string };
