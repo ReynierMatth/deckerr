@@ -7,6 +7,8 @@ import { getCardsByIds, createDeckFromCards, addCardToCollection } from '../serv
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useCollectionCounts } from '../hooks/useCollectionCounts';
+import { GameId } from '../cards/domain/game';
+import { useActiveGames } from '../contexts/PriceSourceContext';
 import { preloadScannerCv, detectQuad, runScan, type Pt } from '../utils/scannerCvPipeline';
 import { sharedTokenCount } from '../utils/nameMatch';
 import CardDetail from './card/CardDetail';
@@ -75,6 +77,12 @@ export default function LiveScanner() {
   const [creating, setCreating] = useState(false);
   const [detailCard, setDetailCard] = useState<Card | null>(null);
 
+  // Which game we're scanning (its art index is what we match against). Kept in
+  // a ref too so the detection loop reads the latest without re-subscribing.
+  const activeGames = useActiveGames();
+  const [scanGame, setScanGame] = useState<GameId>(activeGames[0]?.id ?? 'mtg');
+  const scanGameRef = useRef<GameId>(scanGame);
+
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flashToast = useCallback((msg: string) => {
     setToast(msg);
@@ -126,7 +134,7 @@ export default function LiveScanner() {
     busyRef.current = true;
     setScanning(true);
     try {
-      const outcome = await runScan(video);
+      const outcome = await runScan(video, scanGameRef.current);
       if (!outcome.ok) return;
       const cards = await getCardsByIds(outcome.matches.map((m) => m.id));
       const byId = new Map(cards.map((c) => [c.id, c]));
@@ -148,11 +156,28 @@ export default function LiveScanner() {
       flashToast(`+ ${best.card.name}`);
     } catch (err) {
       console.error('live scan failed:', err);
+      flashToast('Scan indisponible pour ce jeu');
     } finally {
       busyRef.current = false;
       setScanning(false);
     }
   }, [addToBasket, beep, flashToast]);
+
+  // Keep the scanned game valid for this user (e.g. a Pokémon-only player never
+  // scans against the MTG index).
+  const activeIdsKey = activeGames.map((g) => g.id).join(',');
+  useEffect(() => {
+    if (activeGames.length > 0 && !activeGames.some((g) => g.id === scanGame)) {
+      setScanGame(activeGames[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIdsKey]);
+
+  // Preload (and warm) the selected game's art index; refresh on game switch.
+  useEffect(() => {
+    scanGameRef.current = scanGame;
+    preloadScannerCv(scanGame).catch((err) => console.error('scanner preload failed:', err));
+  }, [scanGame]);
 
   // Continuous detection loop: draw the outline, gate recognition on stability.
   useEffect(() => {
@@ -262,7 +287,6 @@ export default function LiveScanner() {
       }
     };
     start();
-    preloadScannerCv().catch((err) => console.error('scanner preload failed:', err));
     return () => {
       cancelled = true;
       streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -358,6 +382,23 @@ export default function LiveScanner() {
           <p className="text-xs text-gray-400">Vise une carte, tiens-la immobile — elle est reconnue toute seule.</p>
         </div>
       </header>
+
+      {/* Which game are you scanning? (its art index is matched against) */}
+      {activeGames.length > 1 && (
+        <div className="flex gap-2 mb-4">
+          {activeGames.map((g) => (
+            <button
+              key={g.id}
+              onClick={() => setScanGame(g.id)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                scanGame === g.id ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Camera preview + live outline */}
       <div className="relative w-full max-w-md mx-auto aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-gray-700">
