@@ -155,14 +155,18 @@ export default function CardDetailPanel({
                   {card.collectorNumber && <span> #{card.collectorNumber}</span>}
                 </div>
               )}
-              <button
-                type="button"
-                onClick={() => setShowPrintingPicker(true)}
-                className="w-full min-h-[44px] px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
-              >
-                <Layers size={18} />
-                Change printing
-              </button>
+              {/* "Change printing" is an MTG concept (same card, many editions).
+                  Other games' printings are effectively distinct cards. */}
+              {card.game === 'mtg' && (
+                <button
+                  type="button"
+                  onClick={() => setShowPrintingPicker(true)}
+                  className="w-full min-h-[44px] px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+                >
+                  <Layers size={18} />
+                  Change printing
+                </button>
+              )}
             </div>
 
             {/* Price Alert */}

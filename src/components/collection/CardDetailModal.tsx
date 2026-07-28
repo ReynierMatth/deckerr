@@ -145,15 +145,19 @@ export default function CardDetailModal({
                   {item.card.collectorNumber && <span> #{item.card.collectorNumber}</span>}
                 </div>
               )}
-              <button
-                type="button"
-                onClick={() => setShowPrintingPicker(true)}
-                disabled={isUpdating}
-                className="w-full min-h-[44px] px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
-              >
-                <Layers size={18} />
-                Change printing
-              </button>
+              {/* "Change printing" is an MTG concept (same card, many editions).
+                  Other games' printings are effectively distinct cards. */}
+              {item.card.game === 'mtg' && (
+                <button
+                  type="button"
+                  onClick={() => setShowPrintingPicker(true)}
+                  disabled={isUpdating}
+                  className="w-full min-h-[44px] px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+                >
+                  <Layers size={18} />
+                  Change printing
+                </button>
+              )}
             </div>
 
             {/* Price history */}
