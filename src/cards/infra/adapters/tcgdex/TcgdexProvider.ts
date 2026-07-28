@@ -12,14 +12,18 @@ import { UnifiedCard } from '../../../domain/UnifiedCard';
 import { TcgdexBrief, TcgdexCard } from './tcgdexTypes';
 import { tcgdexToUnified, TCGDEX_PROVIDER_ID } from './tcgdexMapper';
 
-const API = 'https://api.tcgdex.net/v2/en';
-
 export class TcgdexProvider implements CardProvider {
   readonly game = 'pokemon' as const;
   readonly id = TCGDEX_PROVIDER_ID;
+  /** TCGdex localizes everything (names, text, images) by URL locale. */
+  private readonly api: string;
+
+  constructor(lang = 'fr') {
+    this.api = `https://api.tcgdex.net/v2/${lang}`;
+  }
 
   private async get<T>(path: string, signal?: AbortSignal): Promise<T> {
-    const res = await fetch(`${API}${path}`, { headers: { Accept: 'application/json' }, signal });
+    const res = await fetch(`${this.api}${path}`, { headers: { Accept: 'application/json' }, signal });
     if (!res.ok) throw new Error(`tcgdex request failed (${res.status})`);
     return (await res.json()) as T;
   }

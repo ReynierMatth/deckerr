@@ -20,7 +20,7 @@ type ProviderFactory = (game: GameId, cfg: CardsConfig) => CardProvider;
 const FACTORIES: Record<string, ProviderFactory> = {
   scryfall: () => new ScryfallCardProvider(),
   pokemontcg: (_game, cfg) => new PokemonTcgProvider(cfg.pokemonTcgApiKey),
-  tcgdex: () => new TcgdexProvider(),
+  tcgdex: (_game, cfg) => new TcgdexProvider(cfg.pokemonLang),
 };
 
 const cache = new Map<GameId, CardProvider>();
