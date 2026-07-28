@@ -187,6 +187,11 @@ const alertsRoute = createRoute({
   path: '/alerts',
   component: lazyRouteComponent(() => import('./components/PriceAlerts')),
 });
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings',
+  component: lazyRouteComponent(() => import('./components/Settings')),
+});
 const editDeckRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/decks/$deckId/edit',
@@ -210,6 +215,7 @@ const routeTree = rootRoute.addChildren([
   scanCvRoute,
   lifeCounterRoute,
   alertsRoute,
+  settingsRoute,
   editDeckRoute,
   viewDeckRoute,
 ]);

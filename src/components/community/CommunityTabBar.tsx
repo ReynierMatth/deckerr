@@ -1,6 +1,6 @@
-import { Globe, Users, ArrowLeftRight, Sparkles, Settings } from 'lucide-react';
+import { Globe, Users, ArrowLeftRight, Sparkles } from 'lucide-react';
 
-export type CommunityTab = 'browse' | 'friends' | 'trades' | 'suggestions' | 'profile';
+export type CommunityTab = 'browse' | 'friends' | 'trades' | 'suggestions';
 
 interface CommunityTabBarProps {
   activeTab: CommunityTab;
@@ -23,7 +23,6 @@ export default function CommunityTabBar({
         { id: 'friends' as CommunityTab, label: `Friends`, count: friendsCount, icon: Users },
         { id: 'trades' as CommunityTab, label: `Trades`, count: pendingTradesCount, icon: ArrowLeftRight },
         { id: 'suggestions' as CommunityTab, label: 'Suggestions', icon: Sparkles },
-        { id: 'profile' as CommunityTab, label: 'Profile', icon: Settings },
       ].map((tab) => (
         <button
           key={tab.id}

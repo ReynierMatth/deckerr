@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Library, LogOut, ChevronDown, Compass, Search, Heart, HeartPulse, Users, Bell, MoreHorizontal, ScanLine, X } from 'lucide-react';
+import { Library, LogOut, ChevronDown, Compass, Search, Heart, HeartPulse, Users, Bell, MoreHorizontal, ScanLine, X, Settings } from 'lucide-react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
@@ -120,6 +120,16 @@ export default function Navigation() {
                   {showDropdown && (
                     <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-md shadow-lg py-1 border border-gray-700 animate-scale-in glass-effect z-[110]">
                       <button
+                        onClick={() => {
+                          setShowDropdown(false);
+                          navigate({ to: '/settings' });
+                        }}
+                        className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-smooth"
+                      >
+                        <Settings size={16} />
+                        <span>Settings</span>
+                      </button>
+                      <button
                         onClick={handleSignOut}
                         className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-smooth"
                       >
@@ -205,6 +215,16 @@ export default function Navigation() {
                   <span>{item.label}</span>
                 </button>
               ))}
+              <button
+                onClick={() => {
+                  setShowMore(false);
+                  navigate({ to: '/settings' });
+                }}
+                className="flex items-center gap-3 w-full px-3 py-3 rounded-lg text-gray-200 hover:bg-gray-700 transition-colors"
+              >
+                <Settings size={20} />
+                <span>Settings</span>
+              </button>
               <button
                 onClick={() => {
                   setShowMore(false);

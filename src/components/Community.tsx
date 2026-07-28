@@ -6,7 +6,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCardFaces } from '../hooks/useCardFaces';
 import { useBackDismiss } from '../hooks/useBackDismiss';
 import { supabase } from '../lib/supabase';
-import ProfileSettings from './community/ProfileSettings';
 import FriendsTab from './community/FriendsTab';
 import TradesTab from './community/TradesTab';
 import TradeSuggestions from './community/TradeSuggestions';
@@ -282,9 +281,6 @@ export default function Community() {
 
         {/* ============ SUGGESTIONS TAB ============ */}
         {activeTab === 'suggestions' && <TradeSuggestions />}
-
-        {/* ============ PROFILE TAB ============ */}
-        {activeTab === 'profile' && <ProfileSettings />}
       </div>
     </div>
   );
