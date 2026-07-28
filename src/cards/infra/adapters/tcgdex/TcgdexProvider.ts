@@ -32,9 +32,17 @@ export class TcgdexProvider implements CardProvider {
   async search(query: SearchQuery, signal?: AbortSignal): Promise<SearchResult> {
     const text = (typeof query.raw?.tcgdex === 'string' ? query.raw.tcgdex : query.text)?.trim();
     if (!text) return { cards: [], hasMore: false };
+    const path = `/cards?name=${encodeURIComponent(text)}`;
     // Optional per-search language override (from the search UI).
     const lang = typeof query.raw?.lang === 'string' ? query.raw.lang : undefined;
-    const briefs = await this.get<TcgdexBrief[]>(`/cards?name=${encodeURIComponent(text)}`, signal, lang);
+    let briefs = await this.get<TcgdexBrief[]>(path, signal, lang);
+    // A localized search misses cross-language names (e.g. "charizard" in the
+    // French DB, where it's "Dracaufeu"). Retry in English — reliable, and
+    // English names are the common denominator.
+    const effectiveLang = lang ?? this.lang;
+    if ((briefs?.length ?? 0) === 0 && effectiveLang !== 'en') {
+      briefs = await this.get<TcgdexBrief[]>(path, signal, 'en');
+    }
     return { cards: (briefs ?? []).map(tcgdexToUnified), hasMore: false };
   }
 

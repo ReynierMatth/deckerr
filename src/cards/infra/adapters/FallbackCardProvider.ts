@@ -26,13 +26,22 @@ export class FallbackCardProvider implements CardProvider {
     isEmpty: (r: T) => boolean,
     signal?: AbortSignal,
   ): Promise<T> {
+    let primaryResult: T | undefined;
     try {
-      const result = await run(this.primary);
-      if (!isEmpty(result)) return result;
+      primaryResult = await run(this.primary);
+      if (!isEmpty(primaryResult)) return primaryResult;
     } catch (error) {
       if (signal?.aborted) throw error;
+      primaryResult = undefined;
     }
-    return run(this.fallback);
+    // Primary errored or returned empty — try the fallback, but if IT fails
+    // don't surface that error over a (successful, if empty) primary result.
+    try {
+      return await run(this.fallback);
+    } catch (error) {
+      if (signal?.aborted || primaryResult === undefined) throw error;
+      return primaryResult;
+    }
   }
 
   search(query: SearchQuery, signal?: AbortSignal): Promise<SearchResult> {
