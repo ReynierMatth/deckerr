@@ -7,6 +7,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import PrintingPickerModal from '../card/PrintingPickerModal';
 import WishlistButton from '../WishlistButton';
+import { getPrice, hasPrice } from '../../cards/domain/accessors/price';
+import { usePriceSource } from '../../contexts/PriceSourceContext';
 
 type AlertDirection = 'above' | 'below';
 
@@ -44,6 +46,7 @@ export default function CardDetailPanel({
 }: CardDetailPanelProps) {
   const { user } = useAuth();
   const { success, error: toastError } = useToast();
+  const { source } = usePriceSource();
 
   const [showPrintingPicker, setShowPrintingPicker] = useState(false);
   const [alertDirection, setAlertDirection] = useState<AlertDirection>('below');
@@ -67,13 +70,13 @@ export default function CardDetailPanel({
 
   const currentFaceIndex = getCurrentFaceIndex(card.id);
   const isMultiFaced = isDoubleFaced(card);
-  const currentFace = isMultiFaced && card.card_faces
-    ? card.card_faces[currentFaceIndex]
+  const currentFace = isMultiFaced && card.faces
+    ? card.faces[currentFaceIndex]
     : null;
 
   const displayName = currentFace?.name || card.name;
-  const displayTypeLine = currentFace?.type_line || card.type_line;
-  const displayOracleText = currentFace?.oracle_text || card.oracle_text;
+  const displayTypeLine = currentFace?.typeLine || card.mtg?.typeLine;
+  const displayOracleText = currentFace?.text || card.mtg?.oracleText;
 
   return (
     <>
@@ -109,10 +112,10 @@ export default function CardDetailPanel({
             {isMultiFaced && (
               <>
                 <div className="absolute top-2 right-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
-                  Face {currentFaceIndex + 1}/{card.card_faces!.length}
+                  Face {currentFaceIndex + 1}/{card.faces!.length}
                 </div>
                 <button
-                  onClick={() => toggleCardFace(card.id, card.card_faces!.length)}
+                  onClick={() => toggleCardFace(card.id, card.faces!.length)}
                   className="absolute bottom-2 right-2 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full shadow-lg transition-all"
                   title="Flip card"
                 >
@@ -135,21 +138,21 @@ export default function CardDetailPanel({
               </div>
             )}
 
-            {card.prices?.usd && (
+            {hasPrice(card, source) && (
               <div className="border-t border-gray-700 pt-3">
                 <div className="text-lg text-green-400 font-semibold">
-                  ${card.prices.usd} each
+                  ${getPrice(card, source)} each
                 </div>
               </div>
             )}
 
             {/* Printing / edition */}
             <div className="border-t border-gray-700 pt-3">
-              {card.set_name && (
+              {card.setName && (
                 <div className="text-sm text-gray-400 mb-2">
-                  {card.set_name}
-                  {card.set && <span className="uppercase"> ({card.set})</span>}
-                  {card.collector_number && <span> #{card.collector_number}</span>}
+                  {card.setName}
+                  {card.setCode && <span className="uppercase"> ({card.setCode})</span>}
+                  {card.collectorNumber && <span> #{card.collectorNumber}</span>}
                 </div>
               )}
               <button

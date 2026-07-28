@@ -1,6 +1,8 @@
 import { X, RefreshCw } from 'lucide-react';
 import { Card } from '../../types';
 import { isDoubleFaced, getCardLargeImageUri } from '../../utils/cardFaces';
+import { getPrice, hasPrice } from '../../cards/domain/accessors/price';
+import { usePriceSource } from '../../contexts/PriceSourceContext';
 
 interface UserCardDetailPanelProps {
   card: Card;
@@ -18,15 +20,16 @@ export default function UserCardDetailPanel({
   getCurrentFaceIndex,
   toggleCardFace,
 }: UserCardDetailPanelProps) {
+  const { source } = usePriceSource();
   const currentFaceIndex = getCurrentFaceIndex(card.id);
   const isMultiFaced = isDoubleFaced(card);
-  const currentFace = isMultiFaced && card.card_faces
-    ? card.card_faces[currentFaceIndex]
+  const currentFace = isMultiFaced && card.faces
+    ? card.faces[currentFaceIndex]
     : null;
 
   const displayName = currentFace?.name || card.name;
-  const displayTypeLine = currentFace?.type_line || card.type_line;
-  const displayOracleText = currentFace?.oracle_text || card.oracle_text;
+  const displayTypeLine = currentFace?.typeLine || card.mtg?.typeLine;
+  const displayOracleText = currentFace?.text || card.mtg?.oracleText;
 
   return (
     <>
@@ -58,10 +61,10 @@ export default function UserCardDetailPanel({
             {isMultiFaced && (
               <>
                 <div className="absolute top-2 right-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
-                  Face {currentFaceIndex + 1}/{card.card_faces!.length}
+                  Face {currentFaceIndex + 1}/{card.faces!.length}
                 </div>
                 <button
-                  onClick={() => toggleCardFace(card.id, card.card_faces!.length)}
+                  onClick={() => toggleCardFace(card.id, card.faces!.length)}
                   className="absolute bottom-2 right-2 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full shadow-lg transition-all"
                   title="Flip card"
                 >
@@ -84,13 +87,13 @@ export default function UserCardDetailPanel({
               </div>
             )}
 
-            {card.prices?.usd && (
+            {hasPrice(card, source) && (
               <div className="border-t border-gray-700 pt-3">
                 <div className="text-lg text-green-400 font-semibold">
-                  ${card.prices.usd} each
+                  ${getPrice(card, source)} each
                 </div>
                 <div className="text-sm text-gray-400">
-                  Total value: ${(parseFloat(card.prices.usd) * quantity).toFixed(2)}
+                  Total value: ${(getPrice(card, source) * quantity).toFixed(2)}
                 </div>
               </div>
             )}

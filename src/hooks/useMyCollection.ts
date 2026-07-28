@@ -4,6 +4,7 @@ import type { InfiniteData } from '@tanstack/react-query';
 import { getUserCollectionPaginated, getCardsByIds } from '../services/api';
 import { supabase } from '../lib/supabase';
 import { CollectionItem } from '../components/collection/types';
+import { GameId } from '../cards/domain/game';
 
 const PAGE_SIZE = 50;
 
@@ -25,7 +26,11 @@ interface CollectionPage {
  * the debounced search term) for infinite scroll, joined with Scryfall card
  * data and per-entry foil/condition metadata.
  */
-export function useMyCollection(userId: string | undefined, debouncedSearch: string) {
+export function useMyCollection(
+  userId: string | undefined,
+  debouncedSearch: string,
+  game?: GameId,
+) {
   const queryClient = useQueryClient();
 
   // Fetch per-entry foil/condition metadata (not returned by the paginated API)
@@ -58,8 +63,8 @@ export function useMyCollection(userId: string | undefined, debouncedSearch: str
   );
 
   const collectionKey = useMemo(
-    () => ['myCollection', userId, debouncedSearch] as const,
-    [userId, debouncedSearch],
+    () => ['myCollection', userId, debouncedSearch, game ?? 'all'] as const,
+    [userId, debouncedSearch, game],
   );
   const {
     data: collectionPages,
@@ -74,7 +79,7 @@ export function useMyCollection(userId: string | undefined, debouncedSearch: str
     initialPageParam: 0,
     queryFn: async ({ pageParam }): Promise<CollectionPage> => {
       // Get paginated (and server-side filtered) collection from Supabase
-      const result = await getUserCollectionPaginated(userId!, PAGE_SIZE, pageParam, debouncedSearch);
+      const result = await getUserCollectionPaginated(userId!, PAGE_SIZE, pageParam, debouncedSearch, game);
 
       let items: CollectionItem[] = [];
       if (result.items.size > 0) {

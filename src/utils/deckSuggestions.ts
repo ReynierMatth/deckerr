@@ -30,12 +30,13 @@ export const suggestLandCountAndDistribution = (
   let totalColorSymbols = 0;
 
   cards.forEach(({ card, quantity }) => {
-    if (card.mana_cost) {
-      const wMatches = (card.mana_cost.match(/\{W\}/g) || []).length;
-      const uMatches = (card.mana_cost.match(/\{U\}/g) || []).length;
-      const bMatches = (card.mana_cost.match(/\{B\}/g) || []).length;
-      const rMatches = (card.mana_cost.match(/\{R\}/g) || []).length;
-      const gMatches = (card.mana_cost.match(/\{G\}/g) || []).length;
+    const manaCost = card.mtg?.manaCost;
+    if (manaCost) {
+      const wMatches = (manaCost.match(/\{W\}/g) || []).length;
+      const uMatches = (manaCost.match(/\{U\}/g) || []).length;
+      const bMatches = (manaCost.match(/\{B\}/g) || []).length;
+      const rMatches = (manaCost.match(/\{R\}/g) || []).length;
+      const gMatches = (manaCost.match(/\{G\}/g) || []).length;
 
       colorCounts.W += wMatches * quantity;
       colorCounts.U += uMatches * quantity;
@@ -93,13 +94,13 @@ export const suggestLandCountAndDistribution = (
 // Get commander color identity
 export const getCommanderColors = (commander: Card | null): string[] => {
   if (!commander) return [];
-  return commander.colors || [];
+  return commander.mtg?.colors || [];
 };
 
 // Check if a card's colors are valid for the commander
 export const isCardValidForCommander = (card: Card, commanderColors: string[]): boolean => {
   if (commanderColors.length === 0) return true; // No commander restriction
-  const cardColors = card.colors || [];
+  const cardColors = card.mtg?.colors || [];
   // Every color in the card must be in the commander's colors
   return cardColors.every(color => commanderColors.includes(color));
 };

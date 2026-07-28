@@ -26,11 +26,11 @@ const TYPE_PRIORITY = [
   'Enchantment',
 ];
 
-const isLand = (card: Card): boolean => /\bLand\b/i.test(card.type_line ?? '');
+const isLand = (card: Card): boolean => /\bLand\b/i.test(card.mtg?.typeLine ?? '');
 
 /** The single card type a card is filed under (Land wins over Creature, etc.). */
 export const primaryType = (card: Card): string => {
-  const line = card.type_line ?? '';
+  const line = card.mtg?.typeLine ?? '';
   const match = TYPE_PRIORITY.find((t) => new RegExp(`\\b${t}\\b`, 'i').test(line));
   return match ?? 'Other';
 };
@@ -94,7 +94,7 @@ export function computeDeckStats(cards: { card: Card; quantity: number }[]): Dec
     typeMap.set(type, (typeMap.get(type) ?? 0) + quantity);
 
     // Colors (a multicolour card counts in each of its colours; none => colourless)
-    const colors = (card.colors ?? []).filter((c): c is DeckColorKey => c in colorCounts);
+    const colors = (card.mtg?.colors ?? []).filter((c): c is DeckColorKey => c in colorCounts);
     if (colors.length === 0) {
       colorCounts.C += quantity;
     } else {
@@ -105,7 +105,7 @@ export function computeDeckStats(cards: { card: Card; quantity: number }[]): Dec
       landCount += quantity;
     } else {
       nonLandCount += quantity;
-      const cmc = Math.max(0, Math.floor(card.cmc ?? 0));
+      const cmc = Math.max(0, Math.floor(card.mtg?.cmc ?? 0));
       cmcWeightedSum += cmc * quantity;
       const bucket = Math.min(cmc, 7); // 7 = "7+"
       curveBuckets.set(bucket, (curveBuckets.get(bucket) ?? 0) + quantity);

@@ -1,4 +1,5 @@
 import { Card } from '../types';
+import { getPrice, hasPrice } from '../cards/domain/accessors/price';
 
 interface MagicCardProps {
   card: Card;
@@ -6,7 +7,7 @@ interface MagicCardProps {
 
 const MagicCard = ({ card }: MagicCardProps) => {
   // Handle both regular cards and double-faced cards (transform, modal_dfc, etc)
-  const imageUri = card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal;
+  const imageUri = card.images?.normal || card.faces?.[0]?.images?.normal;
 
   return (
     <div className="relative card-hover animate-fade-in">
@@ -21,9 +22,9 @@ const MagicCard = ({ card }: MagicCardProps) => {
           No Image Available
         </div>
       )}
-      {card.prices?.usd && (
+      {hasPrice(card, 'tcgplayer') && (
         <div className="absolute bottom-0 left-0 p-2 bg-gray-900 bg-opacity-50 text-white rounded-bl-lg rounded-tr-lg transition-smooth">
-          ${card.prices.usd}
+          ${getPrice(card, 'tcgplayer').toFixed(2)}
         </div>
       )}
     </div>

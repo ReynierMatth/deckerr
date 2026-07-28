@@ -4,6 +4,7 @@ import { isDoubleFaced } from '../../utils/cardFaces';
 import MagicCard from '../MagicCard';
 import CardRow from '../card/CardRow';
 import CardTile from '../card/CardTile';
+import { getPrice, hasPrice } from '../../cards/domain/accessors/price';
 
 interface SearchResultsProps {
   results: Card[];
@@ -52,7 +53,7 @@ export default function SearchResults({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      toggleCardFace(card.id, card.card_faces!.length);
+                      toggleCardFace(card.id, card.faces!.length);
                     }}
                     className="absolute bottom-0.5 right-0.5 bg-purple-600 text-white p-2 rounded-full"
                     aria-label="Flip card"
@@ -110,8 +111,8 @@ export default function SearchResults({
           const inCollection = userCollection[card.id] ?? 0;
           const isAddingThisCard = addingCardId === card.id;
 
-          const displayName = isMultiFaced && card.card_faces
-            ? card.card_faces[currentFaceIndex]?.name || card.name
+          const displayName = isMultiFaced && card.faces
+            ? card.faces[currentFaceIndex]?.name || card.name
             : card.name;
 
           return (
@@ -152,7 +153,7 @@ export default function SearchResults({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      toggleCardFace(card.id, card.card_faces!.length);
+                      toggleCardFace(card.id, card.faces!.length);
                     }}
                     className="absolute bottom-2 right-2 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full shadow-lg transition-all"
                     title="Flip card"
@@ -166,12 +167,12 @@ export default function SearchResults({
                 <div className="p-3">
                   <h3 className="font-bold text-sm truncate mb-1">{displayName}</h3>
                   <p className="text-gray-400 text-xs truncate mb-2">
-                    {isMultiFaced && card.card_faces
-                      ? card.card_faces[currentFaceIndex]?.type_line || card.type_line
-                      : card.type_line}
+                    {isMultiFaced && card.faces
+                      ? card.faces[currentFaceIndex]?.typeLine || card.mtg?.typeLine
+                      : card.mtg?.typeLine}
                   </p>
-                  {card.prices?.usd && (
-                    <div className="text-xs text-gray-400 mb-2">${card.prices.usd}</div>
+                  {hasPrice(card, 'tcgplayer') && (
+                    <div className="text-xs text-gray-400 mb-2">${getPrice(card, 'tcgplayer')}</div>
                   )}
                   <button
                     onClick={(e) => {

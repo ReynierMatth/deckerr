@@ -1,13 +1,16 @@
 import { supabase } from '../lib/supabase';
-import { getCardsByIds as fetchCardsByIds } from './scryfall';
+import { UnifiedCard } from '../cards/domain/UnifiedCard';
+import { getPrice } from '../cards/domain/accessors/price';
+import { cardData } from '../cards/infra/facade';
+import { parseCardRef } from '../cards/domain/accessors/identity';
+import { GameId } from '../cards/domain/game';
 
-// Scryfall card API lives in its own module; re-exported here for backwards
-// compatibility with existing `../services/api` imports.
+// Name/query-based MTG helpers are still served by the Scryfall service. The
+// id-based lookups below go through the facade so game-qualified ids route to
+// the right provider.
 export {
   searchCards,
   getRandomCards,
-  getCardById,
-  getCardsByIds,
   getCardsByNames,
   getCardsBySetNumber,
   setNumberKey,
@@ -16,10 +19,21 @@ export {
   ScryfallHttpError,
 } from './scryfall';
 
-const priceFromCard = (prices?: { usd?: string; usd_foil?: string }): number => {
-  const usd = prices?.usd ?? prices?.usd_foil;
-  return usd ? Number(usd) : 0;
-};
+/** Fetch cards by game-qualified id (`${game}:${rawId}`), routed per game. */
+export const getCardsByIds = (ids: string[], signal?: AbortSignal): Promise<UnifiedCard[]> =>
+  cardData.getCardsByIds(ids, signal);
+
+/** Fetch a single card by game-qualified id. */
+export const getCardById = (id: string, signal?: AbortSignal): Promise<UnifiedCard | null> =>
+  cardData.getCardById(id, signal);
+
+const fetchCardsByIds = (ids: string[], signal?: AbortSignal): Promise<UnifiedCard[]> =>
+  cardData.getCardsByIds(ids, signal);
+
+// Collection value is stored canonically in USD (TCGPlayer) in Phase 1; the
+// user's preferred source only affects display. See the multi-TCG plan.
+const priceFromCard = (card: UnifiedCard, foil = false): number =>
+  getPrice(card, 'tcgplayer', { foil });
 
 // Collection API functions
 export const getUserCollection = async (userId: string): Promise<Map<string, number>> => {
@@ -69,16 +83,18 @@ export const getUserCollectionPaginated = async (
   userId: string,
   pageSize: number = 50,
   offset: number = 0,
-  search: string = ''
+  search: string = '',
+  game?: GameId
 ): Promise<PaginatedCollectionResult> => {
   const term = search.trim();
 
-  // First, get the total count (server-side name filter when searching)
+  // First, get the total count (server-side name + game filters when set)
   let countQuery = supabase
     .from('collections')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId);
   if (term) countQuery = countQuery.ilike('card_name', `%${term}%`);
+  if (game) countQuery = countQuery.eq('game', game);
   const { count: totalCount, error: countError } = await countQuery;
 
   if (countError) {
@@ -92,6 +108,7 @@ export const getUserCollectionPaginated = async (
     .select('card_id, quantity')
     .eq('user_id', userId);
   if (term) dataQuery = dataQuery.ilike('card_name', `%${term}%`);
+  if (game) dataQuery = dataQuery.eq('game', game);
   const { data, error } = await dataQuery
     .order('created_at', { ascending: false })
     .range(offset, offset + pageSize - 1);
@@ -138,6 +155,7 @@ export const addCardToCollection = async (
       {
         user_id: userId,
         card_id: cardId,
+        game: parseCardRef(cardId).game,
         quantity: (existing?.quantity ?? 0) + quantity,
         price_usd: priceUsd,
         ...(cardName ? { card_name: cardName } : {}),
@@ -184,6 +202,7 @@ export const addMultipleCardsToCollection = async (
   const rows = [...requested.entries()].map(([cardId, { quantity, priceUsd, cardName }]) => ({
     user_id: userId,
     card_id: cardId,
+    game: parseCardRef(cardId).game,
     quantity: (existingQty.get(cardId) ?? 0) + quantity,
     price_usd: priceUsd,
     ...(cardName ? { card_name: cardName } : {}),
@@ -216,14 +235,12 @@ export const refreshCollectionPrices = async (userId: string): Promise<void> => 
   const now = new Date().toISOString();
   const rows = items.map((i) => {
     const card = byId.get(i.card_id);
-    const prices = card?.prices;
-    // foil entries are valued at the foil price (Scryfall's usd_foil)
-    const price = i.is_foil
-      ? Number(prices?.usd_foil ?? prices?.usd ?? 0)
-      : Number(prices?.usd ?? prices?.usd_foil ?? 0);
+    // foil entries are valued at the foil price
+    const price = card ? priceFromCard(card, i.is_foil) : 0;
     return {
       user_id: userId,
       card_id: i.card_id,
+      game: parseCardRef(i.card_id).game,
       quantity: i.quantity,
       is_foil: i.is_foil,
       price_usd: price,
@@ -243,9 +260,10 @@ export const refreshCollectionPrices = async (userId: string): Promise<void> => 
   const today = now.slice(0, 10);
   const historyRows = cards.map((card) => ({
     card_id: card.id,
+    game: card.game,
     recorded_at: today,
-    price_usd: card.prices?.usd ? Number(card.prices.usd) : null,
-    price_usd_foil: card.prices?.usd_foil ? Number(card.prices.usd_foil) : null,
+    price_usd: card.prices?.tcgplayer?.market ?? null,
+    price_usd_foil: card.prices?.tcgplayer?.foil ?? null,
   }));
   const { error: historyError } = await supabase
     .from('card_price_history')
@@ -362,7 +380,10 @@ export const updateWishlistItem = async (
 export const addToWishlist = async (userId: string, cardId: string): Promise<void> => {
   const { error } = await supabase
     .from('wishlists')
-    .upsert({ user_id: userId, card_id: cardId }, { onConflict: 'user_id,card_id' });
+    .upsert(
+      { user_id: userId, card_id: cardId, game: parseCardRef(cardId).game },
+      { onConflict: 'user_id,card_id' },
+    );
   if (error) throw error;
 };
 
@@ -375,7 +396,11 @@ export const removeFromWishlist = async (userId: string, cardId: string): Promis
 export const addCardsToWishlist = async (userId: string, cardIds: string[]): Promise<void> => {
   const unique = [...new Set(cardIds)];
   if (unique.length === 0) return;
-  const rows = unique.map((cardId) => ({ user_id: userId, card_id: cardId }));
+  const rows = unique.map((cardId) => ({
+    user_id: userId,
+    card_id: cardId,
+    game: parseCardRef(cardId).game,
+  }));
   const { error } = await supabase.from('wishlists').upsert(rows, { onConflict: 'user_id,card_id' });
   if (error) throw error;
 };
@@ -461,7 +486,14 @@ export const addPriceAlert = async (
   const { error } = await supabase
     .from('price_alerts')
     .upsert(
-      { user_id: userId, card_id: cardId, card_name: cardName, target_price: targetPrice, direction },
+      {
+        user_id: userId,
+        card_id: cardId,
+        game: parseCardRef(cardId).game,
+        card_name: cardName,
+        target_price: targetPrice,
+        direction,
+      },
       { onConflict: 'user_id,card_id,direction' },
     );
   if (error) throw error;
@@ -479,7 +511,7 @@ export const runPriceAlertCheck = async (userId: string): Promise<void> => {
   const cards = await fetchCardsByIds([...new Set(alerts.map((a) => a.card_id))]);
   const prices: Record<string, number> = {};
   cards.forEach((c) => {
-    prices[c.id] = priceFromCard(c.prices);
+    prices[c.id] = priceFromCard(c);
   });
   const { error } = await supabase.rpc('check_price_alerts', { prices });
   if (error) throw error;
@@ -502,10 +534,12 @@ export const createDeckFromCards = async (
   const now = new Date().toISOString();
   const cardCount = cards.reduce((n, c) => n + c.quantity, 0);
 
+  const deckGame = cards.length ? parseCardRef(cards[0].cardId).game : 'mtg';
   const { error: deckError } = await supabase.from('decks').insert({
     id: newDeckId,
     name,
     format,
+    game: deckGame,
     user_id: userId,
     created_at: now,
     updated_at: now,
@@ -518,6 +552,7 @@ export const createDeckFromCards = async (
     const rows = cards.map(({ cardId, quantity }) => ({
       deck_id: newDeckId,
       card_id: cardId,
+      game: parseCardRef(cardId).game,
       quantity,
       is_commander: false,
       is_sideboard: false,

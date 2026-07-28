@@ -4,6 +4,8 @@ import Modal from '../Modal';
 import { Card } from '../../types';
 import { getCardPrintings } from '../../services/scryfall';
 import { getCardImageSmall } from '../../utils/cardFaces';
+import { getPrice } from '../../cards/domain/accessors/price';
+import { usePriceSource } from '../../contexts/PriceSourceContext';
 
 interface PrintingPickerModalProps {
   /** The card whose printings are listed (its id marks the current printing). */
@@ -23,6 +25,7 @@ export default function PrintingPickerModal({
   onClose,
   onSelect,
 }: PrintingPickerModalProps) {
+  const { source } = usePriceSource();
   // Printings are shared per card name (not per printing id).
   const { data, isPending, isError } = useQuery({
     queryKey: ['printings', card.name],
@@ -52,6 +55,8 @@ export default function PrintingPickerModal({
             {printings.map((printing) => {
               const isCurrent = printing.id === card.id;
               const imageUri = getCardImageSmall(printing);
+              const usd = getPrice(printing, source);
+              const usdFoil = getPrice(printing, source, { foil: true });
               return (
                 <button
                   key={printing.id}
@@ -68,7 +73,7 @@ export default function PrintingPickerModal({
                   {imageUri ? (
                     <img
                       src={imageUri}
-                      alt={`${printing.name} — ${printing.set_name ?? printing.set ?? ''}`}
+                      alt={`${printing.name} — ${printing.setName ?? printing.setCode ?? ''}`}
                       loading="lazy"
                       decoding="async"
                       className="w-full h-auto rounded"
@@ -79,21 +84,21 @@ export default function PrintingPickerModal({
                     </div>
                   )}
                   <div className="mt-1 space-y-0.5">
-                    <div className="text-xs text-gray-200 truncate">{printing.set_name}</div>
+                    <div className="text-xs text-gray-200 truncate">{printing.setName}</div>
                     <div className="text-[11px] text-gray-400">
-                      <span className="uppercase">{printing.set}</span>
-                      {printing.collector_number ? ` #${printing.collector_number}` : ''}
+                      <span className="uppercase">{printing.setCode}</span>
+                      {printing.collectorNumber ? ` #${printing.collectorNumber}` : ''}
                     </div>
-                    {(printing.prices?.usd || printing.prices?.usd_foil) && (
+                    {(usd > 0 || usdFoil > 0) && (
                       <div className="text-[11px]">
-                        {printing.prices?.usd && (
-                          <span className="text-green-400">${printing.prices.usd}</span>
+                        {usd > 0 && (
+                          <span className="text-green-400">${usd.toFixed(2)}</span>
                         )}
-                        {printing.prices?.usd && printing.prices?.usd_foil && (
+                        {usd > 0 && usdFoil > 0 && (
                           <span className="text-gray-500"> · </span>
                         )}
-                        {printing.prices?.usd_foil && (
-                          <span className="text-fuchsia-400">${printing.prices.usd_foil} foil</span>
+                        {usdFoil > 0 && (
+                          <span className="text-fuchsia-400">${usdFoil.toFixed(2)} foil</span>
                         )}
                       </div>
                     )}

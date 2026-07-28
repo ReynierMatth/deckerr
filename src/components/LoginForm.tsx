@@ -80,7 +80,7 @@ import { useState, useEffect } from 'react';
                   <div
                     className="absolute inset-0 bg-cover bg-center transform transition-transform duration-1000"
                     style={{
-                      backgroundImage: `url(${card.image_uris?.normal})`,
+                      backgroundImage: `url(${card.images?.normal})`,
                       filter: 'blur(8px) brightness(0.4)',
                     }}
                   />

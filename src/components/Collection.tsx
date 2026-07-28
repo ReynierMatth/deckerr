@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '../types';
+import { GameId, enabledGames } from '../cards/domain/game';
 import { getCollectionTotalValue, refreshCollectionPrices, getCollectionValueHistory, runPriceAlertCheck, addMultipleCardsToCollection, getCardsBySetNumber, resolveCardsByNames, setNumberKey } from '../services/api';
 import { toCsv, parseCsv, isManaBoxCsv, parseManaBoxCsv, CollectionCsvRow, ManaBoxCsvRow } from '../utils/collectionCsv';
 import CollectionValueChart from './CollectionValueChart';
@@ -18,6 +19,7 @@ import CollectionHeader from './collection/CollectionHeader';
 import CollectionGrid from './collection/CollectionGrid';
 import CardDetailModal from './collection/CardDetailModal';
 import { CollectionItem } from './collection/types';
+import { getPrice } from '../cards/domain/accessors/price';
 
 interface ProfileTotalValueRow {
   collection_total_value: number;
@@ -29,6 +31,7 @@ export default function Collection() {
   const { getCurrentFaceIndex, toggleCardFace } = useCardFaces();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
+  const [gameFilter, setGameFilter] = useState<GameId | 'all'>('all');
   // Search term backing the currently-loaded pages: trails searchQuery by
   // ~300ms so the (server-filtered) pages aren't refetched on every keystroke.
   // Starts as '' (matching searchQuery) so the initial mount loads immediately.
@@ -151,7 +154,7 @@ export default function Collection() {
     isLoadingMore,
     fetchNextPage,
     updateCachedItems,
-  } = useMyCollection(user?.id, debouncedSearch);
+  } = useMyCollection(user?.id, debouncedSearch, gameFilter === 'all' ? undefined : gameFilter);
 
   const isLoadingCollection = !!user && isCollectionPending;
 
@@ -223,9 +226,7 @@ export default function Collection() {
 
   // Compute the per-copy price for a variant (foil uses usd_foil, else usd).
   const priceForVariant = (card: Card, isFoil: boolean): number => {
-    const raw = isFoil ? card.prices?.usd_foil : card.prices?.usd;
-    const parsed = raw ? parseFloat(raw) : 0;
-    return Number.isFinite(parsed) ? parsed : 0;
+    return getPrice(card, 'tcgplayer', { foil: isFoil });
   };
 
   // Update the foil flag and/or condition of a collection entry.
@@ -470,6 +471,23 @@ export default function Collection() {
 
         {/* Search within collection */}
         <CollectionToolbar searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+
+        {/* Per-game filter */}
+        {enabledGames().length > 1 && (
+          <div className="flex gap-2 mb-4">
+            {[{ id: 'all' as const, label: 'All' }, ...enabledGames()].map((g) => (
+              <button
+                key={g.id}
+                onClick={() => setGameFilter(g.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                  gameFilter === g.id ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Collection */}
         <div>

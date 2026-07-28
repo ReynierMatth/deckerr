@@ -41,8 +41,8 @@ function buildCsv(mainboard: DeckEntry[], sideboard: DeckEntry[]): string {
     [
       String(quantity),
       escapeCsvField(card.name),
-      escapeCsvField(card.set ?? ''),
-      escapeCsvField(card.collector_number ?? ''),
+      escapeCsvField(card.setCode ?? ''),
+      escapeCsvField(card.collectorNumber ?? ''),
       is_commander ? 'true' : 'false',
       is_sideboard ? 'true' : 'false',
     ].join(',');
@@ -83,8 +83,8 @@ export function buildDeckExport(cards: DeckEntry[], format: ExportFormat = 'plai
   if (format === 'mtgo') return buildMtgoDek(mainboard, sideboard);
 
   const line = ({ card, quantity }: DeckEntry): string => {
-    if (format === 'arena' && card.set && card.collector_number) {
-      return `${quantity} ${card.name} (${card.set.toUpperCase()}) ${card.collector_number}`;
+    if (format === 'arena' && card.setCode && card.collectorNumber) {
+      return `${quantity} ${card.name} (${card.setCode.toUpperCase()}) ${card.collectorNumber}`;
     }
     return `${quantity} ${card.name}`;
   };

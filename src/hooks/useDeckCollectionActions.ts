@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { addCardToCollection, addMultipleCardsToCollection, addCardsToWishlist } from '../services/api';
 import { useCollectionCounts } from './useCollectionCounts';
+import { getPrice } from '../cards/domain/accessors/price';
 
 /**
  * Collection/wishlist actions for the deck builder: which deck cards are
@@ -65,7 +66,7 @@ export function useDeckCollectionActions(
     try {
       setAddingCardId(cardId);
       const card = selectedCards.find(c => c.card.id === cardId)?.card;
-      const priceUsd = card?.prices?.usd ? Number(card.prices.usd) : 0;
+      const priceUsd = card ? getPrice(card, 'tcgplayer') : 0;
       await addCardToCollection(user.id, cardId, quantity, priceUsd, card?.name);
 
       applyCollectionAdds([{ cardId, quantity }]);
@@ -98,7 +99,7 @@ export function useDeckCollectionActions(
         return {
           cardId: card.id,
           quantity: neededQuantity,
-          priceUsd: card.prices?.usd ? Number(card.prices.usd) : 0,
+          priceUsd: getPrice(card, 'tcgplayer'),
           cardName: card.name,
         };
       }).filter(c => c.quantity > 0);

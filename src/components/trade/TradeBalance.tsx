@@ -1,8 +1,9 @@
 import { SelectedCard } from './types';
+import { getPrice } from '../../cards/domain/accessors/price';
 
 const sumSideValue = (cards: Map<string, SelectedCard>): number =>
   Array.from(cards.values()).reduce(
-    (total, item) => total + (item.card.prices?.usd ? parseFloat(item.card.prices.usd) : 0) * item.quantity,
+    (total, item) => total + getPrice(item.card, 'tcgplayer') * item.quantity,
     0,
   );
 

@@ -1,5 +1,6 @@
 import { Minus } from 'lucide-react';
 import { SelectedCard } from './types';
+import { getPrice } from '../../cards/domain/accessors/price';
 
 interface SelectedCardsSummaryProps {
   cards: Map<string, SelectedCard>;
@@ -16,7 +17,7 @@ export default function SelectedCardsSummary({ cards, onRemove, label, emptyLabe
 
   // Calculate total price
   const totalPrice = Array.from(cards.values()).reduce((total, item) => {
-    const price = item.card.prices?.usd ? parseFloat(item.card.prices.usd) : 0;
+    const price = getPrice(item.card, 'tcgplayer');
     return total + (price * item.quantity);
   }, 0);
 

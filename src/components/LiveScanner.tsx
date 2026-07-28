@@ -11,6 +11,7 @@ import { preloadScannerCv, detectQuad, runScan, type Pt } from '../utils/scanner
 import { sharedTokenCount } from '../utils/nameMatch';
 import CardDetail from './card/CardDetail';
 import { useBackDismiss } from '../hooks/useBackDismiss';
+import { getPrice } from '../cards/domain/accessors/price';
 
 type CameraState = 'starting' | 'ready' | 'denied' | 'unavailable';
 
@@ -292,7 +293,7 @@ export default function LiveScanner() {
         return;
       }
       try {
-        const priceUsd = card.prices?.usd ? Number(card.prices.usd) : 0;
+        const priceUsd = getPrice(card, 'tcgplayer');
         await addCardToCollection(user.id, card.id, 1, priceUsd, card.name);
         queryClient.setQueryData<Record<string, number>>(
           ['collection', user.id, 'counts'],
@@ -457,14 +458,14 @@ export default function LiveScanner() {
                         className="flex items-center gap-3 flex-1 min-w-0 text-left"
                         aria-label={`Détails de ${e.card.name}`}
                       >
-                        {e.card.image_uris?.art_crop && (
-                          <img src={e.card.image_uris.art_crop} alt="" className="w-12 h-9 rounded object-cover flex-shrink-0" loading="lazy" />
+                        {e.card.images?.artCrop && (
+                          <img src={e.card.images.artCrop} alt="" className="w-12 h-9 rounded object-cover flex-shrink-0" loading="lazy" />
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm truncate">{e.card.name}</p>
                           <p className="text-xs text-gray-400 truncate">
-                            {e.card.set_name}
-                            {e.card.set ? ` · ${e.card.set.toUpperCase()}` : ''} · {e.score.toFixed(2)}
+                            {e.card.setName}
+                            {e.card.setCode ? ` · ${e.card.setCode.toUpperCase()}` : ''} · {e.score.toFixed(2)}
                           </p>
                         </div>
                       </button>

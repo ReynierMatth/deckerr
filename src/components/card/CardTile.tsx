@@ -54,8 +54,8 @@ export default function CardTile({
   const imageUri =
     imageSize === 'small' ? getCardImageSmall(card, faceIndex) : getCardImageUri(card, faceIndex);
   const displayName =
-    isDoubleFaced(card) && card.card_faces
-      ? card.card_faces[faceIndex]?.name || card.name
+    isDoubleFaced(card) && card.faces
+      ? card.faces[faceIndex]?.name || card.name
       : card.name;
 
   return (

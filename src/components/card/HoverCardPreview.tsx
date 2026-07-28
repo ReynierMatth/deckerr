@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Card } from '../../types';
 import { isDoubleFaced, getCardLargeImageUri } from '../../utils/cardFaces';
+import { getPrice, hasPrice } from '../../cards/domain/accessors/price';
+import { usePriceSource } from '../../contexts/PriceSourceContext';
 
 interface HoverCardPreviewProps {
   card: Card;
@@ -23,6 +25,7 @@ export default function HoverCardPreview({
   card,
   getCurrentFaceIndex,
 }: HoverCardPreviewProps) {
+  const { source } = usePriceSource();
   const [pos, setPos] = useState(() => ({
     x: typeof window !== 'undefined' ? window.innerWidth / 2 : 0,
     y: typeof window !== 'undefined' ? window.innerHeight / 2 : 0,
@@ -36,11 +39,11 @@ export default function HoverCardPreview({
 
   const currentFaceIndex = getCurrentFaceIndex(card.id);
   const isMultiFaced = isDoubleFaced(card);
-  const currentFace = isMultiFaced && card.card_faces ? card.card_faces[currentFaceIndex] : null;
+  const currentFace = isMultiFaced && card.faces ? card.faces[currentFaceIndex] : null;
 
   const displayName = currentFace?.name || card.name;
-  const displayTypeLine = currentFace?.type_line || card.type_line;
-  const displayOracleText = currentFace?.oracle_text || card.oracle_text;
+  const displayTypeLine = currentFace?.typeLine || card.mtg?.typeLine;
+  const displayOracleText = currentFace?.text || card.mtg?.oracleText;
 
   const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
   const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
@@ -63,7 +66,7 @@ export default function HoverCardPreview({
           />
           {isMultiFaced && (
             <div className="absolute top-2 right-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
-              Face {currentFaceIndex + 1}/{card.card_faces!.length}
+              Face {currentFaceIndex + 1}/{card.faces!.length}
             </div>
           )}
         </div>
@@ -75,9 +78,9 @@ export default function HoverCardPreview({
               {displayOracleText}
             </p>
           )}
-          {card.prices?.usd && (
+          {hasPrice(card, source) && (
             <div className="text-xs text-green-400 font-semibold border-t border-gray-700 pt-1.5">
-              ${card.prices.usd}
+              ${getPrice(card, source).toFixed(2)}
             </div>
           )}
         </div>

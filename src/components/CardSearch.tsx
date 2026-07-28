@@ -1,13 +1,14 @@
 import React, { useState, useRef, useReducer } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  searchCards,
   addCardToCollection,
   getWishlist,
   addToWishlist,
   removeFromWishlist,
 } from '../services/api';
 import { Card } from '../types';
+import { GameId, enabledGames } from '../cards/domain/game';
+import { cardData } from '../cards/infra/facade';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { buildScryfallQuery } from '../utils/scryfallQuery';
@@ -17,6 +18,7 @@ import SearchForm from './search/SearchForm';
 import SearchResults from './search/SearchResults';
 import CardDetail from './card/CardDetail';
 import { SearchFormState, initialSearchForm, searchFormReducer } from './search/searchFormState';
+import { getPrice } from '../cards/domain/accessors/price';
 
 const CardSearch = () => {
   const { user } = useAuth();
@@ -58,6 +60,10 @@ const CardSearch = () => {
   const [searchResults, setSearchResults] = useState<Card[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Search targets one game at a time (each has its own provider/syntax).
+  const [game, setGame] = useState<GameId>('mtg');
+  const [pokemonQuery, setPokemonQuery] = useState('');
+  const games = enabledGames();
 
   // Collection state (card_id -> quantity), same cache entry as DeckManager.
   const { data: collectionCounts } = useCollectionCounts(user?.id);
@@ -74,7 +80,7 @@ const CardSearch = () => {
     try {
       setAddingCardId(cardId);
       const card = searchResults.find(c => c.id === cardId);
-      const priceUsd = card?.prices?.usd ? Number(card.prices.usd) : 0;
+      const priceUsd = card ? getPrice(card, 'tcgplayer') : 0;
       await addCardToCollection(user.id, cardId, 1, priceUsd, card?.name);
 
       // Bump the cached count right away (instant feedback), then invalidate
@@ -108,11 +114,14 @@ const CardSearch = () => {
     setLoading(true);
     setError(null);
 
-    const query = buildScryfallQuery(form);
+    const query =
+      game === 'mtg'
+        ? { raw: { scryfall: buildScryfallQuery(form) } }
+        : { text: pokemonQuery };
 
     try {
-      const cards = await searchCards(query, controller.signal);
-      setSearchResults(cards || []);
+      const result = await cardData.search(game, query, controller.signal);
+      setSearchResults(result.cards || []);
     } catch (err) {
       // A newer search aborted this one — ignore, the newer one owns the UI.
       if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -127,7 +136,45 @@ const CardSearch = () => {
     <div className="relative bg-gray-900 text-white p-3 sm:p-6 md:min-h-screen">
       <div className="max-w-7xl mx-auto">
         <h1 className="text-2xl md:text-3xl font-bold mb-4 md:mb-6">Card Search</h1>
-        <SearchForm form={form} setField={setField} onSubmit={handleSearch} />
+
+        {games.length > 1 && (
+          <div className="flex gap-2 mb-4">
+            {games.map((g) => (
+              <button
+                key={g.id}
+                onClick={() => {
+                  setGame(g.id);
+                  setSearchResults([]);
+                  setError(null);
+                }}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                  game === g.id
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {game === 'mtg' ? (
+          <SearchForm form={form} setField={setField} onSubmit={handleSearch} />
+        ) : (
+          <form onSubmit={handleSearch} className="mb-6 flex gap-2">
+            <input
+              type="text"
+              value={pokemonQuery}
+              onChange={(e) => setPokemonQuery(e.target.value)}
+              placeholder="Search Pokémon cards by name…"
+              className="flex-1 px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm"
+            />
+            <button type="submit" className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium">
+              Search
+            </button>
+          </form>
+        )}
 
         {loading && (
           <div className="flex items-center justify-center h-32">

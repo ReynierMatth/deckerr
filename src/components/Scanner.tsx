@@ -12,6 +12,7 @@ import { dhashFromRGBA, matchHashIndex } from '../utils/imageHash';
 import { useCardHashIndex } from '../hooks/useCardHashIndex';
 import Modal from './Modal';
 import PrintingPickerModal from './card/PrintingPickerModal';
+import { getPrice } from '../cards/domain/accessors/price';
 
 type CameraState = 'starting' | 'ready' | 'denied' | 'unavailable';
 
@@ -55,9 +56,7 @@ const DEBUG_HASH = true;
  * foil copies use usd_foil (falling back to usd), non-foil copies use usd.
  */
 const priceForVariant = (card: Card, isFoil: boolean): number => {
-  const raw = isFoil ? card.prices?.usd_foil ?? card.prices?.usd : card.prices?.usd;
-  const price = Number(raw ?? 0);
-  return Number.isFinite(price) ? price : 0;
+  return getPrice(card, 'tcgplayer', { foil: isFoil });
 };
 
 /**
@@ -331,7 +330,7 @@ export default function Scanner() {
               if (isCancelled()) return;
               setHashDebug(
                 c
-                  ? `≈ ${c.name} · ${c.set?.toUpperCase()} · d${nearest.distance} · ${bestVotes}/${HASH_VOTES}${strong ? ' ⚡' : ''}`
+                  ? `≈ ${c.name} · ${c.setCode?.toUpperCase()} · d${nearest.distance} · ${bestVotes}/${HASH_VOTES}${strong ? ' ⚡' : ''}`
                   : `d${nearest.distance} · ${bestVotes}/${HASH_VOTES}`,
               );
             } else {
@@ -607,15 +606,15 @@ export default function Scanner() {
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-sm truncate">{entry.card.name}</p>
                         {entry.added ? (
-                          entry.card.set_name && (
-                            <p className="text-xs text-gray-400 truncate">{entry.card.set_name}</p>
+                          entry.card.setName && (
+                            <p className="text-xs text-gray-400 truncate">{entry.card.setName}</p>
                           )
                         ) : (
                           <button
                             onClick={() => setPickerEntryId(entry.card.id)}
                             className="flex items-center gap-1 text-xs text-blue-400 hover:underline max-w-full"
                           >
-                            <span className="truncate">{entry.card.set_name ?? 'Choose edition'}</span>
+                            <span className="truncate">{entry.card.setName ?? 'Choose edition'}</span>
                             <ChevronDown size={12} className="flex-shrink-0" />
                           </button>
                         )}

@@ -4,6 +4,7 @@ import { Card } from '../../types';
 import { isDoubleFaced, getCardImageUri } from '../../utils/cardFaces';
 import WishlistButton from '../WishlistButton';
 import { ManaCost } from '../ManaCost';
+import { getPrice, hasPrice } from '../../cards/domain/accessors/price';
 
 interface DeckCardEntry {
   card: Card;
@@ -119,8 +120,8 @@ export default function DeckSearchPanel({
           const cardInDeck = selectedCards.find(c => c.card.id === card.id && !c.is_sideboard);
           const quantityInDeck = cardInDeck?.quantity || 0;
 
-          const displayName = isMultiFaced && card.card_faces
-            ? card.card_faces[currentFaceIndex]?.name || card.name
+          const displayName = isMultiFaced && card.faces
+            ? card.faces[currentFaceIndex]?.name || card.name
             : card.name;
 
           const isValidForCommander = deckFormat !== 'commander' || !commander || isCardValidForCommander(card, commanderColors);
@@ -158,7 +159,7 @@ export default function DeckSearchPanel({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      toggleCardFace(card.id, card.card_faces!.length);
+                      toggleCardFace(card.id, card.faces!.length);
                     }}
                     className="absolute bottom-0 right-0 bg-purple-600 text-white p-1 rounded-tl"
                   >
@@ -171,11 +172,11 @@ export default function DeckSearchPanel({
               <div className="flex-1 min-w-0">
                 <h3 className="font-medium text-sm truncate">{displayName}</h3>
                 <div className="flex items-center gap-2 mt-1">
-                  {card.mana_cost && (
-                    <ManaCost cost={card.mana_cost} size={14} />
+                  {card.mtg?.manaCost && (
+                    <ManaCost cost={card.mtg.manaCost} size={14} />
                   )}
-                  {card.prices?.usd && (
-                    <div className="text-xs text-gray-400">${card.prices.usd}</div>
+                  {hasPrice(card, 'tcgplayer') && (
+                    <div className="text-xs text-gray-400">${getPrice(card, 'tcgplayer')}</div>
                   )}
                 </div>
                 {inCollection > 0 && (

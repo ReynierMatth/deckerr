@@ -5,6 +5,7 @@ import { isDoubleFaced } from '../../utils/cardFaces';
 import CardTile from '../card/CardTile';
 import WishlistButton from '../WishlistButton';
 import { CollectionItem } from './types';
+import { getPrice, hasPrice } from '../../cards/domain/accessors/price';
 
 interface CollectionGridProps {
   items: CollectionItem[];
@@ -83,8 +84,8 @@ export default function CollectionGrid({
             const { card, quantity, isFoil } = item;
             const currentFaceIndex = getCurrentFaceIndex(card.id);
             const isMultiFaced = isDoubleFaced(card);
-            const displayName = isMultiFaced && card.card_faces
-              ? card.card_faces[currentFaceIndex]?.name || card.name
+            const displayName = isMultiFaced && card.faces
+              ? card.faces[currentFaceIndex]?.name || card.name
               : card.name;
 
             return (
@@ -114,9 +115,9 @@ export default function CollectionGrid({
                   </>
                 }
                 bottomLeft={
-                  card.prices?.usd && (
+                  hasPrice(card, 'tcgplayer') && (
                     <div className="absolute bottom-1 left-1 bg-green-600 text-white text-[10px] sm:text-xs font-bold px-1.5 py-0.5 rounded shadow-lg">
-                      ${card.prices.usd}
+                      ${getPrice(card, 'tcgplayer')}
                     </div>
                   )
                 }
@@ -125,7 +126,7 @@ export default function CollectionGrid({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        toggleCardFace(card.id, card.card_faces!.length);
+                        toggleCardFace(card.id, card.faces!.length);
                       }}
                       className="absolute bottom-1 right-1 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full shadow-lg transition-all"
                       title="Flip card"

@@ -4,10 +4,13 @@ import { useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, Deck } from '../types';
 import { searchCards, resolveCardsByNames, deleteDeck } from '../services/api';
+import { GameId, enabledGames } from '../cards/domain/game';
+import { cardData } from '../cards/infra/facade';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import ConfirmModal from './ConfirmModal';
 import { getCardLargeImageUri } from '../utils/cardFaces';
+import { getPrice } from '../cards/domain/accessors/price';
 import { useCardFaces } from '../hooks/useCardFaces';
 import { useBackDismiss } from '../hooks/useBackDismiss';
 import { useDeckSave } from '../hooks/useDeckSave';
@@ -111,13 +114,23 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
     handleAddMissingToWishlist,
   } = useDeckCollectionActions(selectedCards);
 
+  // A deck is single-game: once it has cards (or when editing an existing deck)
+  // the search is locked to that game; a fresh empty deck lets the user pick.
+  const deckGameFixed: GameId | undefined = selectedCards[0]?.card.game ?? initialDeck?.game;
+  const [chosenGame, setChosenGame] = useState<GameId>('mtg');
+  const searchGame: GameId = deckGameFixed ?? chosenGame;
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
 
     setIsSearching(true);
     try {
-      const cards = await searchCards(searchQuery);
+      const result = await cardData.search(
+        searchGame,
+        searchGame === 'mtg' ? { raw: { scryfall: searchQuery } } : { text: searchQuery },
+      );
+      const cards = result.cards;
       setSearchResults(cards || []);
     } catch (error) {
       console.error('Failed to search cards:', error);
@@ -239,6 +252,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
   const currentDeck: Deck = {
     id: initialDeck?.id || '',
     name: deckName,
+    game: selectedCards[0]?.card.game ?? initialDeck?.game ?? 'mtg',
     format: deckFormat,
     cards: selectedCards,
     userId: user?.id || '',
@@ -264,7 +278,7 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       card.name === 'Swamp' ||
       card.name === 'Mountain' ||
       card.name === 'Forest';
-    const price = isBasicLand ? 0 : card.prices?.usd ? parseFloat(card.prices.usd) : 0;
+    const price = isBasicLand ? 0 : getPrice(card, 'tcgplayer');
     return acc + price * quantity;
   }, 0);
 
@@ -489,6 +503,21 @@ export default function DeckManager({ initialDeck, onSave }: DeckManagerProps) {
       <Modal isOpen={showSearch} onClose={() => setShowSearch(false)} size="xl" labelledBy="add-cards-title">
         <div className="p-3">
           <h2 id="add-cards-title" className="text-lg font-semibold text-white mb-3 pr-8">Add cards</h2>
+          {!deckGameFixed && enabledGames().length > 1 && (
+            <div className="flex gap-2 mb-3">
+              {enabledGames().map((g) => (
+                <button
+                  key={g.id}
+                  onClick={() => setChosenGame(g.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                    searchGame === g.id ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                  }`}
+                >
+                  {g.label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="lg:flex lg:gap-4">
             <div className="lg:flex-1 lg:min-w-0">
               <DeckSearchPanel

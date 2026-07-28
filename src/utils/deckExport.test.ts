@@ -2,7 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { buildDeckExport, DECK_CSV_HEADER } from './deckExport';
 import { Card } from '../types';
 
-const card = (over: Partial<Card>): Card => ({ id: over.name ?? 'x', name: over.name ?? 'x', ...over });
+const card = (over: { name?: string; set?: string; collector_number?: string } = {}): Card => ({
+  id: over.name ?? 'x',
+  rawId: over.name ?? 'x',
+  game: 'mtg',
+  providerId: 'test',
+  name: over.name ?? 'x',
+  setCode: over.set,
+  collectorNumber: over.collector_number,
+});
 
 describe('buildDeckExport', () => {
   it('produces plain "<qty> <name>" lines', () => {

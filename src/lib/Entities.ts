@@ -38,6 +38,7 @@ export type Database = {
                 Row: {
                     card_id: string
                     created_at: string | null
+                    game: string
                     id: string
                     quantity: number | null
                     updated_at: string | null
@@ -46,6 +47,7 @@ export type Database = {
                 Insert: {
                     card_id: string
                     created_at?: string | null
+                    game?: string
                     id?: string
                     quantity?: number | null
                     updated_at?: string | null
@@ -54,6 +56,7 @@ export type Database = {
                 Update: {
                     card_id?: string
                     created_at?: string | null
+                    game?: string
                     id?: string
                     quantity?: number | null
                     updated_at?: string | null
@@ -73,6 +76,7 @@ export type Database = {
                 Row: {
                     card_id: string
                     deck_id: string
+                    game: string
                     id: string
                     is_commander: boolean | null
                     is_sideboard: boolean
@@ -81,6 +85,7 @@ export type Database = {
                 Insert: {
                     card_id: string
                     deck_id: string
+                    game?: string
                     id?: string
                     is_commander?: boolean | null
                     is_sideboard?: boolean
@@ -89,6 +94,7 @@ export type Database = {
                 Update: {
                     card_id?: string
                     deck_id?: string
+                    game?: string
                     id?: string
                     is_commander?: boolean | null
                     is_sideboard?: boolean
@@ -108,6 +114,7 @@ export type Database = {
                 Row: {
                     created_at: string | null
                     format: string
+                    game: string
                     id: string
                     name: string
                     updated_at: string | null
@@ -116,6 +123,7 @@ export type Database = {
                 Insert: {
                     created_at?: string | null
                     format: string
+                    game?: string
                     id?: string
                     name: string
                     updated_at?: string | null
@@ -124,6 +132,7 @@ export type Database = {
                 Update: {
                     created_at?: string | null
                     format?: string
+                    game?: string
                     id?: string
                     name?: string
                     updated_at?: string | null
@@ -148,6 +157,7 @@ export type Database = {
                     display_name: string | null
                     handle: string | null
                     collection_visibility: 'public' | 'friends' | 'private' | null
+                    preferred_price_source: 'tcgplayer' | 'cardmarket'
                 }
                 Insert: {
                     created_at?: string | null
@@ -157,6 +167,7 @@ export type Database = {
                     display_name?: string | null
                     handle?: string | null
                     collection_visibility?: 'public' | 'friends' | 'private' | null
+                    preferred_price_source?: 'tcgplayer' | 'cardmarket'
                 }
                 Update: {
                     created_at?: string | null
@@ -166,6 +177,7 @@ export type Database = {
                     display_name?: string | null
                     handle?: string | null
                     collection_visibility?: 'public' | 'friends' | 'private' | null
+                    preferred_price_source?: 'tcgplayer' | 'cardmarket'
                 }
                 Relationships: []
             }

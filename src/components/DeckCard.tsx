@@ -13,7 +13,7 @@ export default function DeckCard({ deck, onEdit, onDelete }: DeckCardProps) {
   const validationErrors = deck.validationErrors || [];
 
   // Use cover card (already loaded)
-  const coverImage = deck.coverCard?.image_uris?.normal;
+  const coverImage = deck.coverCard?.images?.normal;
 
   return (
     <div

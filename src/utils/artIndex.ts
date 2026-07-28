@@ -33,31 +33,38 @@ interface ArtIndexMeta {
   ids: string[];
 }
 
-let indexPromise: Promise<ArtIndex> | null = null;
+import type { GameId } from '../cards/domain/game';
+
+// One cached promise per game. MTG lives at the historical path; other games
+// under /<game>/… (built by scripts/build-art-index.mjs GAME=<game>).
+const indexPromises = new Map<GameId, Promise<ArtIndex>>();
+
+const indexBasePath = (game: GameId): string =>
+  game === 'mtg' ? '/card-art-index' : `/${game}/card-art-index`;
 
 /**
- * Load and cache the art index (metadata JSON + packed int8 binary) from the
- * app origin. Both files are precached by the service worker, so this works
- * offline once the app has been visited.
+ * Load and cache the art index (metadata JSON + packed int8 binary) for a game
+ * from the app origin. Both files are precached by the service worker, so this
+ * works offline once the app has been visited. Ids are game-qualified.
  */
-export function loadArtIndex(): Promise<ArtIndex> {
-  if (!indexPromise) {
-    indexPromise = (async () => {
-      console.info('[scan-cv] loading art index (.json + .bin)…');
-      const [metaRes, binRes] = await Promise.all([
-        fetch('/card-art-index.json'),
-        fetch('/card-art-index.bin'),
-      ]);
+export function loadArtIndex(game: GameId = 'mtg'): Promise<ArtIndex> {
+  let promise = indexPromises.get(game);
+  if (!promise) {
+    promise = (async () => {
+      const base = indexBasePath(game);
+      console.info(`[scan-cv] loading ${game} art index (.json + .bin)…`);
+      const [metaRes, binRes] = await Promise.all([fetch(`${base}.json`), fetch(`${base}.bin`)]);
       if (!metaRes.ok || !binRes.ok) {
-        throw new Error('Failed to load the card art index');
+        throw new Error(`Failed to load the ${game} card art index`);
       }
       const meta = (await metaRes.json()) as ArtIndexMeta;
       const rows = new Int8Array(await binRes.arrayBuffer());
-      console.info(`[scan-cv] art index loaded (${meta.count} vecs)`);
+      console.info(`[scan-cv] ${game} art index loaded (${meta.count} vecs)`);
       return { model: meta.model, dim: meta.dim, scale: meta.scale, ids: meta.ids, rows };
     })();
+    indexPromises.set(game, promise);
   }
-  return indexPromise;
+  return promise;
 }
 
 /**

@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { getCardImageUri } from '../utils/cardFaces';
+import { getPrice, hasPrice } from '../cards/domain/accessors/price';
 import CardTile from './card/CardTile';
 
 interface WishlistItem {
@@ -194,9 +195,9 @@ export default function Wishlist() {
                   </div>
                 }
                 bottomLeft={
-                  card.prices?.usd && (
+                  hasPrice(card, 'tcgplayer') && (
                     <div className="absolute bottom-1 left-1 bg-green-600 text-white text-[10px] sm:text-xs font-bold px-1.5 py-0.5 rounded shadow-lg">
-                      ${card.prices.usd}
+                      ${getPrice(card, 'tcgplayer')}
                     </div>
                   )
                 }

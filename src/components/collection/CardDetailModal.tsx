@@ -8,6 +8,8 @@ import { CARD_CONDITIONS } from '../../utils/collectionCsv';
 import PrintingPickerModal from '../card/PrintingPickerModal';
 import PriceLineChart from '../charts/PriceLineChart';
 import { CollectionItem } from './types';
+import { getPrice, hasPrice } from '../../cards/domain/accessors/price';
+import { usePriceSource } from '../../contexts/PriceSourceContext';
 
 interface CardDetailModalProps {
   item: CollectionItem;
@@ -36,6 +38,7 @@ export default function CardDetailModal({
   toggleCardFace,
 }: CardDetailModalProps) {
   const [showPrintingPicker, setShowPrintingPicker] = useState(false);
+  const { source } = usePriceSource();
 
   // Only mounted while the panel is open, so this fetches on open. If the
   // table has no rows (or the query errors), the empty state renders instead.
@@ -54,13 +57,13 @@ export default function CardDetailModal({
 
   const currentFaceIndex = getCurrentFaceIndex(item.card.id);
   const isMultiFaced = isDoubleFaced(item.card);
-  const currentFace = isMultiFaced && item.card.card_faces
-    ? item.card.card_faces[currentFaceIndex]
+  const currentFace = isMultiFaced && item.card.faces
+    ? item.card.faces[currentFaceIndex]
     : null;
 
   const displayName = currentFace?.name || item.card.name;
-  const displayTypeLine = currentFace?.type_line || item.card.type_line;
-  const displayOracleText = currentFace?.oracle_text || item.card.oracle_text;
+  const displayTypeLine = currentFace?.typeLine || item.card.mtg?.typeLine;
+  const displayOracleText = currentFace?.text || item.card.mtg?.oracleText;
 
   return (
     <>
@@ -96,10 +99,10 @@ export default function CardDetailModal({
             {isMultiFaced && (
               <>
                 <div className="absolute top-2 right-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
-                  Face {currentFaceIndex + 1}/{item.card.card_faces!.length}
+                  Face {currentFaceIndex + 1}/{item.card.faces!.length}
                 </div>
                 <button
-                  onClick={() => toggleCardFace(item.card.id, item.card.card_faces!.length)}
+                  onClick={() => toggleCardFace(item.card.id, item.card.faces!.length)}
                   className="absolute bottom-2 right-2 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full shadow-lg transition-all"
                   title="Flip card"
                 >
@@ -122,24 +125,24 @@ export default function CardDetailModal({
               </div>
             )}
 
-            {item.card.prices?.usd && (
+            {hasPrice(item.card, source) && (
               <div className="border-t border-gray-700 pt-3">
                 <div className="text-lg text-green-400 font-semibold">
-                  ${item.card.prices.usd} each
+                  ${getPrice(item.card, source)} each
                 </div>
                 <div className="text-sm text-gray-400">
-                  Total value: ${(parseFloat(item.card.prices.usd) * item.quantity).toFixed(2)}
+                  Total value: ${(getPrice(item.card, source) * item.quantity).toFixed(2)}
                 </div>
               </div>
             )}
 
             {/* Printing / edition */}
             <div className="border-t border-gray-700 pt-3">
-              {item.card.set_name && (
+              {item.card.setName && (
                 <div className="text-sm text-gray-400 mb-2">
-                  {item.card.set_name}
-                  {item.card.set && <span className="uppercase"> ({item.card.set})</span>}
-                  {item.card.collector_number && <span> #{item.card.collector_number}</span>}
+                  {item.card.setName}
+                  {item.card.setCode && <span className="uppercase"> ({item.card.setCode})</span>}
+                  {item.card.collectorNumber && <span> #{item.card.collectorNumber}</span>}
                 </div>
               )}
               <button
