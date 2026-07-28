@@ -7,14 +7,16 @@ import { getCardsByIds } from '../services/api';
 import { getCardArtCrop } from '../utils/cardFaces';
 import { profileDisplayName, profileHandleLabel } from '../utils/profileName';
 import { useAuth } from '../contexts/AuthContext';
+import { GameId, GAMES } from '../cards/domain/game';
+import { getDeckRules } from '../cards/infra/rules';
+import { useActiveGames } from '../contexts/PriceSourceContext';
 
 const PAGE_SIZE = 20;
-
-const FORMATS = ['standard', 'modern', 'pioneer', 'commander', 'brawl', 'oathbreaker', 'legacy', 'vintage', 'pauper'] as const;
 
 interface DiscoverDeck {
   id: string;
   name: string;
+  game: GameId;
   format: string;
   cardCount: number;
   userId: string | null;
@@ -37,14 +39,16 @@ interface DiscoverPage {
 const fetchDiscoverPage = async (
   offset: number,
   search: string,
-  format: string
+  format: string,
+  gameIds: GameId[]
 ): Promise<DiscoverPage> => {
   let query = supabase
     .from('decks')
-    .select('id, name, format, card_count, cover_card_id, user_id', { count: 'exact' })
+    .select('id, name, game, format, card_count, cover_card_id, user_id', { count: 'exact' })
     .eq('visibility', 'public'); // unlisted decks are link-only, not browsable
   if (search) query = query.ilike('name', `%${search}%`);
   if (format) query = query.eq('format', format);
+  if (gameIds.length > 0) query = query.in('game', gameIds);
 
   const { data, count, error } = await query
     .order('created_at', { ascending: false })
@@ -85,6 +89,7 @@ const fetchDiscoverPage = async (
     return {
       id: row.id as string,
       name: row.name as string,
+      game: ((row.game as string | null) ?? 'mtg') as GameId,
       format: row.format as string,
       cardCount: (row.card_count as number | null) ?? 0,
       userId: (row.user_id as string | null) ?? null,
@@ -104,12 +109,27 @@ const fetchDiscoverPage = async (
 export default function Discover() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const activeGames = useActiveGames();
+  const activeIds = activeGames.map((g) => g.id);
   const [searchQuery, setSearchQuery] = useState('');
   // Trails searchQuery by ~300ms so the server-filtered pages aren't refetched
   // on every keystroke (same pattern as Collection).
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [gameFilter, setGameFilter] = useState<GameId | 'all'>('all');
   const [formatFilter, setFormatFilter] = useState('');
   const observerTarget = useRef<HTMLDivElement>(null);
+
+  // Games sent to the server: the picked one, or all of the user's games.
+  const gameIds = gameFilter === 'all' ? activeIds : [gameFilter];
+
+  // Format options depend on the selected game(s): a single game's formats, or
+  // the union across the user's games when browsing "all".
+  const formatGames: GameId[] = gameFilter === 'all' ? activeIds : [gameFilter];
+  const formatOptions = [
+    ...new Map(
+      formatGames.flatMap((g) => getDeckRules(g).formats()).map((f) => [f.id, f]),
+    ).values(),
+  ];
 
   useEffect(() => {
     const handle = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300);
@@ -124,9 +144,9 @@ export default function Discover() {
     isFetchingNextPage,
     fetchNextPage,
   } = useInfiniteQuery({
-    queryKey: ['discoverDecks', debouncedSearch, formatFilter],
+    queryKey: ['discoverDecks', debouncedSearch, formatFilter, gameFilter, activeIds.join(',')],
     initialPageParam: 0,
-    queryFn: ({ pageParam }) => fetchDiscoverPage(pageParam, debouncedSearch, formatFilter),
+    queryFn: ({ pageParam }) => fetchDiscoverPage(pageParam, debouncedSearch, formatFilter, gameIds),
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextOffset : undefined),
   });
 
@@ -168,6 +188,27 @@ export default function Discover() {
           Discover
         </h1>
 
+        {/* Per-game filter (only when the user follows more than one game) */}
+        {activeIds.length > 1 && (
+          <div className="flex flex-wrap gap-2 mb-3">
+            {[{ id: 'all' as const, label: 'All' }, ...activeGames].map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => {
+                  setGameFilter(g.id);
+                  setFormatFilter(''); // formats differ per game
+                }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                  gameFilter === g.id ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Filters: server-side name search + format */}
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <div className="relative flex-1">
@@ -190,9 +231,9 @@ export default function Discover() {
             className="min-h-[44px] px-3 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500 capitalize sm:w-44"
           >
             <option value="">All formats</option>
-            {FORMATS.map((format) => (
-              <option key={format} value={format} className="capitalize">
-                {format}
+            {formatOptions.map((f) => (
+              <option key={f.id} value={f.id} className="capitalize">
+                {f.label}
               </option>
             ))}
           </select>
@@ -251,6 +292,11 @@ export default function Discover() {
                   )}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-400">
+                  {activeIds.length > 1 && (
+                    <span className="px-1.5 py-0.5 bg-blue-600/25 border border-blue-500/30 rounded text-blue-200">
+                      {GAMES[deck.game]?.label ?? deck.game}
+                    </span>
+                  )}
                   <span className="px-1.5 py-0.5 bg-gray-700 rounded text-gray-300 capitalize">
                     {deck.format}
                   </span>
