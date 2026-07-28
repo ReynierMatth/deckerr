@@ -7,8 +7,9 @@ import {
   removeFromWishlist,
 } from '../services/api';
 import { Card } from '../types';
-import { GameId, enabledGames } from '../cards/domain/game';
+import { GameId } from '../cards/domain/game';
 import { cardData } from '../cards/infra/facade';
+import { useActiveGames } from '../contexts/PriceSourceContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { buildScryfallQuery } from '../utils/scryfallQuery';
@@ -76,7 +77,10 @@ const CardSearch = () => {
   const [game, setGame] = useState<GameId>('mtg');
   const [pokemonQuery, setPokemonQuery] = useState('');
   const [pokemonLang, setPokemonLang] = useState(''); // '' = browser default
-  const games = enabledGames();
+  const games = useActiveGames();
+  const activeIds = games.map((g) => g.id);
+  // Fall back to the user's first game if the current tab isn't one of theirs.
+  const effectiveGame: GameId = activeIds.includes(game) ? game : activeIds[0] ?? 'mtg';
 
   // Collection state (card_id -> quantity), same cache entry as DeckManager.
   const { data: collectionCounts } = useCollectionCounts(user?.id);
@@ -128,12 +132,12 @@ const CardSearch = () => {
     setError(null);
 
     const query =
-      game === 'mtg'
+      effectiveGame === 'mtg'
         ? { raw: { scryfall: buildScryfallQuery(form) } }
         : { text: pokemonQuery, raw: pokemonLang ? { lang: pokemonLang } : undefined };
 
     try {
-      const result = await cardData.search(game, query, controller.signal);
+      const result = await cardData.search(effectiveGame, query, controller.signal);
       setSearchResults(result.cards || []);
     } catch (err) {
       // A newer search aborted this one — ignore, the newer one owns the UI.
@@ -161,7 +165,7 @@ const CardSearch = () => {
                   setError(null);
                 }}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                  game === g.id
+                  effectiveGame === g.id
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
                 }`}
@@ -172,7 +176,7 @@ const CardSearch = () => {
           </div>
         )}
 
-        {game === 'mtg' ? (
+        {effectiveGame === 'mtg' ? (
           <SearchForm form={form} setField={setField} onSubmit={handleSearch} />
         ) : (
           <form onSubmit={handleSearch} className="mb-6 flex flex-wrap gap-2">

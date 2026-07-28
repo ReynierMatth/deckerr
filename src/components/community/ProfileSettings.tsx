@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Save } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { usePriceSource } from '../../contexts/PriceSourceContext';
+import { usePriceSource, usePreferredGames } from '../../contexts/PriceSourceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
+import { enabledGames, GameId } from '../../cards/domain/game';
 import { HANDLE_PATTERN } from '../../utils/profileName';
 
 const PRICE_SOURCE_OPTIONS = [
@@ -34,7 +35,13 @@ const UNIQUE_VIOLATION = '23505';
 export default function ProfileSettings() {
   const { user } = useAuth();
   const { source: priceSource, setSource: setPriceSource } = usePriceSource();
+  const { games: preferredGames, setGames: setPreferredGames } = usePreferredGames();
   const toast = useToast();
+  const allGames = enabledGames();
+  const toggleGame = (id: GameId) =>
+    setPreferredGames(
+      preferredGames.includes(id) ? preferredGames.filter((g) => g !== id) : [...preferredGames, id],
+    );
   const queryClient = useQueryClient();
   const [displayName, setDisplayName] = useState('');
   const [handle, setHandle] = useState('');
@@ -165,6 +172,32 @@ export default function ProfileSettings() {
           ))}
         </div>
       </div>
+
+      {/* Games you play — drives which per-game UI is shown */}
+      {allGames.length > 1 && (
+        <div>
+          <label className="block text-sm text-gray-400 mb-1.5">Games you play</label>
+          <div className="grid grid-cols-2 gap-2">
+            {allGames.map((g) => {
+              // Empty selection means "all games", so nothing selected == all active.
+              const active = preferredGames.length === 0 || preferredGames.includes(g.id);
+              return (
+                <button
+                  key={g.id}
+                  type="button"
+                  onClick={() => toggleGame(g.id)}
+                  className={`p-3 rounded-lg border-2 transition text-center ${
+                    active ? 'border-blue-500 bg-blue-500/10' : 'border-gray-700 bg-gray-800 active:border-gray-600'
+                  }`}
+                >
+                  <div className="font-medium text-sm">{g.label}</div>
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1 text-xs text-gray-500">Only the games you pick show their filters and tabs.</p>
+        </div>
+      )}
 
       {/* Preferred price source */}
       <div>

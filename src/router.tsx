@@ -9,10 +9,12 @@ import {
 } from '@tanstack/react-router';
 import { lazy, Suspense } from 'react';
 import { useAuth } from './contexts/AuthContext';
+import { usePreferredGames } from './contexts/PriceSourceContext';
 import { GameId, isGameId } from './cards/domain/game';
 import Navigation from './components/Navigation';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import LoginForm from './components/LoginForm';
+import Onboarding from './components/Onboarding';
 // The home page stays in the main chunk (it's the first thing rendered);
 // every other page is code-split and loaded on navigation.
 import DeckList from './components/DeckList';
@@ -35,6 +37,7 @@ const PageSpinner = () => (
  */
 function RootLayout() {
   const { user, loading } = useAuth();
+  const { onboarded, loading: prefsLoading } = usePreferredGames();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isPublicRoute = /^\/decks\/[^/]+\/view\/?$/.test(pathname);
 
@@ -56,6 +59,19 @@ function RootLayout() {
       );
     }
     return <LoginForm />;
+  }
+
+  // Signed in: gate the app behind one-time onboarding (skipped on public
+  // deck links, which anyone can view).
+  if (!isPublicRoute) {
+    if (prefsLoading) {
+      return (
+        <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+          <div className="loading-spinner h-32 w-32"></div>
+        </div>
+      );
+    }
+    if (!onboarded) return <Onboarding />;
   }
 
   return (

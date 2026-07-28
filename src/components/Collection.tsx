@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '../types';
-import { GameId, enabledGames } from '../cards/domain/game';
+import { GameId } from '../cards/domain/game';
+import { useActiveGames } from '../contexts/PriceSourceContext';
 import { getCollectionTotalValue, refreshCollectionPrices, getCollectionValueHistory, runPriceAlertCheck, addMultipleCardsToCollection, getCardsBySetNumber, resolveCardsByNames, setNumberKey } from '../services/api';
 import { toCsv, parseCsv, isManaBoxCsv, parseManaBoxCsv, CollectionCsvRow, ManaBoxCsvRow } from '../utils/collectionCsv';
 import CollectionValueChart from './CollectionValueChart';
@@ -32,6 +33,7 @@ export default function Collection() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [gameFilter, setGameFilter] = useState<GameId | 'all'>('all');
+  const activeGames = useActiveGames();
   // Search term backing the currently-loaded pages: trails searchQuery by
   // ~300ms so the (server-filtered) pages aren't refetched on every keystroke.
   // Starts as '' (matching searchQuery) so the initial mount loads immediately.
@@ -473,9 +475,9 @@ export default function Collection() {
         <CollectionToolbar searchQuery={searchQuery} onSearchChange={setSearchQuery} />
 
         {/* Per-game filter */}
-        {enabledGames().length > 1 && (
+        {activeGames.length > 1 && (
           <div className="flex gap-2 mb-4">
-            {[{ id: 'all' as const, label: 'All' }, ...enabledGames()].map((g) => (
+            {[{ id: 'all' as const, label: 'All' }, ...activeGames].map((g) => (
               <button
                 key={g.id}
                 onClick={() => setGameFilter(g.id)}

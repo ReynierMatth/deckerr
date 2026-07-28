@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getCardsByIds, deleteDeck } from '../services/api';
 import { Deck } from '../types';
-import { GameId, enabledGames } from '../cards/domain/game';
+import { GameId } from '../cards/domain/game';
+import { useActiveGames } from '../contexts/PriceSourceContext';
 import { supabase } from "../lib/supabase";
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -50,6 +51,7 @@ const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [choosingGame, setChoosingGame] = useState(false);
+  const activeGames = useActiveGames();
   const { data: decks = [], isLoading } = useQuery({
     queryKey: ['decks', user?.id],
     enabled: !!user,
@@ -107,9 +109,9 @@ const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
 
   return (
     <div className="space-y-4">
-      {enabledGames().length > 1 && (
+      {activeGames.length > 1 && (
         <div className="flex flex-wrap items-center gap-2">
-          {[{ id: 'all' as const, label: 'All' }, ...enabledGames()].map((g) => (
+          {[{ id: 'all' as const, label: 'All' }, ...activeGames].map((g) => (
             <button
               key={g.id}
               type="button"
@@ -164,8 +166,7 @@ const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
         {/* Create New Deck Card */}
       <button
         onClick={() => {
-          const games = enabledGames();
-          if (games.length <= 1) onCreateDeck?.(games[0]?.id ?? 'mtg');
+          if (activeGames.length <= 1) onCreateDeck?.(activeGames[0]?.id ?? 'mtg');
           else setChoosingGame(true);
         }}
         className="bg-gray-800 rounded-lg overflow-hidden shadow-lg hover:shadow-xl border-2 border-dashed border-gray-600 hover:border-blue-500 transition-all duration-300 hover:scale-105 cursor-pointer group aspect-[5/7] flex flex-col items-center justify-center gap-3 p-4"
@@ -187,7 +188,7 @@ const DeckList = ({ onDeckEdit, onCreateDeck }: DeckListProps) => {
           <h2 id="choose-game-title" className="text-lg font-semibold text-white">New deck — choose a game</h2>
           <p className="text-sm text-gray-400">A deck belongs to one game; this can't be changed later.</p>
           <div className="grid grid-cols-2 gap-2 pt-1">
-            {enabledGames().map((g) => (
+            {activeGames.map((g) => (
               <button
                 key={g.id}
                 onClick={() => {
