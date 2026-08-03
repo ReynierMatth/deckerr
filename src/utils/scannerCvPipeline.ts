@@ -53,12 +53,12 @@ const GEOMETRY: Record<GameId, ScanGeometry> = {
     PORTRAIT_RATIO: 1.15,
     TITLE_X: 0.05, TITLE_Y: 0.03, TITLE_W: 0.78, TITLE_H: 0.075,
   },
-  // Pokémon: embed the whole card (index stores full card images). Same physical
-  // card ratio as MTG; the name sits in a top band too.
+  // Pokémon: embed the illustration window (same crop as build-art-index.mjs
+  // POKEMON_ART_CROP) — more discriminant + language-independent, like MTG.
   pokemon: {
     CARD_W: 488, CARD_H: 680,
-    ART_X: 0, ART_Y: 0, ART_W: 1, ART_H: 1,
-    ART_CROP_W: 488, ART_CROP_H: 680,
+    ART_X: 0.06, ART_Y: 0.12, ART_W: 0.88, ART_H: 0.42,
+    ART_CROP_W: 429, ART_CROP_H: 286, // 0.88*488 x 0.42*680
     PORTRAIT_RATIO: 1.15,
     TITLE_X: 0.08, TITLE_Y: 0.04, TITLE_W: 0.7, TITLE_H: 0.07,
   },

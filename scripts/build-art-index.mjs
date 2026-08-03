@@ -30,6 +30,7 @@
 import { writeFile, readFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { pipeline, RawImage } from '@huggingface/transformers';
+import Jimp from 'jimp';
 
 const MODEL = process.env.MODEL || 'Xenova/dinov2-small';
 const DIM = 384;
@@ -46,8 +47,14 @@ const qualify = (rawId) => `${GAME}:${rawId}`;
 let extractorP;
 const extractor = () => (extractorP ??= pipeline('image-feature-extraction', MODEL, { dtype: 'fp32' }));
 
-async function embed(src) {
-  const img = await RawImage.read(src);
+// Illustration window (fraction of the card face) embedded for Pokémon — the
+// same crop the scanner applies at query time (scannerCvPipeline GEOMETRY.pokemon).
+// Focusing on the art (not the whole card) is more discriminant and language-
+// independent, mirroring MTG's art_crop.
+const POKEMON_ART_CROP = { x: 0.06, y: 0.12, w: 0.88, h: 0.42 };
+
+// Mean-pool + L2-normalize a DINOv2 output into a unit vector.
+async function embedRawImage(img) {
   const out = await (await extractor())(img);
   const [, T, D] = out.dims.length === 3 ? out.dims : [1, 1, out.data.length];
   const v = new Float64Array(D);
@@ -56,6 +63,26 @@ async function embed(src) {
   for (let d = 0; d < D; d++) { v[d] /= T; n += v[d] * v[d]; }
   n = Math.sqrt(n) || 1;
   return Array.from(v, (x) => x / n);
+}
+
+async function embed(src) {
+  return embedRawImage(await RawImage.read(src));
+}
+
+// Fetch a full-card image and embed only its cropped illustration window.
+async function embedCropped(url, crop) {
+  const res = await fetch(url, { headers: { 'User-Agent': UA } });
+  if (!res.ok) throw new Error(`${res.status} ${url}`);
+  const img = await Jimp.read(Buffer.from(await res.arrayBuffer()));
+  const { width, height } = img.bitmap;
+  img.crop(
+    Math.round(crop.x * width),
+    Math.round(crop.y * height),
+    Math.round(crop.w * width),
+    Math.round(crop.h * height),
+  );
+  const raw = new RawImage(new Uint8ClampedArray(img.bitmap.data), img.bitmap.width, img.bitmap.height, 4);
+  return embedRawImage(raw);
 }
 
 const quantize = (vec) => Int8Array.from(vec, (x) => Math.max(-127, Math.min(127, Math.round(x * SCALE))));
@@ -108,7 +135,8 @@ async function pokemonSource(sets, limit) {
       const set = await fetchJson(`${TCGDEX}/sets/${setId}`);
       for (const card of set.cards ?? []) {
         if (!card.image) continue; // some promos lack an image
-        items.push({ id: qualify(card.id), url: `${card.image}/high.webp` });
+        // .png so jimp can decode it (no webp support); crop to the art window.
+        items.push({ id: qualify(card.id), url: `${card.image}/high.png`, crop: POKEMON_ART_CROP });
         if (limit && items.length >= limit) return items;
       }
     } catch (e) {
@@ -142,10 +170,10 @@ async function build() {
 
   const flush = async () => writeIndex([...byId.keys()], [...byId.values()]);
   let done = 0, failed = 0;
-  for (const { id, url } of items) {
+  for (const { id, url, crop } of items) {
     if (byId.has(id) || !url) continue;
     try {
-      byId.set(id, quantize(await embed(url)));
+      byId.set(id, quantize(crop ? await embedCropped(url, crop) : await embed(url)));
       if (++done % 50 === 0) console.log(`  embedded ${done} this run / ${byId.size} total (of ${items.length})`);
       if (done % 500 === 0) await flush();
     } catch (e) { failed++; console.warn(`  skip ${id}: ${e.message}`); }
