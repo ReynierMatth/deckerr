@@ -59,8 +59,12 @@ export function loadArtIndex(game: GameId = 'mtg'): Promise<ArtIndex> {
       }
       const meta = (await metaRes.json()) as ArtIndexMeta;
       const rows = new Int8Array(await binRes.arrayBuffer());
+      // Qualify raw ids (`${game}:rawId`) so matches resolve through the facade.
+      // The historical MTG index predates qualification and stores bare Scryfall
+      // ids; newer indexes already ship qualified. Idempotent either way.
+      const ids = meta.ids.map((id) => (id.includes(':') ? id : `${game}:${id}`));
       console.info(`[scan-cv] ${game} art index loaded (${meta.count} vecs)`);
-      return { model: meta.model, dim: meta.dim, scale: meta.scale, ids: meta.ids, rows };
+      return { model: meta.model, dim: meta.dim, scale: meta.scale, ids, rows };
     })();
     indexPromises.set(game, promise);
   }
