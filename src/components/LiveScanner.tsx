@@ -76,6 +76,8 @@ export default function LiveScanner() {
   const [toast, setToast] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [detailCard, setDetailCard] = useState<Card | null>(null);
+  // Debug: last scan's top-5 candidates + scores, to inspect recognition.
+  const [debugMatches, setDebugMatches] = useState<{ name: string; score: number }[]>([]);
 
   // Which game we're scanning (its art index is what we match against). Kept in
   // a ref too so the detection loop reads the latest without re-subscribing.
@@ -149,6 +151,8 @@ export default function LiveScanner() {
           return { m, card, ocrHits };
         })
         .sort((a, b) => b.ocrHits - a.ocrHits || b.m.score - a.m.score);
+      // Debug: surface the top-5 (name + score) even when nothing passes.
+      setDebugMatches(ranked.slice(0, 5).map((r) => ({ name: r.card?.name ?? r.m.id, score: r.m.score })));
       const best = ranked[0];
       if (!best?.card || best.m.score < MIN_SCORE) {
         flashToast('Carte non reconnue, réessaie');
@@ -461,6 +465,27 @@ export default function LiveScanner() {
         Contour <span className="text-cyan-400">cyan</span> = détectée, <span className="text-green-400">vert</span> = reconnaissance en cours.
         {!torchSupported && cameraState === 'ready' ? ' (Torche non dispo sur cet appareil.)' : ''}
       </p>
+
+      {/* Debug: last scan's top-5 candidates + scores */}
+      {debugMatches.length > 0 && (
+        <div className="max-w-md mx-auto mt-3 rounded-xl border border-gray-700 bg-gray-900/60 p-3 text-xs">
+          <p className="mb-1 font-mono uppercase tracking-wide text-gray-500">
+            top 5 — {scanGameRef.current} (seuil {MIN_SCORE})
+          </p>
+          <ol className="space-y-0.5">
+            {debugMatches.map((d, i) => (
+              <li key={i} className="flex items-center justify-between gap-3 font-mono">
+                <span className="truncate text-gray-300">
+                  {i + 1}. {d.name}
+                </span>
+                <span className={d.score >= MIN_SCORE ? 'text-emerald-400' : 'text-gray-500'}>
+                  {d.score.toFixed(3)}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
 
       {/* Basket FAB */}
       <button
