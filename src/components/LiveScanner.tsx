@@ -7,7 +7,7 @@ import { getCardsByIds, createDeckFromCards, addCardToCollection } from '../serv
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useCollectionCounts } from '../hooks/useCollectionCounts';
-import { GameId } from '../cards/domain/game';
+import { GameId, enabledGames } from '../cards/domain/game';
 import { useActiveGames } from '../contexts/PriceSourceContext';
 import { preloadScannerCv, detectQuad, runScan, type Pt } from '../utils/scannerCvPipeline';
 import { sharedTokenCount } from '../utils/nameMatch';
@@ -80,6 +80,9 @@ export default function LiveScanner() {
   // Which game we're scanning (its art index is what we match against). Kept in
   // a ref too so the detection loop reads the latest without re-subscribing.
   const activeGames = useActiveGames();
+  // You scan physical cards you hold — offer every game, not just the user's
+  // preferred ones. Default to their first game.
+  const scanGames = enabledGames();
   const [scanGame, setScanGame] = useState<GameId>(activeGames[0]?.id ?? 'mtg');
   const scanGameRef = useRef<GameId>(scanGame);
 
@@ -162,16 +165,6 @@ export default function LiveScanner() {
       setScanning(false);
     }
   }, [addToBasket, beep, flashToast]);
-
-  // Keep the scanned game valid for this user (e.g. a Pokémon-only player never
-  // scans against the MTG index).
-  const activeIdsKey = activeGames.map((g) => g.id).join(',');
-  useEffect(() => {
-    if (activeGames.length > 0 && !activeGames.some((g) => g.id === scanGame)) {
-      setScanGame(activeGames[0].id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeIdsKey]);
 
   // Preload (and warm) the selected game's art index; refresh on game switch.
   useEffect(() => {
@@ -384,19 +377,24 @@ export default function LiveScanner() {
       </header>
 
       {/* Which game are you scanning? (its art index is matched against) */}
-      {activeGames.length > 1 && (
-        <div className="flex gap-2 mb-4">
-          {activeGames.map((g) => (
-            <button
-              key={g.id}
-              onClick={() => setScanGame(g.id)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                scanGame === g.id ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-              }`}
-            >
-              {g.label}
-            </button>
-          ))}
+      {scanGames.length > 1 && (
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-1.5 text-xs text-gray-400">
+            <ScanEye size={14} /> Scanning:
+          </div>
+          <div className="flex gap-2">
+            {scanGames.map((g) => (
+              <button
+                key={g.id}
+                onClick={() => setScanGame(g.id)}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+                  scanGame === g.id ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
