@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
     import { Mail, Lock, LogIn } from 'lucide-react';
     import { useAuth } from '../contexts/AuthContext';
     import { getInstanceConfig } from '../lib/supabase';
+    import { getEnabledProviders } from '../lib/authProviders';
     import { Card } from '../types';
     import { getRandomCards } from '../services/api';
 
@@ -21,6 +22,14 @@ import { useState, useEffect } from 'react';
       })();
       const [cards, setCards] = useState<Card[]>([]);
       const [loading, setLoading] = useState(true);
+      // Which OAuth providers THIS instance has enabled (hide the rest).
+      const [providers, setProviders] = useState({ google: false, discord: false });
+
+      useEffect(() => {
+        const cfg = getInstanceConfig();
+        if (!cfg) return;
+        getEnabledProviders(cfg.url, cfg.anonKey).then(setProviders).catch(() => {});
+      }, []);
 
       useEffect(() => {
         const loadCards = async () => {
@@ -152,8 +161,9 @@ import { useState, useEffect } from 'react';
               </button>
             </form>
 
-            {/* Social sign-in (Google / Discord). Requires the matching provider
-                enabled in Supabase → Authentication → Sign In / Providers. */}
+            {/* Social sign-in — only shown for providers this instance has
+                actually enabled (fetched from /auth/v1/settings). */}
+            {(providers.google || providers.discord) && (
             <div className="mt-6">
               <div className="flex items-center gap-3 text-gray-500 text-xs">
                 <span className="h-px flex-1 bg-gray-700" />
@@ -161,6 +171,7 @@ import { useState, useEffect } from 'react';
                 <span className="h-px flex-1 bg-gray-700" />
               </div>
               <div className="mt-4 space-y-2">
+                {providers.google && (
                 <button
                   type="button"
                   onClick={() => handleOAuth('google')}
@@ -174,6 +185,8 @@ import { useState, useEffect } from 'react';
                   </svg>
                   Continue with Google
                 </button>
+                )}
+                {providers.discord && (
                 <button
                   type="button"
                   onClick={() => handleOAuth('discord')}
@@ -184,8 +197,10 @@ import { useState, useEffect } from 'react';
                   </svg>
                   Continue with Discord
                 </button>
+                )}
               </div>
             </div>
+            )}
 
             <div className="mt-4 text-center">
               <button
