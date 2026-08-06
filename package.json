@@ -14,7 +14,7 @@
     "cap:sync": "cap sync android",
     "cap:build": "vite build --mode capacitor && cap sync android",
     "cap:open": "cap open android",
-    "assets": "capacitor-assets generate --iconBackgroundColor '#0f172a' --iconBackgroundColorDark '#0f172a' --splashBackgroundColor '#0f172a' --splashBackgroundColorDark '#0f172a'"
+    "assets": "capacitor-assets generate --android --iconBackgroundColor '#0f172a' --iconBackgroundColorDark '#0f172a' --splashBackgroundColor '#0f172a' --splashBackgroundColorDark '#0f172a'"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",
