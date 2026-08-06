@@ -17,6 +17,7 @@ dev-dist
 .env
 .env.*
 !.env.example
+!.env.capacitor
 
 # Local npm registry override
 .npmrc

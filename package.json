@@ -12,7 +12,7 @@
     "test:watch": "vitest",
     "preview": "vite preview",
     "cap:sync": "cap sync android",
-    "cap:build": "vite build && cap sync android",
+    "cap:build": "vite build --mode capacitor && cap sync android",
     "cap:open": "cap open android"
   },
   "dependencies": {
