@@ -22,6 +22,11 @@ dev-dist
 # Local npm registry override
 .npmrc
 
+# Android release signing — NEVER commit the keystore or its passwords
+android/keystore.properties
+*.jks
+*.keystore
+
 # Vite transient config-load artifacts
 vite.config.*.timestamp-*.mjs
 
