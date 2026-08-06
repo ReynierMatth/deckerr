@@ -14,6 +14,7 @@ import { GameId, isGameId } from './cards/domain/game';
 import Navigation from './components/Navigation';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import LoginForm from './components/LoginForm';
+import InstanceForm from './components/InstanceForm';
 import Onboarding from './components/Onboarding';
 // The home page stays in the main chunk (it's the first thing rendered);
 // every other page is code-split and loaded on navigation.
@@ -36,10 +37,16 @@ const PageSpinner = () => (
  * signed-out visitors too — that's the whole point of sharing a deck.
  */
 function RootLayout() {
-  const { user, loading } = useAuth();
+  const { user, loading, instanceConfigured } = useAuth();
   const { onboarded, loading: prefsLoading } = usePreferredGames();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isPublicRoute = /^\/decks\/[^/]+\/view\/?$/.test(pathname);
+
+  // No instance yet (Capacitor/Android): pick one before anything else. Even
+  // public deck links need a backend to read from.
+  if (!instanceConfigured) {
+    return <InstanceForm />;
+  }
 
   if (loading) {
     return (

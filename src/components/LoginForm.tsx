@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
     import { Mail, Lock, LogIn } from 'lucide-react';
     import { useAuth } from '../contexts/AuthContext';
+    import { getInstanceConfig } from '../lib/supabase';
     import { Card } from '../types';
     import { getRandomCards } from '../services/api';
 
@@ -9,7 +10,15 @@ import { useState, useEffect } from 'react';
       const [password, setPassword] = useState('');
       const [isSignUp, setIsSignUp] = useState(false);
       const [error, setError] = useState<string | null>(null);
-      const { signIn, signUp, signInWithProvider } = useAuth();
+      const { signIn, signUp, signInWithProvider, instanceLocked, changeInstance } = useAuth();
+      const instanceHost = (() => {
+        const url = getInstanceConfig()?.url;
+        try {
+          return url ? new URL(url).host : null;
+        } catch {
+          return url ?? null;
+        }
+      })();
       const [cards, setCards] = useState<Card[]>([]);
       const [loading, setLoading] = useState(true);
 
@@ -186,6 +195,22 @@ import { useState, useEffect } from 'react';
                 {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
               </button>
             </div>
+
+            {/* Instance switcher — only when the instance was chosen at runtime
+                (Capacitor/Android); baked self-host config is fixed. */}
+            {!instanceLocked && instanceHost && (
+              <div className="mt-4 pt-4 border-t border-gray-700 text-center text-xs text-gray-500">
+                Connected to <span className="text-gray-400">{instanceHost}</span>
+                {' · '}
+                <button
+                  type="button"
+                  onClick={() => changeInstance()}
+                  className="text-blue-400 hover:text-blue-300 transition-smooth"
+                >
+                  Change instance
+                </button>
+              </div>
+            )}
           </div>
         </div>
       );
