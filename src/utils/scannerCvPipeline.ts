@@ -194,6 +194,10 @@ function loadCv(): Promise<CvModule> {
  * fp32 on both backends to stay bit-for-bit aligned with the offline index,
  * which scripts/build-art-index.mjs builds at fp32.
  */
+// DEBUG: which backend the embedder actually initialised on (null until loaded).
+// Purely observational — no behaviour change; surfaced in the scanner debug panel.
+export let activeBackend: 'webgpu' | 'wasm' | null = null;
+
 function loadEmbedder(): Promise<ImageFeatureExtractionPipeline> {
   if (!embedderPromise) {
     embedderPromise = import('@huggingface/transformers').then(async ({ pipeline, env }) => {
@@ -207,6 +211,7 @@ function loadEmbedder(): Promise<ImageFeatureExtractionPipeline> {
         try {
           console.info('[scan-cv] loading DINOv2 on WebGPU…');
           const p = await build('webgpu');
+          activeBackend = 'webgpu';
           console.info('[scan-cv] embedder ready (WebGPU)');
           return p;
         } catch (err) {
@@ -216,6 +221,7 @@ function loadEmbedder(): Promise<ImageFeatureExtractionPipeline> {
         console.info('[scan-cv] no WebGPU in this browser — using WASM (slower)');
       }
       const p = await build('wasm');
+      activeBackend = 'wasm';
       console.info('[scan-cv] embedder ready (WASM)');
       return p;
     });

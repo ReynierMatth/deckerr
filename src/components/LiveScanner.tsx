@@ -9,7 +9,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useCollectionCounts } from '../hooks/useCollectionCounts';
 import { GameId, enabledGames } from '../cards/domain/game';
 import { useActiveGames } from '../contexts/PriceSourceContext';
-import { preloadScannerCv, detectQuad, runScan, type Pt } from '../utils/scannerCvPipeline';
+import { preloadScannerCv, detectQuad, runScan, activeBackend, type Pt } from '../utils/scannerCvPipeline';
 import { sharedTokenCount } from '../utils/nameMatch';
 import CardDetail from './card/CardDetail';
 import { useBackDismiss } from '../hooks/useBackDismiss';
@@ -89,6 +89,17 @@ export default function LiveScanner() {
   const [detailCard, setDetailCard] = useState<Card | null>(null);
   // Basket entry whose correction picker (top-5) is open, if any.
   const [correcting, setCorrecting] = useState<string | null>(null);
+  // DEBUG: last scan's raw top-5 (id + score + resolved name), set on every
+  // scan — including "not recognized" — to diagnose id/resolution issues.
+  const [scanDebug, setScanDebug] = useState<{
+    ocr: string;
+    minScore: number;
+    items: { id: string; score: number; name: string | null }[];
+  } | null>(null);
+  // DEBUG: actual camera resolution negotiated by getUserMedia.
+  const [camRes, setCamRes] = useState<string | null>(null);
+  // DEBUG: active inference backend (webgpu/wasm), read after the embedder loads.
+  const [backend, setBackend] = useState<string | null>(null);
   // Ids of the RECENT_SCANS most recent scans (oldest first) — entries outside
   // this window drop their candidates so the basket stays light.
   const recentRef = useRef<string[]>([]);
@@ -202,6 +213,17 @@ export default function LiveScanner() {
           return { m, card, ocrHits };
         })
         .sort((a, b) => b.ocrHits - a.ocrHits || b.m.score - a.m.score);
+      // DEBUG: always capture the raw top-5 so we can see ids/scores/resolution
+      // even when nothing is recognized.
+      setScanDebug({
+        ocr,
+        minScore: MIN_SCORE,
+        items: ranked.slice(0, 5).map((r) => ({
+          id: r.m.id,
+          score: r.m.score,
+          name: r.card?.name ?? null,
+        })),
+      });
       const best = ranked[0];
       if (!best?.card || best.m.score < MIN_SCORE) {
         flashToast('Carte non reconnue, réessaie');
@@ -227,7 +249,9 @@ export default function LiveScanner() {
   // Preload (and warm) the selected game's art index; refresh on game switch.
   useEffect(() => {
     scanGameRef.current = scanGame;
-    preloadScannerCv(scanGame).catch((err) => console.error('scanner preload failed:', err));
+    preloadScannerCv(scanGame)
+      .then(() => setBackend(activeBackend)) // DEBUG: reflect the chosen backend
+      .catch((err) => console.error('scanner preload failed:', err));
   }, [scanGame]);
 
   // Continuous detection loop: draw the outline, gate recognition on stability.
@@ -314,8 +338,16 @@ export default function LiveScanner() {
         return;
       }
       try {
+        // Ask for a high-res rear stream. Without explicit width/height the
+        // Android WebView negotiates a low default (~640×480), degrading the
+        // scan embeddings; Chrome/PWA defaults much higher. `ideal` lets the
+        // device fall back gracefully if it can't hit 1080p.
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
         });
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
@@ -326,6 +358,8 @@ export default function LiveScanner() {
         trackRef.current = track;
         const caps = track?.getCapabilities?.() as { torch?: boolean } | undefined;
         setTorchSupported(Boolean(caps?.torch));
+        const s = track?.getSettings?.();
+        setCamRes(s?.width && s?.height ? `${s.width}×${s.height}` : null);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
@@ -509,10 +543,39 @@ export default function LiveScanner() {
           </div>
         )}
 
+        {/* DEBUG: negotiated camera resolution + active inference backend */}
+        {camRes && (
+          <div className="absolute top-3 left-3 rounded bg-black/70 px-2 py-1 text-[10px] font-mono text-cyan-300">
+            cam {camRes} · {backend ?? '…'}
+          </div>
+        )}
+
         {/* Toast */}
         {toast && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full bg-emerald-500/90 px-3 py-1.5 text-sm font-medium text-white shadow-lg">
             {toast}
+          </div>
+        )}
+
+        {/* DEBUG: last scan's raw top-5 (id + score + resolved name) */}
+        {scanDebug && (
+          <div className="absolute bottom-2 left-2 right-2 max-h-52 overflow-auto rounded-lg bg-black/80 p-2 text-[10px] leading-tight text-gray-200 font-mono">
+            <div className="mb-1 flex items-center justify-between text-gray-400">
+              <span>DEBUG top-5 · min={scanDebug.minScore} · OCR:"{scanDebug.ocr}"</span>
+              <button onClick={() => setScanDebug(null)} className="px-1 text-gray-400">✕</button>
+            </div>
+            {scanDebug.items.length === 0 && <div className="text-amber-400">aucun match</div>}
+            {scanDebug.items.map((it, i) => (
+              <div key={i} className="flex gap-2">
+                <span className={it.score >= scanDebug.minScore ? 'text-emerald-400' : 'text-red-400'}>
+                  {it.score.toFixed(3)}
+                </span>
+                <span className={it.name ? 'text-cyan-300' : 'text-red-400'}>
+                  {it.name ?? '✗ non résolu'}
+                </span>
+                <span className="truncate text-gray-500">{it.id}</span>
+              </div>
+            ))}
           </div>
         )}
       </div>
