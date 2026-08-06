@@ -31,6 +31,20 @@ declare global {
 
 const STORAGE_KEY = 'deckerr.instance';
 
+// PKCE is required for the native (Capacitor) OAuth deep-link flow — the app
+// gets a short-lived `?code=` back and exchanges it via exchangeCodeForSession,
+// instead of the implicit flow leaking tokens in the URL. It's also the more
+// secure default on web. persist/autoRefresh/detectSessionInUrl keep the
+// browser OAuth return working.
+const AUTH_OPTIONS = {
+  auth: {
+    flowType: 'pkce' as const,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+  },
+};
+
 let client: SupabaseClient | null = null;
 let activeConfig: InstanceConfig | null = null;
 
@@ -65,7 +79,7 @@ function ensureClient(): SupabaseClient | null {
   const config = readBakedConfig() ?? readStoredConfig();
   if (!config) return null;
   activeConfig = config;
-  client = createClient(config.url, config.anonKey);
+  client = createClient(config.url, config.anonKey, AUTH_OPTIONS);
   return client;
 }
 
@@ -88,7 +102,7 @@ export function getInstanceConfig(): InstanceConfig | null {
 /** Persist + activate a runtime-chosen instance, (re)creating the client. */
 export function setInstanceConfig(config: InstanceConfig): void {
   activeConfig = config;
-  client = createClient(config.url, config.anonKey);
+  client = createClient(config.url, config.anonKey, AUTH_OPTIONS);
   if (typeof localStorage !== 'undefined') {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(config));

@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
+import { Capacitor } from '@capacitor/core';
+import { App } from '@capacitor/app';
+import { Browser } from '@capacitor/browser';
 import {
   supabase,
   isInstanceConfigured,
@@ -8,6 +11,10 @@ import {
   clearInstanceConfig,
 } from '../lib/supabase';
 import type { InstanceConfig } from '../lib/instanceConfig';
+
+// Custom scheme registered natively (AndroidManifest intent-filter) so the
+// OAuth provider can hand control back to the app after login.
+const OAUTH_REDIRECT = 'deckerr://auth';
 
 interface AuthContextType {
   user: User | null;
@@ -79,6 +86,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [instanceConfigured]);
 
+  // Native only: complete OAuth when the provider redirects back to our custom
+  // scheme (deckerr://auth?code=…). We opened the login URL in the system
+  // browser, so the PKCE code_verifier is still in THIS WebView's storage —
+  // exchange the code here, then close the browser.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const handle = App.addListener('appUrlOpen', async ({ url }) => {
+      if (!url.startsWith(OAUTH_REDIRECT)) return;
+      try {
+        const code = new URL(url).searchParams.get('code');
+        if (code) await supabase.auth.exchangeCodeForSession(code);
+      } catch (err) {
+        console.error('OAuth deep-link exchange failed:', err);
+      } finally {
+        await Browser.close().catch(() => {});
+      }
+    });
+    return () => {
+      handle.then((h) => h.remove()).catch(() => {});
+    };
+  }, []);
+
   const connectInstance = (config: InstanceConfig) => {
     setInstanceConfig(config);
     setInstanceConfigured(true);
@@ -130,9 +159,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signInWithProvider = async (provider: 'google' | 'discord') => {
-    // Supabase handles the OAuth handshake; it returns to this app's origin
-    // (works for any instance's domain). Enable the provider in
-    // Supabase → Authentication → Sign In / Providers first.
+    // Enable the provider in Supabase → Authentication → Providers first, and
+    // add the redirect URL to Authentication → URL Configuration.
+    if (Capacitor.isNativePlatform()) {
+      // Native: don't navigate the WebView (Capacitor would kick us out to an
+      // external browser and lose the PKCE verifier). Get the URL, open it in
+      // the system browser, and let the deckerr://auth deep link return us —
+      // handled by the appUrlOpen listener above.
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo: OAUTH_REDIRECT, skipBrowserRedirect: true },
+      });
+      if (error) throw error;
+      if (data?.url) await Browser.open({ url: data.url });
+      return;
+    }
+    // Web: Supabase redirects the browser and returns to this origin.
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo: window.location.origin },
