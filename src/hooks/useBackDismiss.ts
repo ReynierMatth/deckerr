@@ -62,9 +62,22 @@ export function useBackDismiss(isOpen: boolean, onClose: () => void): void {
       stack.splice(idx, 1);
       // Programmatic close: consume the entry we pushed, unless a route
       // navigation has already replaced it (then rewinding would undo the nav).
+      //
+      // The rewind is DEFERRED to the next macrotask: when a close and a router
+      // navigation happen in the same handler (e.g. "choose a game" closes the
+      // modal AND navigates to /deck), TanStack's navigate() pushes its history
+      // entry asynchronously. Rewinding synchronously here would run first and
+      // cancel that navigation (URL snaps back — the bug seen in the Android
+      // WebView). Deferring lets the async navigation commit; we then re-check
+      // and only rewind if our marker is still the current entry (i.e. it was a
+      // genuine close with no navigation).
       if (window.history.state?.__backLayer) {
-        selfPop = true;
-        window.history.back();
+        setTimeout(() => {
+          if (window.history.state?.__backLayer) {
+            selfPop = true;
+            window.history.back();
+          }
+        }, 0);
       }
     };
   }, [isOpen]);
