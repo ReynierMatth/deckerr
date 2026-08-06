@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "cap:sync": "cap sync android",
     "cap:build": "vite build --mode capacitor && cap sync android",
-    "cap:open": "cap open android"
+    "cap:open": "cap open android",
+    "assets": "capacitor-assets generate --iconBackgroundColor '#0f172a' --iconBackgroundColorDark '#0f172a' --splashBackgroundColor '#0f172a' --splashBackgroundColorDark '#0f172a'"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",
@@ -34,6 +35,7 @@
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@eslint/js": "^9.9.1",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
