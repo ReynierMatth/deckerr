@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, ScanEye, Zap, ZapOff, Trash2, Plus, Minus, X, Layers, ShoppingCart, Library, Check } from 'lucide-react';
+import { Camera, ScanEye, Zap, ZapOff, Trash2, Plus, Minus, X, Layers, ShoppingCart, Library, Check, Wand2 } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Card } from '../types';
@@ -17,11 +17,22 @@ import { getPrice } from '../cards/domain/accessors/price';
 
 type CameraState = 'starting' | 'ready' | 'denied' | 'unavailable';
 
+interface Candidate {
+  card: Card;
+  score: number;
+}
+
 interface BasketEntry {
   card: Card;
   qty: number;
   score: number;
+  /** Scan top-5 (best first), kept for correction. Only the RECENT_SCANS most
+   * recently-scanned entries retain this — older ones drop it to spare memory. */
+  candidates?: Candidate[];
 }
+
+// How many recent scans keep their correction candidates in memory.
+const RECENT_SCANS = 10;
 
 // Live-loop tuning.
 const DETECT_INTERVAL = 180; // ms between detection passes (~5.5 fps)
@@ -76,8 +87,11 @@ export default function LiveScanner() {
   const [toast, setToast] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [detailCard, setDetailCard] = useState<Card | null>(null);
-  // Debug: last scan's top-5 candidates + scores, to inspect recognition.
-  const [debugMatches, setDebugMatches] = useState<{ name: string; score: number }[]>([]);
+  // Basket entry whose correction picker (top-5) is open, if any.
+  const [correcting, setCorrecting] = useState<string | null>(null);
+  // Ids of the RECENT_SCANS most recent scans (oldest first) — entries outside
+  // this window drop their candidates so the basket stays light.
+  const recentRef = useRef<string[]>([]);
 
   // Which game we're scanning (its art index is what we match against). Kept in
   // a ref too so the detection loop reads the latest without re-subscribing.
@@ -123,14 +137,51 @@ export default function LiveScanner() {
     }
   }, []);
 
-  const addToBasket = useCallback((card: Card, score: number) => {
+  // Add a scan's best match to the basket, keeping its top-5 candidates for
+  // later correction. Only the RECENT_SCANS most recent scans keep candidates.
+  const registerScan = useCallback((candidates: Candidate[]) => {
+    const best = candidates[0];
     setBasket((prev) => {
       const next = new Map(prev);
-      const existing = next.get(card.id);
-      next.set(card.id, { card, qty: (existing?.qty ?? 0) + 1, score });
+      // Move this card to the front of the recent window (dedup), then evict
+      // candidates from anything that falls out of the window.
+      const order = recentRef.current.filter((id) => id !== best.card.id);
+      order.push(best.card.id);
+      while (order.length > RECENT_SCANS) {
+        const evicted = order.shift()!;
+        const it = next.get(evicted);
+        if (it?.candidates) next.set(evicted, { ...it, candidates: undefined });
+      }
+      recentRef.current = order;
+      const existing = next.get(best.card.id);
+      next.set(best.card.id, { card: best.card, qty: (existing?.qty ?? 0) + 1, score: best.score, candidates });
       return next;
     });
   }, []);
+
+  // Swap a basket entry for one of its scan candidates (a manual correction):
+  // move the whole line's quantity onto the chosen card, carrying the top-5 so
+  // it can be re-corrected.
+  const applyCorrection = useCallback((fromId: string, pick: Candidate) => {
+    setCorrecting(null);
+    if (pick.card.id === fromId) return;
+    setBasket((prev) => {
+      const from = prev.get(fromId);
+      if (!from) return prev;
+      const next = new Map(prev);
+      next.delete(fromId);
+      recentRef.current = recentRef.current.map((id) => (id === fromId ? pick.card.id : id));
+      const existing = next.get(pick.card.id);
+      next.set(pick.card.id, {
+        card: pick.card,
+        qty: (existing?.qty ?? 0) + from.qty,
+        score: pick.score,
+        candidates: from.candidates,
+      });
+      return next;
+    });
+    flashToast(`✓ ${pick.card.name}`);
+  }, [flashToast]);
 
   // Recognize the current frame and add the best match to the basket.
   const recognize = useCallback(async () => {
@@ -151,14 +202,17 @@ export default function LiveScanner() {
           return { m, card, ocrHits };
         })
         .sort((a, b) => b.ocrHits - a.ocrHits || b.m.score - a.m.score);
-      // Debug: surface the top-5 (name + score) even when nothing passes.
-      setDebugMatches(ranked.slice(0, 5).map((r) => ({ name: r.card?.name ?? r.m.id, score: r.m.score })));
       const best = ranked[0];
       if (!best?.card || best.m.score < MIN_SCORE) {
         flashToast('Carte non reconnue, réessaie');
         return;
       }
-      addToBasket(best.card, best.m.score);
+      // Resolved top-5 (best first) kept for correction from the basket.
+      const candidates: Candidate[] = ranked
+        .slice(0, 5)
+        .filter((r): r is typeof r & { card: Card } => !!r.card)
+        .map((r) => ({ card: r.card, score: r.m.score }));
+      registerScan(candidates);
       beep();
       flashToast(`+ ${best.card.name}`);
     } catch (err) {
@@ -168,7 +222,7 @@ export default function LiveScanner() {
       busyRef.current = false;
       setScanning(false);
     }
-  }, [addToBasket, beep, flashToast]);
+  }, [registerScan, beep, flashToast]);
 
   // Preload (and warm) the selected game's art index; refresh on game switch.
   useEffect(() => {
@@ -337,8 +391,10 @@ export default function LiveScanner() {
       const entry = next.get(id);
       if (!entry) return prev;
       const qty = entry.qty + delta;
-      if (qty <= 0) next.delete(id);
-      else next.set(id, { ...entry, qty });
+      if (qty <= 0) {
+        next.delete(id);
+        recentRef.current = recentRef.current.filter((rid) => rid !== id);
+      } else next.set(id, { ...entry, qty });
       return next;
     });
   }, []);
@@ -466,27 +522,6 @@ export default function LiveScanner() {
         {!torchSupported && cameraState === 'ready' ? ' (Torche non dispo sur cet appareil.)' : ''}
       </p>
 
-      {/* Debug: last scan's top-5 candidates + scores */}
-      {debugMatches.length > 0 && (
-        <div className="max-w-md mx-auto mt-3 rounded-xl border border-gray-700 bg-gray-900/60 p-3 text-xs">
-          <p className="mb-1 font-mono uppercase tracking-wide text-gray-500">
-            top 5 — {scanGameRef.current} (seuil {MIN_SCORE})
-          </p>
-          <ol className="space-y-0.5">
-            {debugMatches.map((d, i) => (
-              <li key={i} className="flex items-center justify-between gap-3 font-mono">
-                <span className="truncate text-gray-300">
-                  {i + 1}. {d.name}
-                </span>
-                <span className={d.score >= MIN_SCORE ? 'text-emerald-400' : 'text-gray-500'}>
-                  {d.score.toFixed(3)}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
-
       {/* Basket FAB */}
       <button
         onClick={() => setBasketOpen(true)}
@@ -546,6 +581,46 @@ export default function LiveScanner() {
                         </button>
                       </div>
                     </div>
+                    {/* Correction: pick the right card among the scan's top-5. */}
+                    {e.candidates && e.candidates.length > 1 && (
+                      <button
+                        onClick={() => setCorrecting((id) => (id === e.card.id ? null : e.card.id))}
+                        className="w-full flex items-center justify-center gap-2 h-8 rounded-lg text-xs font-medium text-gray-300 hover:bg-gray-700"
+                      >
+                        <Wand2 size={14} />
+                        {correcting === e.card.id ? 'Fermer' : 'Corriger la carte'}
+                      </button>
+                    )}
+                    {correcting === e.card.id && e.candidates && (
+                      <ol className="space-y-1 rounded-lg bg-gray-800 p-1.5">
+                        {e.candidates.map((c) => {
+                          const current = c.card.id === e.card.id;
+                          return (
+                            <li key={c.card.id}>
+                              <button
+                                onClick={() => applyCorrection(e.card.id, c)}
+                                disabled={current}
+                                className={`w-full flex items-center gap-2 rounded-md p-1.5 text-left ${
+                                  current ? 'bg-blue-600/20 ring-1 ring-blue-500' : 'hover:bg-gray-700'
+                                }`}
+                              >
+                                {c.card.images?.artCrop && (
+                                  <img src={c.card.images.artCrop} alt="" className="w-10 h-7 rounded object-cover flex-shrink-0" loading="lazy" />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium truncate">{c.card.name}</p>
+                                  <p className="text-[11px] text-gray-400 truncate">
+                                    {c.card.setCode ? c.card.setCode.toUpperCase() : c.card.setName}
+                                  </p>
+                                </div>
+                                <span className="flex-shrink-0 font-mono text-[11px] text-gray-400">{c.score.toFixed(2)}</span>
+                                {current && <Check size={13} className="flex-shrink-0 text-blue-400" />}
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    )}
                     {/* Per-card add-to-collection (like the Search card) */}
                     <button
                       onClick={() => addToCollection(e.card)}
