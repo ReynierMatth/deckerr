@@ -194,9 +194,12 @@ function loadCv(): Promise<CvModule> {
  * fp32 on both backends to stay bit-for-bit aligned with the offline index,
  * which scripts/build-art-index.mjs builds at fp32.
  */
-// DEBUG: which backend the embedder actually initialised on (null until loaded).
-// Purely observational — no behaviour change; surfaced in the scanner debug panel.
-export let activeBackend: 'webgpu' | 'wasm' | null = null;
+// Force the WASM backend. The offline art index is built with WASM (Node) at
+// fp32; WebGPU fp32 embeddings diverge enough to drop cosine scores below
+// threshold, so WebGPU clients (Android WebView, desktop Chrome) failed to
+// recognise cards while WASM clients (Firefox) matched. WASM is slower but is
+// the only backend that stays aligned with the index across all platforms.
+const FORCE_WASM = true;
 
 function loadEmbedder(): Promise<ImageFeatureExtractionPipeline> {
   if (!embedderPromise) {
@@ -206,12 +209,11 @@ function loadEmbedder(): Promise<ImageFeatureExtractionPipeline> {
       env.allowLocalModels = false;
       const build = (device: 'webgpu' | 'wasm') =>
         pipeline('image-feature-extraction', 'Xenova/dinov2-small', { device, dtype: 'fp32' });
-      const hasWebGpu = typeof navigator !== 'undefined' && 'gpu' in navigator;
+      const hasWebGpu = !FORCE_WASM && typeof navigator !== 'undefined' && 'gpu' in navigator;
       if (hasWebGpu) {
         try {
           console.info('[scan-cv] loading DINOv2 on WebGPU…');
           const p = await build('webgpu');
-          activeBackend = 'webgpu';
           console.info('[scan-cv] embedder ready (WebGPU)');
           return p;
         } catch (err) {
@@ -221,7 +223,6 @@ function loadEmbedder(): Promise<ImageFeatureExtractionPipeline> {
         console.info('[scan-cv] no WebGPU in this browser — using WASM (slower)');
       }
       const p = await build('wasm');
-      activeBackend = 'wasm';
       console.info('[scan-cv] embedder ready (WASM)');
       return p;
     });
