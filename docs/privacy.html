@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Deckerr — Politique de confidentialité</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0; padding: 2rem 1rem; background: #0f172a; color: #e2e8f0;
+      font: 16px/1.6 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    main { max-width: 720px; margin: 0 auto; }
+    h1 { color: #f97316; font-size: 1.9rem; margin-bottom: .25rem; }
+    h2 { color: #f1f5f9; font-size: 1.15rem; margin-top: 2rem; }
+    a { color: #60a5fa; }
+    .muted { color: #94a3b8; font-size: .9rem; }
+    code { background: #1e293b; padding: .1rem .35rem; border-radius: 4px; }
+    hr { border: 0; border-top: 1px solid #1e293b; margin: 2rem 0; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Deckerr — Politique de confidentialité</h1>
+  <p class="muted">Deckerr est une application open-source (GPL-3.0) de gestion de cartes à collectionner. Dernière mise à jour : 2026.</p>
+
+  <p><strong>Deckerr est un client multi-instance.</strong> Au démarrage, vous saisissez l'URL de l'instance (serveur) de votre choix. C'est <strong>l'opérateur de cette instance</strong> qui héberge et contrôle vos données ; l'application elle-même ne collecte aucune donnée de façon centralisée.</p>
+
+  <h2>Données traitées</h2>
+  <ul>
+    <li><strong>Compte</strong> : adresse e-mail et identifiants d'authentification, gérés par le backend (Supabase) de l'instance choisie. La connexion peut aussi se faire via Google ou Discord si l'instance les active.</li>
+    <li><strong>Contenu utilisateur</strong> : votre collection, vos decks, listes de souhaits, amis et échanges — stockés sur l'instance à laquelle vous vous connectez.</li>
+  </ul>
+
+  <h2>Scan de cartes</h2>
+  <p>La reconnaissance de cartes s'effectue <strong>entièrement sur votre appareil</strong>. Les images de la caméra ne sont ni envoyées ni stockées sur un serveur.</p>
+
+  <h2>Caméra</h2>
+  <p>La permission caméra sert uniquement à la fonction de scan, à votre initiative.</p>
+
+  <h2>Services tiers</h2>
+  <ul>
+    <li><strong>Supabase</strong> (backend de l'instance) : stockage du compte et des données.</li>
+    <li><strong>Scryfall</strong> et bases de données de cartes : informations et images de cartes publiques.</li>
+    <li>Le modèle de reconnaissance est téléchargé une fois depuis un CDN public, puis mis en cache.</li>
+  </ul>
+
+  <h2>Partage &amp; vente</h2>
+  <p>Deckerr ne vend pas vos données personnelles et ne les partage pas à des fins publicitaires.</p>
+
+  <h2>Conservation &amp; suppression</h2>
+  <p>Vos données restent tant que votre compte existe sur l'instance. Pour les supprimer, contactez l'opérateur de votre instance ou supprimez votre compte.</p>
+
+  <h2>Contact</h2>
+  <p>Éditeur de l'application : <a href="mailto:CONTACT_EMAIL_A_REMPLIR">CONTACT_EMAIL_A_REMPLIR</a>.</p>
+
+  <hr />
+  <p class="muted">Code source : <a href="https://github.com/ReynierMatth/deckerr">github.com/ReynierMatth/deckerr</a></p>
+</main>
+</body>
+</html>
