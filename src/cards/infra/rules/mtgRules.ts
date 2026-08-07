@@ -48,11 +48,17 @@ const FORMAT_RULES: Record<string, FormatRules> = {
 
 const label = (id: string): string => id.charAt(0).toUpperCase() + id.slice(1);
 
-const getCommanderColors = (commander: UnifiedCard | undefined): string[] => commander?.mtg?.colors || [];
+// Commander legality is based on COLOUR IDENTITY (coloured mana symbols in the
+// cost AND rules text), not mana-cost colours — so e.g. Najeela (cost {2}{R},
+// ability text {W}{U}{B}{R}{G}) is a 5-colour commander. Fall back to mana-cost
+// colours only if identity is missing. (Mirrors deckSuggestions.ts — keep both
+// in sync.)
+const getCommanderColors = (commander: UnifiedCard | undefined): string[] =>
+  commander?.mtg?.colorIdentity ?? commander?.mtg?.colors ?? [];
 
 const isCardValidForCommander = (card: UnifiedCard, commanderColors: string[]): boolean => {
   if (commanderColors.length === 0) return true;
-  return (card.mtg?.colors || []).every((color) => commanderColors.includes(color));
+  return (card.mtg?.colorIdentity ?? card.mtg?.colors ?? []).every((color) => commanderColors.includes(color));
 };
 
 export const mtgDeckRules: DeckRules = {
