@@ -91,16 +91,20 @@ export const suggestLandCountAndDistribution = (
   return { landCount: landsToAdd, landDistribution };
 };
 
-// Get commander color identity
+// Get the commander's COLOR IDENTITY — not its mana-cost colors. Identity
+// includes coloured mana symbols in the rules text (and colour indicators), so
+// e.g. Najeela (cost {2}{R} but text {W}{U}{B}{R}{G}) is a 5-colour commander.
+// Fall back to mana-cost colours only if identity is somehow missing.
 export const getCommanderColors = (commander: Card | null): string[] => {
   if (!commander) return [];
-  return commander.mtg?.colors || [];
+  return commander.mtg?.colorIdentity ?? commander.mtg?.colors ?? [];
 };
 
-// Check if a card's colors are valid for the commander
+// A card is legal iff its COLOR IDENTITY is a subset of the commander's — again
+// identity (text symbols included), not just the card's mana-cost colours.
 export const isCardValidForCommander = (card: Card, commanderColors: string[]): boolean => {
   if (commanderColors.length === 0) return true; // No commander restriction
-  const cardColors = card.mtg?.colors || [];
-  // Every color in the card must be in the commander's colors
+  const cardColors = card.mtg?.colorIdentity ?? card.mtg?.colors ?? [];
+  // Every colour in the card's identity must be in the commander's identity.
   return cardColors.every(color => commanderColors.includes(color));
 };
