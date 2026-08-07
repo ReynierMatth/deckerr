@@ -52,3 +52,6 @@ vite.config.*.timestamp-*.mjs
 
 # Local MCP server config (per-developer project ref) — copy from .mcp.json.example
 .mcp.json
+
+# Play Store listing kit (marketing assets — not source)
+store/
