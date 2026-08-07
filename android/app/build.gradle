@@ -9,6 +9,15 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
 
+// Single source of truth for the app version: read it from the root package.json
+// so a release is just `npm version …` + tag — no native file to bump by hand.
+// versionCode is derived from semver (e.g. 2.5.4 -> 20504) so it strictly
+// increases as long as the version does. `cap sync` never rewrites this file.
+def pkg = new groovy.json.JsonSlurper().parse(rootProject.file("../package.json"))
+def semver = (pkg.version as String).tokenize('.')
+def deckerrVersionName = pkg.version as String
+def deckerrVersionCode = semver[0].toInteger() * 10000 + semver[1].toInteger() * 100 + semver[2].toInteger()
+
 android {
     namespace = "io.github.reyniermatth.deckerr"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,8 +25,8 @@ android {
         applicationId "io.github.reyniermatth.deckerr"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "2.5.3"
+        versionCode deckerrVersionCode
+        versionName deckerrVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
