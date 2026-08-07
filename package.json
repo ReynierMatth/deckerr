@@ -2,6 +2,7 @@
   "name": "deckerr",
   "private": true,
   "version": "2.5.4",
+  "license": "GPL-3.0-or-later",
   "type": "module",
   "scripts": {
     "dev": "vite",
